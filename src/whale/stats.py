@@ -22,6 +22,9 @@ from .db import COUNTED_STATUSES
 
 # Actions that move money in a direction we can aggregate. Exchanges have no
 # net direction and are excluded from buy/sell rollups.
+# The STOCK Act's reporting deadline, measured from the transaction date.
+STOCK_ACT_DEADLINE_DAYS = 45
+
 BUY_ACTIONS = ("purchase",)
 SELL_ACTIONS = ("sale", "sale_partial")
 
@@ -89,7 +92,7 @@ def _rows(conn: sqlite3.Connection, since: str | None, tickers_only: bool,
     marks = ", ".join("?" for _ in COUNTED_STATUSES)
     sql = f"""
         SELECT t.*, COALESCE(p.full_name, f.filer_name) AS member_name,
-               p.party, p.state, p.district, p.chamber
+               p.party, p.state, p.district, p.chamber, f.filing_date
         FROM transactions t
         JOIN filings f ON f.id = t.filing_id
         LEFT JOIN politicians p ON p.id = t.politician_id
@@ -225,6 +228,7 @@ def politician_stats(conn: sqlite3.Connection, window_days: int | None = None,
 
     The STOCK Act allows 45 days between trade and disclosure; the delay is
     worth surfacing because it is the one compliance fact these filings prove.
+    Measured trade date -> filing date; see `disclosure_delay_days`.
     """
     since = _window_start(window_days) if window_days else None
     rows = _rows(conn, since, tickers_only=False, asset_types=None)
@@ -236,7 +240,7 @@ def politician_stats(conn: sqlite3.Connection, window_days: int | None = None,
             "name": name, "party": r["party"], "state": r["state"],
             "district": r["district"], "chamber": r["chamber"],
             "trade_count": 0, "buy_count": 0, "sell_count": 0,
-            "tickers": set(), "volume": Volume(), "delays": [],
+            "tickers": set(), "volume": Volume(), "delays": [], "lags": [],
         })
         a["trade_count"] += 1
         if r["action"] in BUY_ACTIONS:
@@ -246,32 +250,56 @@ def politician_stats(conn: sqlite3.Connection, window_days: int | None = None,
         if r["ticker"]:
             a["tickers"].add(r["ticker"])
         a["volume"].add(r["amount_min_cents"], r["amount_max_cents"], r["amount_exact_cents"])
-        delay = disclosure_delay_days(r["tx_date"], r["notification_date"])
+        delay = disclosure_delay_days(r["tx_date"], r["filing_date"])
         if delay is not None:
             a["delays"].append(delay)
+        lag = notification_lag_days(r["tx_date"], r["notification_date"])
+        if lag is not None:
+            a["lags"].append(lag)
 
     out = []
     for a in agg.values():
         a["ticker_count"] = len(a["tickers"])
         a["avg_delay_days"] = round(sum(a["delays"]) / len(a["delays"]), 1) if a["delays"] else None
-        a["late_count"] = sum(1 for d in a["delays"] if d > 45)
+        a["late_count"] = sum(1 for d in a["delays"] if d > STOCK_ACT_DEADLINE_DAYS)
+        a["avg_lag_days"] = round(sum(a["lags"]) / len(a["lags"]), 1) if a["lags"] else None
         out.append(a)
     out.sort(key=lambda a: a["volume"].mid_cents, reverse=True)
     return out[:limit]
 
 
-def disclosure_delay_days(tx_date: str | None, notification_date: str | None) -> int | None:
-    """Days from trade to disclosure, or None when the dates make no sense.
+def disclosure_delay_days(tx_date: str | None, filing_date: str | None) -> int | None:
+    """Days from trade to disclosure — the STOCK Act's 45-day clock.
 
-    A handful of filings carry a mistyped year (one 2026 filing reports a trade
-    date of 12/26/2026 disclosed on 01/21/2026). The parse is faithful to the
-    PDF, but a negative delay is not a fact about anyone's behaviour, so it is
-    reported as unknown rather than as "-339 days".
+    Measured against the date the report reached the Clerk, NOT the report's
+    "Notification Date" column. Those are different facts and confusing them
+    understates compliance badly: a member who trades their own account is
+    notified the same day, so the notification column reads zero however long
+    the paperwork actually took. Nancy Pelosi's 2026 filings all show
+    "05/29/2026 05/29/2026" while the report itself was filed 25 days later.
+
+    Returns None when the dates contradict each other. A few filings carry a
+    mistyped year, and a negative delay is not a fact about anyone's
+    behaviour.
     """
-    if not tx_date or not notification_date:
+    return _day_gap(tx_date, filing_date)
+
+
+def notification_lag_days(tx_date: str | None, notification_date: str | None) -> int | None:
+    """Days from trade to the member learning of it.
+
+    Distinct from the disclosure delay and worth keeping: a nonzero lag means
+    the member was not the one placing the trade — a spouse's account, a
+    managed portfolio, or a trust. It carries no compliance meaning on its own.
+    """
+    return _day_gap(tx_date, notification_date)
+
+
+def _day_gap(start: str | None, end: str | None) -> int | None:
+    if not start or not end:
         return None
     try:
-        delta = (date.fromisoformat(notification_date) - date.fromisoformat(tx_date)).days
+        delta = (date.fromisoformat(end) - date.fromisoformat(start)).days
     except ValueError:
         return None
     return delta if delta >= 0 else None

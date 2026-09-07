@@ -47,6 +47,8 @@ export type TransactionRow = {
   pdf_url: string;
   filing_date: string | null;
   delay_days: number | null;
+  /** Days until the member was notified — not a compliance measure. */
+  lag_days: number | null;
   /** 1 when the filing's own trade/notification dates contradict each other. */
   dates_inconsistent: number;
 };
@@ -63,6 +65,7 @@ export type PoliticianRow = {
   sells: number;
   volume_mid: number;
   avg_delay: number | null;
+  avg_lag: number | null;
   late_count: number;
 };
 
@@ -78,10 +81,20 @@ function sinceClause(days?: number): string {
 }
 
 /**
- * Days from trade to disclosure, NULL when the filed dates contradict each
- * other. Reporting "-339 days" would present a filer's typo as a fact.
+ * Days from trade to disclosure — the STOCK Act's 45-day clock. Measured to
+ * the date the report reached the Clerk, NOT the report's "Notification Date"
+ * column: a member trading their own account is notified the same day, so
+ * that column reads zero however long the filing actually took.
+ *
+ * NULL when the dates contradict each other; reporting "-339 days" would
+ * present a filer's typo as a fact. Mirrors `disclosure_delay_days` in
+ * src/whale/stats.py — keep the two in agreement.
  */
-const DELAY = `CASE WHEN julianday(t.notification_date) >= julianday(t.tx_date)
+const DELAY = `CASE WHEN julianday(f.filing_date) >= julianday(t.tx_date)
+     THEN CAST(julianday(f.filing_date) - julianday(t.tx_date) AS INTEGER) END`;
+
+/** Days until the member learned of the trade. Not a compliance measure. */
+const LAG = `CASE WHEN julianday(t.notification_date) >= julianday(t.tx_date)
      THEN CAST(julianday(t.notification_date) - julianday(t.tx_date) AS INTEGER) END`;
 
 /**
@@ -183,6 +196,7 @@ export async function getTransactions(opts: {
               p.party, p.state, p.district, p.chamber,
               f.pdf_url, f.filing_date,
               ${DELAY} AS delay_days,
+              ${LAG} AS lag_days,
               CASE WHEN julianday(t.notification_date) < julianday(t.tx_date)
                    THEN 1 ELSE 0 END AS dates_inconsistent
        FROM transactions t
@@ -207,6 +221,7 @@ export async function getPoliticians(days?: number, limit = 60): Promise<Politic
               SUM(t.action IN ('sale','sale_partial')) AS sells,
               SUM(COALESCE(${MID},0)) AS volume_mid,
               AVG(${DELAY}) AS avg_delay,
+              AVG(${LAG}) AS avg_lag,
               SUM(CASE WHEN ${DELAY} > 45 THEN 1 ELSE 0 END) AS late_count
        FROM transactions t
        JOIN filings f ON f.id = t.filing_id

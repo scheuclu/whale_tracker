@@ -86,15 +86,19 @@ def politicians(config: Config, window_days: int | None, limit: int) -> None:
             return
         window = f"last {window_days}d" if window_days else "all time"
         print(f"\nMost active members ({window})\n")
-        print(f"{'MEMBER':<30} {'TRADES':>7} {'TICKERS':>8} {'VOLUME (mid)':>14} {'DELAY':>7} {'LATE':>5}")
-        print("─" * 78)
+        print(f"{'MEMBER':<30} {'TRADES':>7} {'TICKERS':>8} {'VOLUME (mid)':>14} "
+              f"{'DELAY':>7} {'LATE':>5} {'LAG':>5}")
+        print("─" * 84)
         for a in rows:
             who = f"{a['name']} ({a['party'] or '?'}-{a['state'] or '?'})"
             delay = f"{a['avg_delay_days']:.0f}d" if a["avg_delay_days"] is not None else "—"
+            lag = f"{a['avg_lag_days']:.0f}d" if a["avg_lag_days"] is not None else "—"
             print(f"{who[:30]:<30} {a['trade_count']:>7} {a['ticker_count']:>8} "
-                  f"{usd(a['volume'].mid_cents):>14} {delay:>7} {a['late_count']:>5}")
-        print("\nDELAY = mean days from trade to disclosure. "
-              "LATE = trades disclosed past the STOCK Act's 45-day deadline.")
+                  f"{usd(a['volume'].mid_cents):>14} {delay:>7} {a['late_count']:>5} {lag:>5}")
+        print("\nDELAY = mean days from trade to the report reaching the Clerk.")
+        print("LATE  = trades filed past the STOCK Act's 45-day deadline.")
+        print("LAG   = mean days until the member was notified of their own trade; a")
+        print("        nonzero lag means someone else placed it (spouse, trust, manager).")
     finally:
         conn.close()
 

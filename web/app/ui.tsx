@@ -173,7 +173,11 @@ export function DelayTag({ days, inconsistent }: { days: number | null; inconsis
         "tabular text-[11px]",
         late ? "font-medium text-red-600 dark:text-red-400" : "text-muted-foreground"
       )}
-      title={late ? "Disclosed past the STOCK Act's 45-day deadline" : "Days from trade to disclosure"}
+      title={
+        late
+          ? "Filed past the STOCK Act's 45-day deadline"
+          : "Days from the trade to the report reaching the Clerk"
+      }
     >
       {days}d{late ? " late" : ""}
     </span>

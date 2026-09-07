@@ -46,6 +46,13 @@ parser stays faithful to the PDF and the UI flags the row rather than
 - Cluster alerts consider only equity-like asset types. Members roll Treasury
   bills constantly; one member alone filed 99 T-bill transactions in 2026.
 - Senate is expected to fail. `senate.py` must never raise into the pipeline.
+- **Disclosure delay is trade date -> filing date**, never the report's
+  "Notification Date" column. Notification is when the *member* learned of the
+  trade: someone trading their own account is notified same-day, so that column
+  reads 0 however long the filing took, and using it halves the apparent
+  lateness. Both are kept — `disclosure_delay_days` and `notification_lag_days`
+  in `stats.py`, mirrored by `DELAY`/`LAG` in `web/lib/queries.ts`. Keep the
+  Python and SQL definitions in agreement.
 - Scanned-PDF transcription is off by default and must stay that way until
   vision rows are quarantined from the statistics (https://github.com/scheuclu/whale_tracker/issues/1). Do not flip
   `vision.enabled` to close a coverage gap.

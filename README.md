@@ -161,7 +161,10 @@ would trade a verifiable primary source for an unreliable secondary one.
   delay rather than inventing one.
 - **A late disclosure is a reporting fact.** Missing the 45-day deadline is
   surfaced because it is what the filings prove. It is not evidence of anything
-  else.
+  else. The delay is measured from the trade to the date the report reached the
+  Clerk. The report's separate "Notification Date" — when the member learned of
+  the trade — is tracked as `LAG`: a nonzero lag means someone else placed the
+  trade (a spouse, trust or managed account) and carries no compliance meaning.
 
 ## Dashboard
 
