@@ -183,7 +183,11 @@ committed database. The repo is private, so `raw.githubusercontent.com` will
 | Env var | Value |
 |---|---|
 | `TRADES_DB_REPO` | `scheuclu/whale_tracker` |
-| `GITHUB_TOKEN` | a fine-grained PAT with **Contents: read** on this repo only |
+| `TRADES_DB_TOKEN` | a fine-grained PAT with **Contents: read** on this repo only |
+
+Set both for **Production** (and Preview, if you want PR previews to load
+data), then **redeploy** — Vercel only picks up environment changes on a new
+deployment, so an existing one keeps failing until you trigger one.
 
 (For a public repo, set `TRADES_DB_URL` to the raw URL instead and skip the
 token.) Either way the app fetches with a 2-minute cache, so it tracks the

@@ -9,15 +9,18 @@ import path from "node:path";
  * redeploy. Locally it opens the working-copy file directly.
  *
  * The repo is private, so a plain raw.githubusercontent.com URL 404s. Set
- * `TRADES_DB_REPO` (owner/name) plus a `GITHUB_TOKEN` with read access and
- * the database is pulled through the authenticated contents API instead;
- * `TRADES_DB_URL` still works for a public repo or any other host.
+ * `TRADES_DB_REPO` (owner/name) plus `TRADES_DB_TOKEN` (a GitHub PAT with
+ * Contents: read) and the database is pulled through the authenticated
+ * contents API instead; `TRADES_DB_URL` still works for a public repo.
  */
 const DB_URL = process.env.TRADES_DB_URL;
 const DB_REPO = process.env.TRADES_DB_REPO;
 const DB_REF = process.env.TRADES_DB_REF ?? "main";
 const DB_PATH_IN_REPO = process.env.TRADES_DB_PATH ?? "data/trades.sqlite3";
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+// TRADES_DB_TOKEN is the preferred name — it says what it is for. GITHUB_TOKEN
+// is accepted too, but it is a generic name that collides with other tooling's
+// conventions, so it is the fallback rather than the documented one.
+const DB_TOKEN = process.env.TRADES_DB_TOKEN ?? process.env.GITHUB_TOKEN;
 const LOCAL_DB = path.join(process.cwd(), "..", "data", "trades.sqlite3");
 const TTL_MS = 120_000;
 /** Grace period before closing a superseded handle in-flight queries may hold. */
@@ -42,15 +45,18 @@ function retire(entry: { db: Database.Database; file: string | null }) {
 /** Where to fetch the committed database from, and with what headers. */
 function remoteSource(): { url: string; headers: Record<string, string> } | null {
   if (DB_REPO) {
-    if (!GITHUB_TOKEN) {
-      throw new Error("TRADES_DB_REPO is set but GITHUB_TOKEN is missing");
+    if (!DB_TOKEN) {
+      throw new Error(
+        "TRADES_DB_REPO is set but no token — add TRADES_DB_TOKEN (a GitHub PAT " +
+          "with Contents: read on that repo)"
+      );
     }
     return {
       // The contents API returns the file itself under the raw media type,
       // which is what makes this work for a private repo.
       url: `https://api.github.com/repos/${DB_REPO}/contents/${DB_PATH_IN_REPO}?ref=${DB_REF}`,
       headers: {
-        Authorization: `Bearer ${GITHUB_TOKEN}`,
+        Authorization: `Bearer ${DB_TOKEN}`,
         Accept: "application/vnd.github.raw",
         "X-GitHub-Api-Version": "2022-11-28",
       },
@@ -64,9 +70,15 @@ async function refresh(): Promise<Database.Database> {
   const source = remoteSource();
   if (!source) {
     if (!fs.existsSync(LOCAL_DB)) {
+      const onVercel = Boolean(process.env.VERCEL);
       throw new Error(
-        `no database at ${LOCAL_DB} — run \`python -m whale backfill --year 2026\`, ` +
-          `or set TRADES_DB_REPO (private) / TRADES_DB_URL (public)`
+        onVercel
+          ? "Not configured: set TRADES_DB_REPO=owner/name and TRADES_DB_TOKEN " +
+            "(GitHub PAT, Contents: read) in the Vercel project's environment " +
+            "variables, then redeploy — env changes do not affect a running " +
+            "deployment. The repo checkout is not available at runtime."
+          : `no database at ${LOCAL_DB} — run \`python -m whale backfill --year 2026\`, ` +
+            `or set TRADES_DB_REPO + TRADES_DB_TOKEN`
       );
     }
     const db = new Database(LOCAL_DB, { readonly: true, fileMustExist: true });
@@ -81,7 +93,8 @@ async function refresh(): Promise<Database.Database> {
     if (cached) return cached.db; // stale is better than broken
     throw new Error(
       `trade database fetch failed: ${resp.status}` +
-        (resp.status === 404 ? " (private repo? set TRADES_DB_REPO + GITHUB_TOKEN)" : "")
+        (resp.status === 404 ? " — wrong repo/ref/path, or the token lacks Contents: read" : "") +
+        (resp.status === 401 ? " — token invalid or expired" : "")
     );
   }
   const buf = Buffer.from(await resp.arrayBuffer());
