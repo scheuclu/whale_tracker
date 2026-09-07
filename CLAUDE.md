@@ -56,6 +56,11 @@ parser stays faithful to the PDF and the UI flags the row rather than
 - Scanned-PDF transcription is off by default and must stay that way until
   vision rows are quarantined from the statistics (https://github.com/scheuclu/whale_tracker/issues/1). Do not flip
   `vision.enabled` to close a coverage gap.
+- `src/whale/audit.py` powers the weekly self-review. Two standing rules: a
+  check that fires every week on benign data is itself a defect (fix the check),
+  and a check that raises must report `check_failed` rather than be swallowed —
+  an unknown must never read as a pass. Real tickers collide with asset-type
+  codes (ST is Sensata, AB is AllianceBernstein); do not "fix" that.
 - Tests: `.venv/bin/python -m pytest -q` (run before every PR).
 
 ## SEC Form 4 (corporate insiders)

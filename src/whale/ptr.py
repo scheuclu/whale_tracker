@@ -41,6 +41,10 @@ COL_CAPGAINS = (518, 612)
 DATE_RE = re.compile(r"^\d{2}/\d{2}/\d{4}$")
 # Trailing "(NVDA) [ST]" — ticker is optional, the bracketed asset code is not.
 TICKER_TYPE_RE = re.compile(r"\(([A-Z0-9.\-]{1,10})\)\s*\[([A-Z0-9]{2})\]\s*$")
+# Treasury and agency debt put a CUSIP in that slot, not a ticker: exactly nine
+# alphanumerics with at least one digit ("91282CGH8"). Storing it as a ticker
+# pollutes the ticker namespace with identifiers no equity will ever match.
+CUSIP_RE = re.compile(r"^(?=.*\d)[A-Z0-9]{9}$")
 TYPE_ONLY_RE = re.compile(r"\[([A-Z0-9]{2})\]\s*$")
 
 ACTIONS = {
@@ -235,7 +239,8 @@ def _resolve_asset(tx: Transaction) -> None:
     """Split the trailing "(TICKER) [XX]" marker off the asset name."""
     name = tx.asset_name
     if m := TICKER_TYPE_RE.search(name):
-        tx.ticker = m.group(1)
+        candidate = m.group(1)
+        tx.ticker = None if CUSIP_RE.match(candidate) else candidate
         tx.asset_type = m.group(2)
         tx.asset_name = name[: m.start()].strip(" -")
     elif m := TYPE_ONLY_RE.search(name):
