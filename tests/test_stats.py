@@ -17,11 +17,12 @@ def _member(conn, bioguide, name, party="D", state="CA", district="1"):
                                 district=district, active=1)
 
 
-def _filing(conn, politician_id, name, status="backfilled", doc_id=None):
+def _filing(conn, politician_id, name, status="backfilled", doc_id=None,
+            filing_date="2026-06-20"):
     return db.insert_filing(
         conn, chamber="house", doc_id=doc_id or f"d{politician_id}-{status}-{name}",
         politician_id=politician_id, filer_name=name, state_district="CA01",
-        filing_type="P", filing_date="2026-06-20", year=2026,
+        filing_type="P", filing_date=filing_date, year=2026,
         pdf_url="http://example/x.pdf", status=status)
 
 
@@ -198,26 +199,61 @@ def test_cluster_dedupe_suppresses_repeat_and_allows_growth(conn):
 # --- politician rollups -----------------------------------------------------
 
 
-def test_disclosure_delay_and_late_flagging(conn):
+def test_disclosure_delay_measures_trade_to_filing(conn):
+    # Two trades on one report filed 2026-03-15: 73 days after the January
+    # trade (late) and 14 after the March one (compliant).
     pid = _member(conn, "X1", "Slow S")
-    fid = _filing(conn, pid, "Slow S")
+    fid = _filing(conn, pid, "Slow S", filing_date="2026-03-15")
     db.replace_transactions(conn, fid, pid, [
-        {**_tx("NVDA", "purchase", 100_100, 1_500_000, tx_date="2026-01-01"),
-         "notification_date": "2026-03-15"},   # 73 days — past the 45-day limit
-        {**_tx("AAPL", "purchase", 100_100, 1_500_000, tx_date="2026-06-01"),
-         "notification_date": "2026-06-11"},   # 10 days — compliant
+        _tx("NVDA", "purchase", 100_100, 1_500_000, tx_date="2026-01-01"),
+        _tx("AAPL", "purchase", 100_100, 1_500_000, tx_date="2026-03-01"),
     ])
     conn.commit()
     row = stats.politician_stats(conn)[0]
     assert row["late_count"] == 1
-    assert row["avg_delay_days"] == pytest.approx(41.5)
+    assert row["avg_delay_days"] == pytest.approx((73 + 14) / 2)
     assert row["ticker_count"] == 2
 
 
-def test_disclosure_delay_handles_missing_dates():
+def test_same_day_notification_does_not_hide_a_slow_filing(conn):
+    """The bug this metric had: a member who trades their own account is
+    notified the same day, so the report's Notification Date column reads zero
+    however long the paperwork took. Pelosi's 2026 filings all show
+    '05/29/2026 05/29/2026' while the report was filed 25 days later."""
+    pid = _member(conn, "X1", "Self Directed")
+    fid = _filing(conn, pid, "Self Directed", filing_date="2026-06-23")
+    db.replace_transactions(conn, fid, pid, [
+        {**_tx("INTC", "purchase", 100_100, 1_500_000, tx_date="2026-05-29"),
+         "notification_date": "2026-05-29"},
+    ])
+    conn.commit()
+    row = stats.politician_stats(conn)[0]
+    assert row["avg_delay_days"] == 25    # trade -> filing, the real delay
+    assert row["avg_lag_days"] == 0       # trade -> notified, reported separately
+
+
+def test_notification_lag_is_reported_separately(conn):
+    # A nonzero lag means someone else placed the trade.
+    pid = _member(conn, "X1", "Managed M")
+    fid = _filing(conn, pid, "Managed M", filing_date="2026-03-15")
+    db.replace_transactions(conn, fid, pid, [
+        {**_tx("NVDA", "purchase", 100_100, 1_500_000, tx_date="2026-01-01"),
+         "notification_date": "2026-02-01"},
+    ])
+    conn.commit()
+    row = stats.politician_stats(conn)[0]
+    assert row["avg_lag_days"] == 31
+    assert row["avg_delay_days"] == 73
+
+
+def test_delay_helpers_handle_missing_and_contradictory_dates():
     assert stats.disclosure_delay_days(None, "2026-01-01") is None
     assert stats.disclosure_delay_days("2026-01-01", None) is None
     assert stats.disclosure_delay_days("2026-01-01", "2026-02-15") == 45
+    assert stats.notification_lag_days("2026-01-01", "2026-02-15") == 45
+    # Filed before it was traded: a typo, not a negative delay.
+    assert stats.disclosure_delay_days("2026-12-26", "2026-01-21") is None
+    assert stats.notification_lag_days("2026-12-26", "2026-01-21") is None
 
 
 def test_contradictory_filed_dates_report_no_delay():

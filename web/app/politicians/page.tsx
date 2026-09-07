@@ -64,7 +64,7 @@ export default async function PoliticiansPage() {
         <SectionTitle
           right={
             <span className="text-[11px] text-muted-foreground">
-              delay = mean days from trade to disclosure
+              delay = mean days from trade to filing
             </span>
           }
         >
@@ -81,6 +81,7 @@ export default async function PoliticiansPage() {
                 <th className="px-4 py-2.5 text-right font-medium">Volume (est.)</th>
                 <th className="px-4 py-2.5 text-right font-medium">Delay</th>
                 <th className="px-4 py-2.5 text-right font-medium">Late</th>
+                <th className="px-4 py-2.5 text-right font-medium">Notify lag</th>
               </tr>
             </thead>
             <tbody>
@@ -117,15 +118,25 @@ export default async function PoliticiansPage() {
                   >
                     {r.late_count || "—"}
                   </td>
+                  <td
+                    className="tabular px-4 py-2 text-right text-muted-foreground"
+                    title="Days until the member was notified of their own trade. A nonzero lag means someone else placed it."
+                  >
+                    {r.avg_lag == null ? "—" : `${Math.round(r.avg_lag)}d`}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </Card>
         <p className="mt-3 text-[11px] text-muted-foreground">
-          &ldquo;Late&rdquo; counts trades disclosed more than 45 days after the trade
-          date, the STOCK Act&rsquo;s deadline. A late count is a reporting fact, not
-          an allegation of wrongdoing.
+          &ldquo;Delay&rdquo; is measured from the trade to the date the report reached
+          the Clerk, and &ldquo;Late&rdquo; counts trades filed more than 45 days after
+          the trade — the STOCK Act&rsquo;s deadline. A late count is a reporting
+          fact, not an allegation of wrongdoing. &ldquo;Notify lag&rdquo; is a
+          different measure: how long until the member learned of the trade. A
+          nonzero lag means someone else placed it — a spouse, a trust or a
+          managed account — and carries no compliance meaning.
         </p>
       </section>
     </div>

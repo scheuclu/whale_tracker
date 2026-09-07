@@ -219,7 +219,7 @@ def notify_pending(conn: sqlite3.Connection, config: Config, dry_run: bool = Fal
     for filing in db.filings_by_status(conn, "parsed", unnotified_only=True):
         rows = [dict(r) for r in db.transactions_for_filing(conn, filing["id"])]
         for r in rows:
-            r["delay_days"] = stats.disclosure_delay_days(r["tx_date"], r["notification_date"])
+            r["delay_days"] = stats.disclosure_delay_days(r["tx_date"], filing["filing_date"])
 
         contexts = {}
         for ticker in {r["ticker"] for r in rows if r["ticker"]}:
