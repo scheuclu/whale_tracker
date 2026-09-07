@@ -46,6 +46,9 @@ parser stays faithful to the PDF and the UI flags the row rather than
 - Cluster alerts consider only equity-like asset types. Members roll Treasury
   bills constantly; one member alone filed 99 T-bill transactions in 2026.
 - Senate is expected to fail. `senate.py` must never raise into the pipeline.
+- Scanned-PDF transcription is off by default and must stay that way until
+  vision rows are quarantined from the statistics (https://github.com/scheuclu/whale_tracker/issues/1). Do not flip
+  `vision.enabled` to close a coverage gap.
 - Tests: `.venv/bin/python -m pytest -q` (run before every PR).
 
 ## Data-viz

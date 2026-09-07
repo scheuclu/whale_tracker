@@ -4,7 +4,13 @@ About 8% of House PTRs are filed on paper and scanned to image-only PDFs with
 no text layer, so `ptr.py` cannot read them. Gemini reads the page image
 directly and returns the same transaction rows.
 
-This path is optional: without `GEMINI_API_KEY` those filings are reported to
+This path is optional AND off by default (`vision.enabled` in config.yaml).
+The paper form records the amount as a checkbox grid with rotated column
+headers, which every model tested misreads — roughly a quarter of rows come
+back with a wrong amount or direction. Measurement and proposed fix:
+https://github.com/scheuclu/whale_tracker/issues/1
+
+With it off, or without `GEMINI_API_KEY`, scanned filings are reported to
 Telegram as metadata-only and excluded from volume statistics rather than
 silently dropped.
 """

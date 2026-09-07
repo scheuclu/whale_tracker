@@ -146,9 +146,12 @@ would trade a verifiable primary source for an unreliable secondary one.
 ### Other limits
 
 - **Scanned paper filings.** About 11% of PTRs are filed on paper and arrive as
-  image-only PDFs with no text layer. With `GEMINI_API_KEY` set they are read by
-  a vision model; without it they are reported to Telegram with a link and
-  contribute no transactions. `python -m whale status` counts them.
+  image-only PDFs with no text layer. They are reported to Telegram with a link
+  and contribute no transactions; `python -m whale status` counts them.
+  Gemini transcription exists (`vision.enabled` in `config.yaml`) but is **off
+  by default**: the paper form records amounts as a checkbox grid with rotated
+  headers that every model tested misreads, at roughly a 25% row error rate.
+  Measurement and proposed fix: https://github.com/scheuclu/whale_tracker/issues/1
 - **Assets without tickers.** Treasury bills, municipal bonds, structured notes
   and private funds are stored but carry no symbol, so they appear in a member's
   totals and not in ticker rollups. Some members trade almost nothing else.
