@@ -174,6 +174,8 @@ def _parse_bytes(pdf_bytes: bytes, config: Config) -> tuple[ParsedFiling, str]:
     try:
         return parse_pdf(io.BytesIO(pdf_bytes)), "text"
     except ScannedFilingError:
+        if not config.vision_enabled:
+            raise VisionUnavailable("vision disabled in config.yaml") from None
         # VisionUnavailable propagates: the caller distinguishes "this is a
         # scan we cannot read" from "the parser broke".
         try:

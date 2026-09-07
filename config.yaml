@@ -28,3 +28,18 @@ senate:
   # Senate eFD sits behind Akamai bot protection and is expected to fail from
   # datacenter IPs. When it does, the run logs a skip and carries on.
   enabled: true
+
+vision:
+  # Reads scanned paper PTRs with Gemini when GEMINI_API_KEY is set.
+  #
+  # OFF by default, on measured accuracy. The paper form records the amount as
+  # a checkbox grid with rotated column headers, and every model tested
+  # (gemini-3.6-flash, 3.8-flash, pro-latest) misreads it. On the committed
+  # fixture, one row's amount is wrong in 3 of 3 trials and one row's
+  # buy/sell direction in 2 of 3 — about a quarter of rows carry an error.
+  #
+  # Those filings are ~11% of the corpus. Reporting them as unreadable, with a
+  # link, is honest; silently folding a 25%-error transcription into the volume
+  # and cluster statistics is not. Turn this on only if you would rather have
+  # approximate coverage than none, and read the Pipeline page accordingly.
+  enabled: false

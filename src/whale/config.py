@@ -42,6 +42,9 @@ class Config:
     alerts: AlertSettings = field(default_factory=AlertSettings)
     ingest: IngestSettings = field(default_factory=IngestSettings)
     senate_enabled: bool = True
+    # Scanned-PDF transcription is opt-in; see config.yaml for the measured
+    # accuracy that makes it off by default.
+    vision_enabled: bool = False
     db_path: Path = DEFAULT_DB_PATH
 
     # Secrets from environment.
@@ -82,6 +85,7 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
         alerts=alerts,
         ingest=ingest,
         senate_enabled=bool((raw.get("senate") or {}).get("enabled", True)),
+        vision_enabled=bool((raw.get("vision") or {}).get("enabled", False)),
         db_path=db_path,
         telegram_bot_token=os.environ.get("TELEGRAM_BOT_TOKEN"),
         telegram_chat_id=os.environ.get("TELEGRAM_CHAT_ID"),
