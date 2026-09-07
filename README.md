@@ -173,9 +173,21 @@ A Next.js app in `web/`, hosted on Vercel, reading the committed database.
 cd web && npm install && npm run dev      # reads ../data/trades.sqlite3 directly
 ```
 
-For Vercel: set **Root Directory** to `web/` and `TRADES_DB_URL` to the raw
-GitHub URL of `data/trades.sqlite3`. The app fetches it with a 2-minute cache,
-so it tracks the bot's commits without redeploying.
+For Vercel: set **Root Directory** to `web/`, then point the app at the
+committed database. The repo is private, so `raw.githubusercontent.com` will
+404 — use the authenticated contents API instead:
+
+| Env var | Value |
+|---|---|
+| `TRADES_DB_REPO` | `scheuclu/whale_tracker` |
+| `GITHUB_TOKEN` | a fine-grained PAT with **Contents: read** on this repo only |
+
+(For a public repo, set `TRADES_DB_URL` to the raw URL instead and skip the
+token.) Either way the app fetches with a 2-minute cache, so it tracks the
+bot's commits without redeploying.
+
+Locally, no configuration is needed — it reads `../data/trades.sqlite3`
+directly.
 
 ## Development
 

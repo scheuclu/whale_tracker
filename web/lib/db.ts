@@ -7,8 +7,17 @@ import path from "node:path";
  * In production the bot commits `data/trades.sqlite3` to the repo and this
  * fetches it over HTTP, so the dashboard reflects the latest run with no
  * redeploy. Locally it opens the working-copy file directly.
+ *
+ * The repo is private, so a plain raw.githubusercontent.com URL 404s. Set
+ * `TRADES_DB_REPO` (owner/name) plus a `GITHUB_TOKEN` with read access and
+ * the database is pulled through the authenticated contents API instead;
+ * `TRADES_DB_URL` still works for a public repo or any other host.
  */
 const DB_URL = process.env.TRADES_DB_URL;
+const DB_REPO = process.env.TRADES_DB_REPO;
+const DB_REF = process.env.TRADES_DB_REF ?? "main";
+const DB_PATH_IN_REPO = process.env.TRADES_DB_PATH ?? "data/trades.sqlite3";
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const LOCAL_DB = path.join(process.cwd(), "..", "data", "trades.sqlite3");
 const TTL_MS = 120_000;
 /** Grace period before closing a superseded handle in-flight queries may hold. */
@@ -30,12 +39,34 @@ function retire(entry: { db: Database.Database; file: string | null }) {
   timer.unref?.();
 }
 
+/** Where to fetch the committed database from, and with what headers. */
+function remoteSource(): { url: string; headers: Record<string, string> } | null {
+  if (DB_REPO) {
+    if (!GITHUB_TOKEN) {
+      throw new Error("TRADES_DB_REPO is set but GITHUB_TOKEN is missing");
+    }
+    return {
+      // The contents API returns the file itself under the raw media type,
+      // which is what makes this work for a private repo.
+      url: `https://api.github.com/repos/${DB_REPO}/contents/${DB_PATH_IN_REPO}?ref=${DB_REF}`,
+      headers: {
+        Authorization: `Bearer ${GITHUB_TOKEN}`,
+        Accept: "application/vnd.github.raw",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    };
+  }
+  if (DB_URL) return { url: `${DB_URL}?t=${Date.now()}`, headers: {} };
+  return null;
+}
+
 async function refresh(): Promise<Database.Database> {
-  if (!DB_URL) {
+  const source = remoteSource();
+  if (!source) {
     if (!fs.existsSync(LOCAL_DB)) {
       throw new Error(
         `no database at ${LOCAL_DB} — run \`python -m whale backfill --year 2026\`, ` +
-          `or set TRADES_DB_URL to the committed copy`
+          `or set TRADES_DB_REPO (private) / TRADES_DB_URL (public)`
       );
     }
     const db = new Database(LOCAL_DB, { readonly: true, fileMustExist: true });
@@ -45,10 +76,13 @@ async function refresh(): Promise<Database.Database> {
     return db;
   }
 
-  const resp = await fetch(`${DB_URL}?t=${Date.now()}`, { cache: "no-store" });
+  const resp = await fetch(source.url, { cache: "no-store", headers: source.headers });
   if (!resp.ok) {
     if (cached) return cached.db; // stale is better than broken
-    throw new Error(`trade database fetch failed: ${resp.status}`);
+    throw new Error(
+      `trade database fetch failed: ${resp.status}` +
+        (resp.status === 404 ? " (private repo? set TRADES_DB_REPO + GITHUB_TOKEN)" : "")
+    );
   }
   const buf = Buffer.from(await resp.arrayBuffer());
 
