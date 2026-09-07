@@ -1,0 +1,30 @@
+# Alert tuning and ingestion scope.
+
+alerts:
+  # A "cluster" is several members converging on the same ticker in the same
+  # direction inside a rolling window — the signal this tracker exists for.
+  #
+  # The window is measured on the TRADE date, not the disclosure date, so it
+  # has to absorb the reporting lag: members have 45 days to disclose, and the
+  # observed lag in the 2026 corpus is a median of 17 days and p90 of 33. A
+  # 30-day window is therefore only ever about half-populated; 90 days covers
+  # the statutory deadline with room to spare.
+  window_days: 90
+  min_politicians: 3
+  min_volume_usd: 500000
+
+  # Only real tradeable securities feed cluster alerts. Members roll Treasury
+  # bills ([GS]) over constantly and hold mutual funds via managed accounts;
+  # including them would bury the signal under housekeeping.
+  cluster_asset_types: [ST, OP, EF, ET, CT, RS, SA]
+
+ingest:
+  years: [2026]
+  # On first sight of a filing, anything older than this is recorded but never
+  # notified — it stops the first run blasting a year of history to Telegram.
+  max_filing_age_days: 7
+
+senate:
+  # Senate eFD sits behind Akamai bot protection and is expected to fail from
+  # datacenter IPs. When it does, the run logs a skip and carries on.
+  enabled: true

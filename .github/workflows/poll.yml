@@ -1,0 +1,73 @@
+name: poll
+
+on:
+  schedule:
+    # The Clerk republishes the disclosure index roughly daily, so polling
+    # more often than this would just re-download the same ZIP.
+    - cron: "0 */3 * * *"
+  workflow_dispatch:
+    inputs:
+      backfill_year:
+        description: "Also parse this year's already-seen filings into the DB (no notifications). Blank = none."
+        default: ""
+        required: false
+
+# One pipeline run at a time; queued rather than cancelled so a run is never
+# killed mid-commit of the database.
+concurrency:
+  group: whale-pipeline
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -e ".[vision]"
+
+      - name: Backfill history (optional)
+        if: ${{ github.event.inputs.backfill_year != '' }}
+        env:
+          BACKFILL_YEAR: ${{ github.event.inputs.backfill_year }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python -m whale backfill --year "$BACKFILL_YEAR"
+
+      - name: Run pipeline
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # Optional: reads scanned paper filings (~11% of PTRs).
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # Optional: sticky residential proxy for Senate eFD, which blocks
+          # GitHub runner IPs. Without it the run is House-only by design.
+          SENATE_PROXY_URL: ${{ secrets.SENATE_PROXY_URL }}
+        run: python -m whale run
+
+      - name: Commit knowledge base
+        run: |
+          git config user.name "whale-bot"
+          git config user.email "whale-bot@users.noreply.github.com"
+          git add data/trades.sqlite3
+          if git diff --cached --quiet; then
+            echo "no DB changes"
+            exit 0
+          fi
+          git commit -m "trades: update $(date -u +%FT%TZ)"
+          for i in 1 2 3; do
+            if git push; then
+              exit 0
+            fi
+            git pull --rebase || true
+          done
+          echo "push failed after retries" >&2
+          exit 1

@@ -1,0 +1,195 @@
+import Link from "next/link";
+import { cn } from "@/lib/utils";
+import {
+  ACTION_LABEL,
+  ASSET_TYPE_LABEL,
+  OWNER_LABEL,
+  isBuy,
+  isSell,
+  range,
+} from "@/lib/format";
+
+/**
+ * Direction pills. The dot carries the diverging colour and the word carries
+ * the meaning, so a colour-blind reader loses nothing.
+ */
+const ACTION_TONE: Record<string, { cls: string; dot: string }> = {
+  purchase: {
+    cls: "text-[#1c5cab] dark:text-[#86b6ef] bg-[#2a78d6]/10 border-[#2a78d6]/25",
+    dot: "bg-[var(--viz-buy)]",
+  },
+  sale: {
+    cls: "text-[#a32c2c] dark:text-[#e89f9f] bg-[#d03b3b]/10 border-[#d03b3b]/25",
+    dot: "bg-[var(--viz-sell)]",
+  },
+  sale_partial: {
+    cls: "text-[#a32c2c] dark:text-[#e89f9f] bg-[#d03b3b]/10 border-[#d03b3b]/25",
+    dot: "bg-[var(--viz-sell)]",
+  },
+  exchange: { cls: "text-muted-foreground bg-muted border-border", dot: "bg-zinc-400" },
+};
+
+const STATUS_TONE: Record<string, { label: string; cls: string; dot: string }> = {
+  notified: {
+    label: "alerted",
+    cls: "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/25",
+    dot: "bg-emerald-500",
+  },
+  backfilled: {
+    label: "history",
+    cls: "text-muted-foreground bg-muted border-border",
+    dot: "bg-zinc-400",
+  },
+  parsed: { label: "sending", cls: "text-primary bg-primary/10 border-primary/25", dot: "bg-primary" },
+  new: {
+    label: "processing",
+    cls: "text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/25",
+    dot: "bg-amber-500 animate-pulse",
+  },
+  backfill_queued: {
+    label: "queued",
+    cls: "text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/25",
+    dot: "bg-amber-500",
+  },
+  failed: {
+    label: "unreadable",
+    cls: "text-red-600 dark:text-red-400 bg-red-500/10 border-red-500/25",
+    dot: "bg-red-500",
+  },
+  seen_skipped: {
+    label: "indexed",
+    cls: "text-muted-foreground bg-muted border-border",
+    dot: "bg-zinc-400",
+  },
+};
+
+function Pill({
+  tone,
+  dot,
+  children,
+}: {
+  tone: string;
+  dot: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium",
+        tone
+      )}
+    >
+      <span className={cn("size-1.5 rounded-full", dot)} />
+      {children}
+    </span>
+  );
+}
+
+export function ActionBadge({ action }: { action: string }) {
+  const t = ACTION_TONE[action] ?? ACTION_TONE.exchange;
+  return (
+    <Pill tone={t.cls} dot={t.dot}>
+      {ACTION_LABEL[action] ?? action}
+    </Pill>
+  );
+}
+
+export function StatusBadge({ value }: { value: string }) {
+  const s = STATUS_TONE[value] ?? {
+    label: value,
+    cls: "text-muted-foreground bg-muted border-border",
+    dot: "bg-zinc-400",
+  };
+  return (
+    <Pill tone={s.cls} dot={s.dot}>
+      {s.label}
+    </Pill>
+  );
+}
+
+export function PartyBadge({ party }: { party: string | null }) {
+  if (!party) return null;
+  const cls =
+    party === "D"
+      ? "text-[#1c5cab] dark:text-[#86b6ef] border-[#2a78d6]/30"
+      : party === "R"
+        ? "text-[#a32c2c] dark:text-[#e89f9f] border-[#d03b3b]/30"
+        : "text-muted-foreground border-border";
+  return (
+    <span className={cn("rounded border px-1.5 py-px text-[10px] font-bold", cls)}>{party}</span>
+  );
+}
+
+export function TickerChip({ ticker, type }: { ticker: string | null; type?: string | null }) {
+  if (!ticker) {
+    return (
+      <span
+        className="text-xs text-muted-foreground"
+        title={type ? ASSET_TYPE_LABEL[type] ?? type : undefined}
+      >
+        {type ? ASSET_TYPE_LABEL[type] ?? type : "no ticker"}
+      </span>
+    );
+  }
+  return (
+    <Link
+      href={`/tickers?t=${encodeURIComponent(ticker)}`}
+      className="inline-flex items-center rounded-md border border-border bg-card px-2 py-0.5 font-mono text-xs font-semibold tracking-tight transition-colors hover:border-primary/40 hover:bg-accent"
+    >
+      {ticker}
+    </Link>
+  );
+}
+
+export function OwnerTag({ owner }: { owner: string | null }) {
+  if (!owner || !OWNER_LABEL[owner]) return null;
+  return (
+    <span className="rounded bg-muted px-1.5 py-px text-[10px] text-muted-foreground">
+      {OWNER_LABEL[owner]}
+    </span>
+  );
+}
+
+/**
+ * Disclosure delay against the STOCK Act's 45-day deadline — the one
+ * compliance fact these filings actually prove.
+ */
+export function DelayTag({ days, inconsistent }: { days: number | null; inconsistent?: number }) {
+  if (inconsistent) {
+    return (
+      <span
+        className="text-[11px] text-amber-600 dark:text-amber-400"
+        title="The filing's trade and notification dates contradict each other — reproduced as filed"
+      >
+        date as filed
+      </span>
+    );
+  }
+  if (days == null) return null;
+  const late = days > 45;
+  return (
+    <span
+      className={cn(
+        "tabular text-[11px]",
+        late ? "font-medium text-red-600 dark:text-red-400" : "text-muted-foreground"
+      )}
+      title={late ? "Disclosed past the STOCK Act's 45-day deadline" : "Days from trade to disclosure"}
+    >
+      {days}d{late ? " late" : ""}
+    </span>
+  );
+}
+
+export function Amount({
+  min,
+  max,
+  exact,
+}: {
+  min: number | null;
+  max: number | null;
+  exact: number | null;
+}) {
+  return <span className="tabular text-[13px]">{range(min, max, exact)}</span>;
+}
+
+export { isBuy, isSell };
