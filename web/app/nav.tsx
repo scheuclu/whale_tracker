@@ -4,13 +4,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
-import { Activity, Landmark, LineChart, Moon, Receipt, Sun } from "lucide-react";
+import { Activity, Briefcase, Landmark, LineChart, Moon, Receipt, Sun } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const TABS = [
   { href: "/", label: "Feed", icon: Receipt },
   { href: "/tickers", label: "Tickers", icon: LineChart },
   { href: "/politicians", label: "Politicians", icon: Landmark },
+  { href: "/insiders", label: "Insiders", icon: Briefcase },
   { href: "/pipeline", label: "Pipeline", icon: Activity },
 ];
 
@@ -19,7 +20,7 @@ export function Tabs() {
   return (
     <nav className="glass flex w-fit gap-1 rounded-full border border-border bg-card p-1">
       {TABS.map(({ href, label, icon: Icon }) => {
-        const active = pathname === href;
+        const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
         return (
           <Link
             key={href}

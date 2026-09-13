@@ -217,6 +217,8 @@ A Next.js app in `web/`, hosted on Vercel, reading the committed database.
 - **Feed** — every disclosed trade, filterable by member and direction
 - **Tickers** — volume and participation leaderboards, plus per-ticker detail
 - **Politicians** — per-member volume, breadth, and disclosure delay
+- **Insiders** — SEC Form 4 open-market trades: issuers where insiders converge,
+  most bought / most sold, every stored trade with role, 10b5-1 flag and lateness
 - **Pipeline** — ingestion status, unreadable filings, and coverage
 
 ```sh

@@ -5,7 +5,7 @@ import { getDb } from "./db";
  * `COUNTED_STATUSES` in src/whale/db.py — a filing that failed to parse must
  * never contribute to a volume total.
  */
-const COUNTED = `('parsed','notified','backfilled')`;
+export const COUNTED = `('parsed','notified','backfilled')`;
 
 /** Asset types eligible for the "conviction" views; mirrors config.yaml. */
 const CLUSTER_TYPES = `('ST','OP','EF','ET','CT','RS','SA')`;
@@ -74,7 +74,7 @@ export type PoliticianRow = {
  * carry a mistyped future trade date, which would otherwise sit inside "the
  * last 30 days" forever.
  */
-function sinceClause(days?: number): string {
+export function sinceClause(days?: number): string {
   return days
     ? `AND t.tx_date >= date('now', '-${Math.floor(days)} day') AND t.tx_date <= date('now')`
     : "";
@@ -90,7 +90,7 @@ function sinceClause(days?: number): string {
  * present a filer's typo as a fact. Mirrors `disclosure_delay_days` in
  * src/whale/stats.py — keep the two in agreement.
  */
-const DELAY = `CASE WHEN julianday(f.filing_date) >= julianday(t.tx_date)
+export const DELAY = `CASE WHEN julianday(f.filing_date) >= julianday(t.tx_date)
      THEN CAST(julianday(f.filing_date) - julianday(t.tx_date) AS INTEGER) END`;
 
 /** Days until the member learned of the trade. Not a compliance measure. */
@@ -105,7 +105,7 @@ const LAG = `CASE WHEN julianday(t.notification_date) >= julianday(t.tx_date)
  * (max IS NULL) contribute their floor to `mid` and force the range's upper
  * bound to be reported as unbounded.
  */
-const MID = `COALESCE(t.amount_exact_cents,
+export const MID = `COALESCE(t.amount_exact_cents,
   CASE WHEN t.amount_max_cents IS NULL THEN t.amount_min_cents
        ELSE (t.amount_min_cents + t.amount_max_cents) / 2 END)`;
 

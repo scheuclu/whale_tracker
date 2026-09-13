@@ -1,10 +1,12 @@
 /**
  * Display helpers.
  *
- * Every amount in this project is a disclosure *bracket*, not a figure the
- * member reported. These helpers keep that distinction visible: `usd` renders
- * a point estimate and is only ever used where the label says "est.", while
- * `range` renders what was actually disclosed.
+ * Congressional amounts are disclosure *brackets*, not figures the member
+ * reported. These helpers keep that distinction visible: `usd` renders a
+ * point estimate and is only ever used where the label says "est.", while
+ * `range` renders what was actually disclosed. Insider (Form 4) values are
+ * the exception — shares × the reported price, exact but computed — and are
+ * labelled as such wherever they appear.
  */
 
 export function usd(cents: number | null | undefined): string {
@@ -103,4 +105,16 @@ export function relativeTime(iso: string | null): string {
   const hours = Math.round(mins / 60);
   if (hours < 24) return `${hours}h ago`;
   return `${Math.round(hours / 24)}d ago`;
+}
+
+/** Share counts as filed; fractional shares keep up to two decimals. */
+export function shares(n: number | null | undefined): string {
+  if (n == null) return "—";
+  return n.toLocaleString(undefined, { maximumFractionDigits: Number.isInteger(n) ? 0 : 2 });
+}
+
+/** Price per share as filed — filers report up to four decimals. */
+export function price(n: number | null | undefined): string {
+  if (n == null) return "—";
+  return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
 }
