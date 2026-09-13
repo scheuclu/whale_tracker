@@ -197,3 +197,198 @@ def test_report_renders_markdown_with_a_finding_count(tmp_path):
     assert "# Whale Tracker — data audit" in text
     assert "error" in text and "empty_parsed_filings" in text
     assert any(f.severity == audit.ERROR for f in findings)
+
+
+# --- insiders (SEC Form 4) --------------------------------------------------
+#
+# Form 4 arrives as structured XML, so its risk is coverage rather than
+# parsing: a sync that stops working stores nothing and says nothing.
+
+
+def _insider_filing(conn, accession, status="backfilled", ticker="ACME",
+                    filing_date="2026-06-20", owners=(("0000000010", "Alice"),)):
+    fid = db.insert_insider_filing(
+        conn, accession=accession, form_type="4", issuer_cik="0000000001",
+        issuer_name="Acme Inc.", ticker=ticker, filing_date=filing_date,
+        source="feed", source_url=f"http://sec/{accession}-index.htm", status=status)
+    for cik, name in owners:
+        db.upsert_insider(conn, cik, name)
+    if owners:
+        db.replace_insider_owners(conn, fid, [{"cik": cik} for cik, _ in owners])
+    return fid
+
+
+def _itx(**over):
+    row = {"transaction_code": "S", "action": "sale", "tx_date": "2026-06-18",
+           "shares": 100.0, "price_per_share": 10.0, "amount_min_cents": 100_000,
+           "amount_max_cents": 100_000, "amount_exact_cents": 100_000, "late": 0}
+    row.update(over)
+    return row
+
+
+def test_stored_form4_with_no_transactions_is_an_error(conn):
+    # A filing is only stored once its open-market rows clear the floor, so
+    # zero rows means the store path dropped them.
+    _insider_filing(conn, "0000000000-26-000001")
+    conn.commit()
+    found = audit.check_insider_empty_filings(conn)
+    assert found and found[0].severity == audit.ERROR
+
+
+def test_stored_form4_with_transactions_is_not_flagged(conn):
+    fid = _insider_filing(conn, "0000000000-26-000002")
+    db.replace_insider_transactions(conn, fid, [_itx()])
+    conn.commit()
+    assert audit.check_insider_empty_filings(conn) == []
+
+
+def test_unreadable_form4_is_not_expected_to_have_transactions(conn):
+    _insider_filing(conn, "0000000000-26-000003", status="failed")
+    conn.commit()
+    assert audit.check_insider_empty_filings(conn) == []
+    assert "insider_unreadable_filings" in codes(audit.check_insider_coverage(conn))
+
+
+def test_filing_without_a_primary_owner_is_an_error(conn):
+    fid = _insider_filing(conn, "0000000000-26-000004", owners=())
+    db.replace_insider_transactions(conn, fid, [_itx()])
+    conn.commit()
+    found = audit.check_insider_primary_owner(conn)
+    assert found and found[0].severity == audit.ERROR
+
+
+def test_joint_filing_has_one_primary_owner_and_is_not_flagged(conn):
+    fid = _insider_filing(conn, "0000000000-26-000005",
+                          owners=(("0000000010", "Founder"), ("0000000020", "Founder LLC")))
+    db.replace_insider_transactions(conn, fid, [_itx()])
+    conn.commit()
+    assert audit.check_insider_primary_owner(conn) == []
+
+
+def test_disagreeing_amount_columns_are_an_error(conn):
+    # An insider value is exact: a min/max pair would render it as a range.
+    fid = _insider_filing(conn, "0000000000-26-000006")
+    db.replace_insider_transactions(conn, fid, [_itx(amount_min_cents=90_000)])
+    conn.commit()
+    assert "insider_amount_inconsistent" in codes(audit.check_insider_values(conn))
+
+
+def test_value_that_is_not_shares_times_price_is_an_error(conn):
+    fid = _insider_filing(conn, "0000000000-26-000007")
+    db.replace_insider_transactions(conn, fid, [
+        _itx(shares=100.0, price_per_share=10.0, amount_min_cents=999,
+             amount_max_cents=999, amount_exact_cents=999)])
+    conn.commit()
+    assert "insider_value_mismatch" in codes(audit.check_insider_values(conn))
+
+
+def test_fractional_share_rounding_is_not_a_mismatch(conn):
+    # 12.345 × $67.89 = $838.098... → 83810 cents, rounded half up.
+    fid = _insider_filing(conn, "0000000000-26-000008")
+    db.replace_insider_transactions(conn, fid, [
+        _itx(shares=12.345, price_per_share=67.89, amount_min_cents=83_810,
+             amount_max_cents=83_810, amount_exact_cents=83_810)])
+    conn.commit()
+    assert audit.check_insider_values(conn) == []
+
+
+def test_value_without_shares_or_price_is_an_error(conn):
+    fid = _insider_filing(conn, "0000000000-26-000009")
+    db.replace_insider_transactions(conn, fid, [_itx(price_per_share=None)])
+    conn.commit()
+    assert "insider_value_without_inputs" in codes(audit.check_insider_values(conn))
+
+
+def test_row_with_no_price_at_all_is_only_informational(conn):
+    # An unknown value is not zero and not a defect — some filers put the
+    # price in a footnote.
+    fid = _insider_filing(conn, "0000000000-26-000010")
+    db.replace_insider_transactions(conn, fid, [
+        _itx(price_per_share=None, amount_min_cents=None, amount_max_cents=None,
+             amount_exact_cents=None)])
+    conn.commit()
+    found = audit.check_insider_values(conn)
+    assert codes(found) == {"insider_unpriced_rows"}
+    assert found[0].severity == audit.INFO
+
+
+def test_uncomparable_trade_date_is_informational(conn):
+    # Seen live: a filer wrote "2026-09-08-05:00" as a transaction date.
+    fid = _insider_filing(conn, "0000000000-26-000011")
+    db.replace_insider_transactions(conn, fid, [_itx(tx_date="2026-06-18-05:00", late=None)])
+    conn.commit()
+    found = audit.check_insider_dates(conn)
+    assert found and found[0].severity == audit.INFO
+
+
+def test_comparable_dates_are_not_flagged(conn):
+    fid = _insider_filing(conn, "0000000000-26-000012")
+    db.replace_insider_transactions(conn, fid, [_itx(late=1)])
+    conn.commit()
+    assert audit.check_insider_dates(conn) == []
+
+
+def test_healthy_sync_produces_no_feed_finding(conn):
+    db.set_state(conn, "edgar_status", "ok: 12 stored / 87 seen")
+    db.set_state(conn, "edgar_cursor", "2026-07-01T02:00:00Z")
+    conn.commit()
+    assert audit.check_insider_feed_health(conn, TODAY) == []
+
+
+def test_throttled_sync_is_an_error(conn):
+    db.set_state(conn, "edgar_status", "throttled: HTTP 403 for https://www.sec.gov/x")
+    conn.commit()
+    found = audit.check_insider_feed_health(conn, TODAY)
+    assert found[0].code == "insider_sync_degraded" and found[0].severity == audit.ERROR
+
+
+def test_missing_user_agent_is_not_an_error(conn):
+    # The step skipping itself without a secret is a configuration state, not
+    # a defect — flagging it weekly would be noise.
+    db.set_state(conn, "edgar_status", "skipped: EDGAR_USER_AGENT not set")
+    conn.commit()
+    found = audit.check_insider_feed_health(conn, TODAY)
+    assert found[0].code == "insider_sync_skipped" and found[0].severity == audit.INFO
+
+
+def test_never_attempted_sync_is_informational(conn):
+    assert audit.check_insider_feed_health(conn, TODAY)[0].code == "insider_sync_not_attempted"
+
+
+def test_feed_gap_is_an_error_with_the_repair_command(conn):
+    db.set_state(conn, "edgar_status", "gap: feed ran out before reaching the cursor")
+    db.set_state(conn, "edgar_gap", "2026-06-20..2026-07-01")
+    conn.commit()
+    found = {f.code: f for f in audit.check_insider_feed_health(conn, TODAY)}
+    gap = found["insider_feed_gap"]
+    assert gap.severity == audit.ERROR
+    assert "backfill-insiders --from 2026-06-20 --to 2026-07-01" in gap.evidence[0]
+
+
+def test_stale_cursor_is_flagged_even_when_the_run_reports_success(conn):
+    db.set_state(conn, "edgar_status", "ok: 0 stored / 0 seen")
+    db.set_state(conn, "edgar_cursor", "2026-06-01T00:00:00Z")
+    conn.commit()
+    assert "insider_cursor_stale" in codes(audit.check_insider_feed_health(conn, TODAY))
+
+
+def test_yesterdays_cursor_is_not_stale(conn):
+    # The feed publishes nothing overnight; a one-day-old cursor is normal.
+    db.set_state(conn, "edgar_status", "ok: 3 stored / 40 seen")
+    db.set_state(conn, "edgar_cursor", "2026-06-30T23:00:00Z")
+    conn.commit()
+    assert audit.check_insider_feed_health(conn, TODAY) == []
+
+
+def test_audit_runs_against_a_database_with_both_sources(conn):
+    fid = _filing(conn, "both1")
+    db.replace_transactions(conn, fid, None, [_tx()])
+    ifid = _insider_filing(conn, "0000000000-26-000013")
+    db.replace_insider_transactions(conn, ifid, [_itx()])
+    db.set_state(conn, "edgar_status", "ok: 1 stored / 1 seen")
+    conn.commit()
+    findings = audit.run_checks(conn, TODAY)
+    assert "check_failed" not in codes(findings)
+    assert not [f for f in findings if f.severity == audit.ERROR]
+    s = audit.summary(conn)
+    assert s["insider_filings"] == 1 and s["insider_txs"] == 1 and s["insiders"] == 1

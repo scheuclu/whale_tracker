@@ -6,6 +6,12 @@ did not anticipate, the failure is usually *silent*: rows come out empty, or an
 amount lands in the wrong column, and the totals stay plausible. These checks
 exist to make that visible.
 
+Two sources, two failure modes. House PTRs are parsed out of a PDF by word
+coordinates, so their risk is a mis-split column. SEC Form 4s arrive as
+structured XML, so their risk is not parsing but *coverage*: a throttled or
+stalled EDGAR sync silently stops storing filings, and the totals simply stop
+growing without anything looking broken.
+
 Every finding is evidence, not a verdict — a spike in unparsed filings may be a
 regression or may be a week when several members filed on paper. The report is
 written to be read by a human, or by the weekly review workflow.
@@ -379,6 +385,267 @@ def check_senate(conn, today: date | None = None) -> list[Finding]:
                     "Expected. All figures are House-only.")]
 
 
+
+# --- insiders (SEC Form 4) ---------------------------------------------------
+#
+# Deliberately NOT checking insider ticker shape. A PTR ticker is regex-split
+# out of a PDF cell and can pick up a CUSIP; `issuerTradingSymbol` is a
+# structured XML element, so there is no column-split failure mode to detect —
+# and real values include exchange-prefixed foreign symbols like "ASX:LNW",
+# which a naive shape rule would flag every week.
+
+
+def check_insider_empty_filings(conn, today: date | None = None) -> list[Finding]:
+    """A stored Form 4 with no transactions — impossible by construction.
+
+    A filing is only stored if its open-market rows clear the value floor, so
+    one with no rows means the store path broke after the filter passed.
+    """
+    rows = _rows(conn, f"""
+        SELECT f.accession, f.ticker, f.issuer_name, f.filing_date, f.source_url
+        FROM insider_filings f
+        WHERE f.status IN {_counted()}
+          AND NOT EXISTS (SELECT 1 FROM insider_transactions t WHERE t.filing_id = f.id)
+        ORDER BY f.filing_date DESC
+    """)
+    if not rows:
+        return []
+    return [Finding(
+        ERROR, "insider_empty_filings",
+        f"{len(rows)} stored Form 4 filing(s) have no transactions",
+        "A Form 4 is only stored when its open-market rows clear the configured "
+        "value floor, so a stored filing with no rows means `store_filing` "
+        "dropped them — those trades are missing from every insider total.",
+        [f"{r['accession']}  {r['ticker'] or '—'}  {r['issuer_name']}  filed {r['filing_date']}  {r['source_url']}"
+         for r in rows],
+    )]
+
+
+def check_insider_primary_owner(conn, today: date | None = None) -> list[Finding]:
+    """Every filing needs an owner at index 0.
+
+    "Distinct insiders" counts primary reporting owners, so a filing without
+    one contributes an "unknown" insider to every rollup and cluster count.
+    """
+    rows = _rows(conn, f"""
+        SELECT f.accession, f.ticker, f.issuer_name FROM insider_filings f
+        WHERE f.status IN {_counted()}
+          AND NOT EXISTS (
+            SELECT 1 FROM insider_filing_owners o
+            WHERE o.filing_id = f.id AND o.owner_index = 0)
+        ORDER BY f.filing_date DESC
+    """)
+    if not rows:
+        return []
+    return [Finding(
+        ERROR, "insider_missing_primary_owner",
+        f"{len(rows)} Form 4 filing(s) have no primary reporting owner",
+        "Insider counts and cluster detection join on `owner_index = 0`. A "
+        "filing without one is attributed to nobody, so it silently inflates "
+        "an \"unknown\" insider instead of a named one.",
+        [f"{r['accession']}  {r['ticker'] or '—'}  {r['issuer_name']}" for r in rows],
+    )]
+
+
+def check_insider_values(conn, today: date | None = None) -> list[Finding]:
+    """Insider values must be exact and internally consistent.
+
+    Form 4 gives share counts and a price, so the value is computed:
+    min == max == exact, or all three NULL. Anything else means `_tx_row`
+    or the schema drifted, and a range would be presented as a measurement.
+    """
+    out = []
+    inconsistent = _rows(conn, f"""
+        SELECT f.accession, t.amount_min_cents lo, t.amount_max_cents hi,
+               t.amount_exact_cents ex, t.shares, t.price_per_share px
+        FROM insider_transactions t JOIN insider_filings f ON f.id = t.filing_id
+        WHERE f.status IN {_counted()}
+          AND (t.amount_min_cents IS NOT t.amount_exact_cents
+               OR t.amount_max_cents IS NOT t.amount_exact_cents)
+    """)
+    if inconsistent:
+        out.append(Finding(
+            ERROR, "insider_amount_inconsistent",
+            f"{len(inconsistent)} insider row(s) have disagreeing amount columns",
+            "An insider value is exact: min, max and exact must all hold the "
+            "same figure, or all be NULL. A disagreement would render an exact "
+            "trade as a range, or a range as a measurement.",
+            [f"{r['accession']}  lo={r['lo']} hi={r['hi']} exact={r['ex']}" for r in inconsistent],
+        ))
+
+    # A value that is not shares × price, to the cent. Catches a regression in
+    # the rounding or a unit slip between dollars and cents.
+    mismatched = [
+        r for r in _rows(conn, f"""
+            SELECT f.accession, t.shares, t.price_per_share px, t.amount_exact_cents ex
+            FROM insider_transactions t JOIN insider_filings f ON f.id = t.filing_id
+            WHERE f.status IN {_counted()}
+              AND t.amount_exact_cents IS NOT NULL
+              AND t.shares IS NOT NULL AND t.price_per_share IS NOT NULL
+        """)
+        if abs(r["shares"] * r["px"] * 100 - r["ex"]) > 1.5
+    ]
+    if mismatched:
+        out.append(Finding(
+            ERROR, "insider_value_mismatch",
+            f"{len(mismatched)} insider row(s) do not equal shares × price",
+            "The stored value is derived from the filed share count and price. "
+            "A row that no longer matches means the derivation drifted — every "
+            "insider volume figure is then wrong while still looking plausible.",
+            [f"{r['accession']}  {r['shares']} × {r['px']} ≠ {r['ex']} cents" for r in mismatched],
+        ))
+
+    priced_without_inputs = _rows(conn, f"""
+        SELECT f.accession, t.shares, t.price_per_share px FROM insider_transactions t
+        JOIN insider_filings f ON f.id = t.filing_id
+        WHERE f.status IN {_counted()} AND t.amount_exact_cents IS NOT NULL
+          AND (t.shares IS NULL OR t.price_per_share IS NULL OR t.price_per_share <= 0)
+    """)
+    if priced_without_inputs:
+        out.append(Finding(
+            ERROR, "insider_value_without_inputs",
+            f"{len(priced_without_inputs)} insider row(s) carry a value with no shares or price",
+            "A value exists only as shares × price. One without them was "
+            "invented somewhere, which is the bracket-collapsing failure this "
+            "project treats as a bug rather than a simplification.",
+            [f"{r['accession']}  shares={r['shares']} price={r['px']}" for r in priced_without_inputs],
+        ))
+
+    unpriced = conn.execute(f"""
+        SELECT COUNT(*) n FROM insider_transactions t JOIN insider_filings f ON f.id = t.filing_id
+        WHERE f.status IN {_counted()} AND t.amount_exact_cents IS NULL
+    """).fetchone()["n"]
+    if unpriced:
+        out.append(Finding(
+            INFO, "insider_unpriced_rows",
+            f"{unpriced} insider row(s) report no price",
+            "Their value is unknown, not zero, so they count toward trade "
+            "counts and contribute nothing to volume. Expected in small "
+            "numbers: some filers leave the price cell to a footnote.",
+        ))
+    return out
+
+
+def check_insider_dates(conn, today: date | None = None) -> list[Finding]:
+    """Trade dates that cannot be compared to the filing date."""
+    rows = _rows(conn, f"""
+        SELECT f.accession, f.ticker, f.filing_date, t.tx_date, t.deemed_execution_date
+        FROM insider_transactions t JOIN insider_filings f ON f.id = t.filing_id
+        WHERE f.status IN {_counted()} AND t.late IS NULL
+    """)
+    if not rows:
+        return []
+    return [Finding(
+        INFO, "insider_uncomparable_dates",
+        f"{len(rows)} insider row(s) have a trade date that cannot be compared to the filing date",
+        "Reproduced as filed — some filers write a timezone-suffixed or "
+        "malformed date. The lateness flag is left unknown rather than guessed, "
+        "and the dashboard shows \"date as filed\".",
+        [f"{r['accession']}  {r['ticker'] or '—'}  traded {r['tx_date']!r}  filed {r['filing_date']}"
+         for r in rows],
+    )]
+
+
+def check_insider_feed_health(conn, today: date | None = None) -> list[Finding]:
+    """Whether the EDGAR sync is still collecting anything.
+
+    The Form 4 feed remembers about two business days. A sync that stops
+    working does not fail loudly — it just stops storing filings, and the
+    insider totals quietly stop growing.
+    """
+    from .db import get_state
+
+    out = []
+    status = get_state(conn, "edgar_status")
+    cursor = get_state(conn, "edgar_cursor")
+    gap = get_state(conn, "edgar_gap")
+
+    if status is None:
+        return [Finding(
+            INFO, "insider_sync_not_attempted",
+            "The EDGAR insider sync has never run",
+            "Expected until EDGAR_USER_AGENT is configured; the step skips "
+            "itself without it.",
+        )]
+    if status.startswith("skipped"):
+        out.append(Finding(
+            INFO, "insider_sync_skipped", f"Insider sync skipping itself: {status}",
+            "SEC requires a contact e-mail in the User-Agent. Set "
+            "EDGAR_USER_AGENT to enable the source.",
+        ))
+    elif not status.startswith("ok"):
+        # throttled / error / gap — the source is degraded, not merely quiet.
+        out.append(Finding(
+            ERROR if status.startswith(("throttled", "gap")) else WARN,
+            "insider_sync_degraded", f"Insider sync last reported: {status}",
+            "A throttle means SEC refused the traffic; an error means the run "
+            "aborted. The cursor is a watermark, so nothing is lost yet — but "
+            "the feed only remembers about two business days, after which the "
+            "missing range needs `whale backfill-insiders`.",
+        ))
+
+    if gap:
+        start, _, end = gap.partition("..")
+        out.append(Finding(
+            ERROR, "insider_feed_gap",
+            f"The insider feed advanced past a gap ({gap})",
+            "Filings in this range were published while the pipeline was not "
+            "watching and the feed has since forgotten them. They will never "
+            "arrive on their own.",
+            [f"python -m whale backfill-insiders --from {start} --to {end}"],
+        ))
+
+    if cursor and status.startswith("ok"):
+        # poll runs every 3h; a cursor older than a day means the step is not
+        # advancing even though it reports success.
+        age_days = (
+            (today or date.today())
+            - date.fromisoformat(cursor[:10])
+        ).days
+        if age_days > 1:
+            out.append(Finding(
+                WARN, "insider_cursor_stale",
+                f"The insider cursor has not advanced in {age_days} days (at {cursor})",
+                "The sync reports success but is not moving forward. Either no "
+                "Form 4 has been published since — implausible on a business "
+                "day — or the feed request is returning nothing usable.",
+            ))
+    return out
+
+
+def check_insider_coverage(conn, today: date | None = None) -> list[Finding]:
+    """What the floor filter is accepting and rejecting."""
+    from .db import get_state
+
+    row = conn.execute(f"""
+        SELECT (SELECT COUNT(*) FROM insider_filings WHERE status IN {_counted()}) kept,
+               (SELECT COUNT(*) FROM insider_filings WHERE status = 'failed') failed,
+               (SELECT COUNT(*) FROM insider_transactions) txs,
+               (SELECT COUNT(DISTINCT issuer_cik) FROM insider_filings) issuers
+    """).fetchone()
+    if not row["kept"] and not row["failed"]:
+        return []
+    out = []
+    if row["failed"]:
+        out.append(Finding(
+            WARN, "insider_unreadable_filings",
+            f"{row['failed']} Form 4 filing(s) could not be parsed",
+            "The submission was fetched but its ownership XML did not parse. "
+            "They are kept so they stay visible and re-parseable; a cluster of "
+            "them means the schema changed.",
+        ))
+    skipped = get_state(conn, "edgar_skipped")
+    out.append(Finding(
+        INFO, "insider_coverage",
+        f"{row['kept']} Form 4 filing(s) stored — {row['txs']} open-market trades "
+        f"across {row['issuers']} issuers",
+        "Only filings whose open-market buys or sells reach the configured "
+        "floor in one direction are stored; the rest are counted and dropped.",
+        [f"last run skipped: {skipped}"] if skipped else [],
+    ))
+    return out
+
+
 CHECKS = (
     check_empty_parsed_filings,
     check_nonstandard_amount_brackets,
@@ -392,6 +659,12 @@ CHECKS = (
     check_transaction_density,
     check_alert_health,
     check_senate,
+    check_insider_empty_filings,
+    check_insider_primary_owner,
+    check_insider_values,
+    check_insider_dates,
+    check_insider_feed_health,
+    check_insider_coverage,
 )
 
 
@@ -416,7 +689,11 @@ def summary(conn: sqlite3.Connection) -> dict:
                (SELECT COUNT(DISTINCT ticker) FROM transactions WHERE ticker IS NOT NULL) tickers,
                (SELECT COUNT(DISTINCT politician_id) FROM transactions) members,
                (SELECT MAX(filing_date) FROM filings WHERE status IN {_counted()}) newest,
-               (SELECT MAX(updated_at) FROM filings) last_run
+               (SELECT MAX(updated_at) FROM filings) last_run,
+               (SELECT COUNT(*) FROM insider_filings) insider_filings,
+               (SELECT COUNT(*) FROM insider_transactions) insider_txs,
+               (SELECT COUNT(DISTINCT cik) FROM insiders) insiders,
+               (SELECT MAX(filing_date) FROM insider_filings) insider_newest
     """).fetchone()
     return dict(row)
 
@@ -438,10 +715,13 @@ def report(db_path: Path, today: date | None = None) -> tuple[str, list[Finding]
         "",
         "## Corpus",
         "",
-        f"- filings indexed: **{s['filings']}**",
-        f"- transactions: **{s['txs']}** across **{s['tickers']}** tickers "
+        f"- House filings indexed: **{s['filings']}**",
+        f"- congressional transactions: **{s['txs']}** across **{s['tickers']}** tickers "
         f"and **{s['members']}** members",
         f"- newest parsed filing: {s['newest']}",
+        f"- Form 4 filings stored: **{s['insider_filings']}** — "
+        f"**{s['insider_txs']}** open-market trades by **{s['insiders']}** insiders "
+        f"(newest {s['insider_newest']})",
         f"- database last written: {s['last_run']}",
         "",
         "## Findings",

@@ -60,7 +60,10 @@ parser stays faithful to the PDF and the UI flags the row rather than
   check that fires every week on benign data is itself a defect (fix the check),
   and a check that raises must report `check_failed` rather than be swallowed —
   an unknown must never read as a pass. Real tickers collide with asset-type
-  codes (ST is Sensata, AB is AllianceBernstein); do not "fix" that.
+  codes (ST is Sensata, AB is AllianceBernstein); do not "fix" that. There is
+  deliberately no shape check on `insider_filings.ticker`: it comes from an XML
+  element rather than a column split, and real values include exchange-prefixed
+  foreign symbols like `ASX:LNW`.
 - Tests: `.venv/bin/python -m pytest -q` (run before every PR).
 
 ## SEC Form 4 (corporate insiders)

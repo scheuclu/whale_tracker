@@ -262,10 +262,19 @@ python -m whale audit --fail-on error # exit 1 on an error-severity finding
 ```
 
 It looks for the failure mode this project actually has — plausible-looking
-wrong numbers rather than crashes. Checks include filings that parsed to zero
-transactions, amounts off the statutory bracket ladder, tickers that are really
-CUSIPs, filings stuck in the queue, unmatched filers, and a drop in rows-per-
-filing that would signal the Clerk changing the PDF template.
+wrong numbers rather than crashes — and covers both sources, which fail
+differently.
+
+For House PTRs, where the risk is a mis-split PDF column: filings that parsed
+to zero transactions, amounts off the statutory bracket ladder, tickers that
+are really CUSIPs, filings stuck in the queue, unmatched filers, and a drop in
+rows-per-filing that would signal the Clerk changing the PDF template.
+
+For SEC Form 4s, where the XML rarely fails to parse but *coverage* does: a
+throttled or stalled EDGAR sync (which reports success while storing nothing),
+a feed gap that needs a daily-index backfill, a stored filing with no rows or
+no primary reporting owner, and values that no longer equal shares × the filed
+price.
 
 Needs `ANTHROPIC_API_KEY` as a repo secret. Without it the audit still runs and
 is uploaded as a build artifact; only the analysis and PR step is skipped.

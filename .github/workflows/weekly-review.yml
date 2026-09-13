@@ -157,9 +157,11 @@ jobs:
             --allowedTools "Read,Grep,Glob,Edit,Write,Bash(python:*),Bash(git:*),Bash(gh pr:*),Bash(gh issue:*),Bash(sqlite3:*),Bash(cat:*),Bash(ls:*)"
             --max-turns 60
           prompt: |
-            You are reviewing one week of output from the whale_tracker pipeline,
-            which parses US House STOCK Act disclosures. Read CLAUDE.md first —
-            it states the project's invariants, and they bind you too.
+            You are reviewing one week of output from the whale_tracker
+            pipeline, which tracks two sources: US House STOCK Act disclosures
+            (PDF, bracketed amounts) and SEC Form 4 corporate-insider filings
+            (XML, exact values). Read CLAUDE.md first — it states the project's
+            invariants for both, and they bind you too.
 
             The evidence is at /tmp/evidence.md: a data audit produced by
             `python -m whale audit` (checks live in src/whale/audit.py) and a
@@ -185,14 +187,31 @@ jobs:
               defect. Fixing the check is a legitimate outcome.
             - Prefer silent-corruption bugs over cosmetics. This project's
               failure mode is plausible-looking wrong numbers, not crashes.
+            - The two sources fail differently. A House PTR is parsed out of a
+              PDF by word coordinates, so suspect a mis-split column. A Form 4
+              is structured XML, so parsing rarely breaks — suspect *coverage*
+              instead: a throttled or stalled EDGAR sync stores nothing and
+              reports success, and the insider totals quietly stop growing.
+              `edgar_status`, `edgar_cursor` and `edgar_gap` in `sync_state`
+              are the evidence; the audit surfaces them.
 
             DO NOT
 
             - Do not open a PR if nothing merits one. Saying "nothing to fix" is
               the correct and expected outcome most weeks. Never invent work.
-            - Do not re-report known, documented limitations: scanned filings and
-              vision accuracy (issue #1), Senate eFD being blocked, amounts being
-              ranges, filer date typos. These are decisions, not bugs.
+            - Do not re-report known, documented limitations. These are
+              decisions, not bugs: scanned filings and vision accuracy (issue
+              #1), Senate eFD being blocked, congressional amounts being
+              ranges, filer date typos, and — on the insider side — the $50k
+              open-market floor, amendments (4/A), Forms 3 and 5 and the
+              derivative table not being ingested, insider Telegram alerts not
+              existing yet, and the feed's ~2-business-day memory.
+            - Insider invariants worth knowing before you call something a bug:
+              a value is `shares × price as filed` stored as min = max = exact
+              (NULL, never 0, when the filing gives no price); `late` is derived
+              once in Python against a two-business-day deadline and SQL only
+              reads it; "distinct insiders" means primary reporting owners, so
+              a joint filing counts once.
             - Do not modify data/trades.sqlite3. It is pipeline state owned by the
               poll workflow, and a PR touching it will conflict.
             - Do not edit .github/workflows/ — the Actions token cannot push
