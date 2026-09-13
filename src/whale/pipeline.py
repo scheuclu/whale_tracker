@@ -1,4 +1,4 @@
-"""Pipeline orchestration: sync → parse → notify → cluster.
+"""Pipeline orchestration: sync → parse → notify → cluster → insiders.
 
 Every step commits DB state before the next runs, so a crash at any point
 resumes cleanly on the next cron tick via the filing status state machine.
@@ -10,7 +10,7 @@ import io
 import logging
 import sqlite3
 
-from . import db, house, roster, senate, stats, telegram
+from . import db, house, insiders, roster, senate, stats, telegram
 from .amounts import parse_amount
 from .config import Config
 from .ptr import ParsedFiling, ScannedFilingError, parse_pdf
@@ -26,6 +26,7 @@ def run(config: Config, dry_run: bool = False) -> None:
         parse_pending(conn, config)
         notify_pending(conn, config, dry_run=dry_run)
         notify_clusters(conn, config, dry_run=dry_run)
+        _sync_insiders(conn, config)
     finally:
         conn.close()
 
@@ -108,6 +109,24 @@ def _sync_senate(conn: sqlite3.Connection, config: Config) -> None:
             status="seen_skipped",
         )
     conn.commit()
+
+
+def _sync_insiders(conn: sqlite3.Connection, config: Config) -> None:
+    """Best-effort, and last: an EDGAR slowdown must never delay House alerts.
+
+    `insiders.sync` absorbs the failures it knows about (throttling, network,
+    a malformed filing); this guard is for everything else.
+    """
+    if not config.insiders.enabled:
+        return
+    try:
+        result = insiders.sync(conn, config)
+    except Exception as exc:
+        log.exception("insider sync failed unexpectedly")
+        db.set_state(conn, insiders.STATE_STATUS, f"error: {exc}")
+        conn.commit()
+        return
+    log.info("insiders: %s", result.summary())
 
 
 # --- parse ------------------------------------------------------------------

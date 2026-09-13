@@ -38,9 +38,32 @@ class IngestSettings:
 
 
 @dataclass
+class InsiderSettings:
+    """SEC Form 4 ingestion. See config.yaml for the reasoning behind each."""
+
+    enabled: bool = True
+    # Only filings whose open-market buys or sells sum to at least this much
+    # in one direction are stored. ~420 Form 4s a day; this is the knob that
+    # keeps the git-committed database sane.
+    min_trade_usd: int = 50_000
+    # 30 days, not 90: Form 4 is due two business days after the trade, so a
+    # trade-date window has no reporting lag to absorb.
+    cluster_window_days: int = 30
+    min_insiders: int = 3
+    # Consumed by insider alerts once they exist; read now so the flip is a
+    # one-line change.
+    max_filing_age_days: int = 7
+
+    @property
+    def min_trade_cents(self) -> int:
+        return self.min_trade_usd * 100
+
+
+@dataclass
 class Config:
     alerts: AlertSettings = field(default_factory=AlertSettings)
     ingest: IngestSettings = field(default_factory=IngestSettings)
+    insiders: InsiderSettings = field(default_factory=InsiderSettings)
     senate_enabled: bool = True
     # Scanned-PDF transcription is opt-in; see config.yaml for the measured
     # accuracy that makes it off by default.
@@ -52,10 +75,17 @@ class Config:
     telegram_chat_id: str | None = None
     gemini_api_key: str | None = None
     senate_proxy_url: str | None = None
+    # SEC requires "<project> <contact e-mail>"; without it EDGAR serves an
+    # HTML refusal page instead of filings, so the insider step skips itself.
+    edgar_user_agent: str | None = None
 
     @property
     def telegram_configured(self) -> bool:
         return bool(self.telegram_bot_token and self.telegram_chat_id)
+
+    @property
+    def insiders_configured(self) -> bool:
+        return bool(self.edgar_user_agent and self.edgar_user_agent.strip())
 
 
 def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
@@ -81,9 +111,19 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
         max_filing_age_days=int(i.get("max_filing_age_days", 7)),
     )
 
+    n = raw.get("insiders") or {}
+    insiders = InsiderSettings(
+        enabled=bool(n.get("enabled", True)),
+        min_trade_usd=int(n.get("min_trade_usd", 50_000)),
+        cluster_window_days=int(n.get("cluster_window_days", 30)),
+        min_insiders=int(n.get("min_insiders", 3)),
+        max_filing_age_days=int(n.get("max_filing_age_days", 7)),
+    )
+
     return Config(
         alerts=alerts,
         ingest=ingest,
+        insiders=insiders,
         senate_enabled=bool((raw.get("senate") or {}).get("enabled", True)),
         vision_enabled=bool((raw.get("vision") or {}).get("enabled", False)),
         db_path=db_path,
@@ -91,4 +131,5 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
         telegram_chat_id=os.environ.get("TELEGRAM_CHAT_ID"),
         gemini_api_key=os.environ.get("GEMINI_API_KEY"),
         senate_proxy_url=os.environ.get("SENATE_PROXY_URL"),
+        edgar_user_agent=os.environ.get("EDGAR_USER_AGENT"),
     )

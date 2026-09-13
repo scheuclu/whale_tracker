@@ -58,6 +58,40 @@ parser stays faithful to the PDF and the UI flags the row rather than
   `vision.enabled` to close a coverage gap.
 - Tests: `.venv/bin/python -m pytest -q` (run before every PR).
 
+## SEC Form 4 (corporate insiders)
+
+- Insider data lives in its own tables (`insiders`, `insider_filings`,
+  `insider_filing_owners`, `insider_transactions`). Never join it into the
+  politician tables or aggregates: every politician query filters on status
+  alone, so shared tables would fold insider volume into member leaderboards.
+- **Insider values are exact but computed**: `shares × price as filed`, stored
+  with `min = max = exact`. A row with no price (or a zero price) has all three
+  NULL — an unknown value is never 0. Filers may report a weighted-average
+  price; the real range is only in the footnote text kept on the row. Label
+  values "shares × reported price", never "disclosed range".
+- Ingestion keeps only filings whose open-market `P`/`S` rows reach
+  `insiders.min_trade_usd` in one direction, and only those rows. Rejected
+  filings are not stored; `sync_state.edgar_cursor` is a per-filing watermark
+  written oldest → newest, so an aborted run loses nothing and re-fetches
+  nothing. Do not "fix" a stuck run by resetting the cursor — run
+  `backfill-insiders` for the range instead.
+- The feed caps at 2000 entries (~2 business days); the daily `form.idx` is the
+  gap-free source. SEC allows 10 req/s and requires a contact e-mail in the
+  User-Agent (`EDGAR_USER_AGENT`); undeclared clients get an HTML refusal page,
+  sometimes with a 200. `edgar.EdgarClient` handles both; never bypass it.
+- **`insider_transactions.late` is derived once in Python** (`stats.form4_is_late`:
+  two business days, federal holidays excluded, from the deemed execution date
+  when present). SQL reads the column and must not re-derive it — the holiday
+  logic has no defensible SQL twin. Recompute with `backfill-insiders --recompute-late`.
+- "Distinct insiders" always means primary reporting owners (`owner_index = 0`):
+  a joint filing is one decision. Show filing counts next to insider counts.
+- The insider cluster window is 30 days, not 90: Form 4 has a 2-business-day
+  deadline, so there is no reporting lag to absorb.
+- `4/A`, Forms 3/5 and the derivative table are not ingested yet (counted in
+  `sync_state.edgar_skipped`). Kept filings enter as `backfilled` until insider
+  alerts exist; the alerts PR flips recent filings to `parsed` at ingest.
+- `insiders.sync` runs **last** in `pipeline.run` and must never raise into it.
+
 ## Data-viz
 
 Charts are pure CSS/SVG in `web/app/charts.tsx`; no chart library. Colour roles

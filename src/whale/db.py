@@ -18,15 +18,24 @@ Filing status state machine:
 
 Whether Telegram has seen a filing is tracked by `notified_at`, not by the
 status, because a filing can be both reported and still unparsed.
+
+SEC Form 4 filings (`insider_*` tables) reuse the same words with a smaller
+machine: they are parsed before they are stored, so there is no 'new'. Kept
+filings enter as `backfilled` (history, never announced) until insider alerts
+exist; `failed` means the submission was fetched but its XML did not parse,
+kept so it is visible and re-parseable. The tables are deliberately separate
+from `filings`/`transactions`: every politician aggregate filters on status
+alone, so shared tables would fold insider volume into member leaderboards.
 """
 
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS politicians (
@@ -113,6 +122,90 @@ CREATE TABLE IF NOT EXISTS sync_state (
 );
 """
 
+
+# SEC Form 4 (corporate insiders). Values are shares × the price as filed —
+# exact figures, unlike the House brackets — so min = max = exact, or all
+# three NULL when the filing gives no price: an unknown value is never 0.
+_INSIDER_DDL = """
+CREATE TABLE IF NOT EXISTS insiders (
+  cik TEXT PRIMARY KEY,                -- 10-digit zero-padded, as filed
+  name TEXT NOT NULL,                  -- as on the most recently processed filing
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS insider_filings (
+  id INTEGER PRIMARY KEY,
+  accession TEXT NOT NULL UNIQUE,      -- dashed: 0001214659-26-011648
+  form_type TEXT NOT NULL,             -- '4' only for now; kept for 4/A, 3, 5
+  issuer_cik TEXT,                     -- NULL only on a 'failed' row with an unreadable header
+  issuer_name TEXT,
+  ticker TEXT,                         -- normalised issuerTradingSymbol; NULL for NONE / N/A / blank
+  ticker_as_filed TEXT,                -- verbatim
+  period_of_report TEXT,
+  -- FILED AS OF DATE. Named filing_date so the disclosure-delay helpers apply.
+  filing_date TEXT NOT NULL,
+  accepted_at TEXT,                    -- ACCEPTANCE-DATETIME (US/Eastern) as UTC; NULL without tz data
+  aff_10b5_one INTEGER,                -- Rule 10b5-1 box: 1 / 0 / NULL when the element is absent
+  source TEXT NOT NULL,                -- 'feed' | 'index'
+  source_url TEXT NOT NULL,            -- the …-index.htm page
+  status TEXT NOT NULL,
+  notified_at TEXT,
+  last_error TEXT,
+  remarks TEXT,
+  first_seen_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_insider_filings_issuer ON insider_filings(issuer_cik);
+CREATE INDEX IF NOT EXISTS idx_insider_filings_ticker ON insider_filings(ticker);
+CREATE INDEX IF NOT EXISTS idx_insider_filings_date   ON insider_filings(filing_date);
+CREATE INDEX IF NOT EXISTS idx_insider_filings_status ON insider_filings(status);
+
+-- Relationship is per filing, not per person: titles change. owner_index 0 is
+-- the primary reporting owner; joint filers (a fund plus its GP and managing
+-- member) are one economic decision, so "distinct insiders" counts index 0 only.
+CREATE TABLE IF NOT EXISTS insider_filing_owners (
+  filing_id INTEGER NOT NULL REFERENCES insider_filings(id) ON DELETE CASCADE,
+  insider_cik TEXT NOT NULL REFERENCES insiders(cik),
+  owner_index INTEGER NOT NULL,
+  is_director INTEGER NOT NULL DEFAULT 0,
+  is_officer INTEGER NOT NULL DEFAULT 0,
+  is_ten_percent_owner INTEGER NOT NULL DEFAULT 0,
+  is_other INTEGER NOT NULL DEFAULT 0,
+  officer_title TEXT,
+  other_text TEXT,
+  PRIMARY KEY (filing_id, insider_cik)
+);
+CREATE INDEX IF NOT EXISTS idx_insider_owners_cik ON insider_filing_owners(insider_cik);
+
+-- Open-market rows (codes P/S, non-derivative table) of kept filings only.
+CREATE TABLE IF NOT EXISTS insider_transactions (
+  id INTEGER PRIMARY KEY,
+  filing_id INTEGER NOT NULL REFERENCES insider_filings(id) ON DELETE CASCADE,
+  tx_date TEXT,                        -- as filed
+  deemed_execution_date TEXT,          -- as filed; starts the 2-day clock when present
+  security_title TEXT,
+  transaction_code TEXT NOT NULL,      -- 'P' | 'S'
+  action TEXT NOT NULL,                -- 'purchase' | 'sale' — same vocabulary as transactions.action
+  acquired_disposed TEXT,              -- 'A' | 'D' as filed
+  timeliness TEXT,                     -- 'E' | 'L' as filed (the filer's own late box) | NULL on time
+  shares REAL,
+  price_per_share REAL,                -- as filed; may be a VWAP whose range lives in a footnote
+  amount_min_cents INTEGER,
+  amount_max_cents INTEGER,
+  amount_exact_cents INTEGER,
+  shares_after REAL,
+  direct_or_indirect TEXT,             -- 'D' | 'I'
+  nature_of_ownership TEXT,
+  footnotes TEXT,                      -- footnote texts referenced by this row, newline-joined
+  -- Derived once at ingest by stats.form4_is_late (2 business days, federal
+  -- holidays excluded). NULL when the dates contradict each other. Read, never
+  -- re-derived, by SQL.
+  late INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_insider_tx_filing ON insider_transactions(filing_id);
+CREATE INDEX IF NOT EXISTS idx_insider_tx_date   ON insider_transactions(tx_date);
+"""
+
 # Statuses whose transactions count toward statistics. A filing that failed to
 # parse contributes nothing, and one that is merely 'new' has no rows yet.
 COUNTED_STATUSES = ("parsed", "notified", "backfilled")
@@ -137,6 +230,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.executescript(_DDL)
     if version == 1:
         conn.execute("ALTER TABLE filings ADD COLUMN notified_at TEXT")
+    if version < 3:
+        # A fresh DB is version 0 and takes this step too, so the insider DDL
+        # is not repeated in _DDL.
+        conn.executescript(_INSIDER_DDL)
     if version < SCHEMA_VERSION:
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         conn.commit()
@@ -287,3 +384,112 @@ def set_state(conn: sqlite3.Connection, key: str, value: str | None) -> None:
         "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
         (key, value, now_iso()),
     )
+
+
+# --- insiders (SEC Form 4) ---------------------------------------------------
+
+
+def known_accessions(conn: sqlite3.Connection, accessions: Iterable[str]) -> set[str]:
+    """Which of these accession numbers are already stored."""
+    known: set[str] = set()
+    items = list(accessions)
+    for i in range(0, len(items), 500):
+        chunk = items[i:i + 500]
+        marks = ", ".join("?" for _ in chunk)
+        known.update(
+            r["accession"] for r in conn.execute(
+                f"SELECT accession FROM insider_filings WHERE accession IN ({marks})", chunk
+            )
+        )
+    return known
+
+
+def upsert_insider(conn: sqlite3.Connection, cik: str, name: str) -> None:
+    conn.execute(
+        "INSERT INTO insiders (cik, name, updated_at) VALUES (?,?,?) "
+        "ON CONFLICT(cik) DO UPDATE SET name=excluded.name, updated_at=excluded.updated_at",
+        (cik, name, now_iso()),
+    )
+
+
+def insert_insider_filing(conn: sqlite3.Connection, **fields) -> int | None:
+    """Insert a Form 4 filing. Returns None if the accession is already known."""
+    ts = now_iso()
+    fields.setdefault("first_seen_at", ts)
+    fields.setdefault("updated_at", ts)
+    cols = ", ".join(fields)
+    placeholders = ", ".join("?" for _ in fields)
+    cur = conn.execute(
+        f"INSERT OR IGNORE INTO insider_filings ({cols}) VALUES ({placeholders})",
+        list(fields.values()),
+    )
+    return cur.lastrowid if cur.rowcount else None
+
+
+def insider_filing_id(conn: sqlite3.Connection, accession: str) -> int | None:
+    row = conn.execute(
+        "SELECT id FROM insider_filings WHERE accession = ?", (accession,)
+    ).fetchone()
+    return row["id"] if row else None
+
+
+def set_insider_status(conn: sqlite3.Connection, filing_id: int, status: str,
+                       error: str | None = None) -> None:
+    conn.execute(
+        "UPDATE insider_filings SET status = ?, last_error = ?, updated_at = ? WHERE id = ?",
+        (status, error, now_iso(), filing_id),
+    )
+
+
+def insider_filings_by_status(conn: sqlite3.Connection, *statuses: str,
+                              unnotified_only: bool = False) -> list[sqlite3.Row]:
+    marks = ", ".join("?" for _ in statuses)
+    sql = f"SELECT * FROM insider_filings WHERE status IN ({marks})"
+    if unnotified_only:
+        sql += " AND notified_at IS NULL"
+    sql += " ORDER BY filing_date, id"
+    return conn.execute(sql, statuses).fetchall()
+
+
+def replace_insider_owners(conn: sqlite3.Connection, filing_id: int,
+                           owners: list[dict]) -> None:
+    """Store a filing's reporting owners in filing order (index 0 = primary)."""
+    conn.execute("DELETE FROM insider_filing_owners WHERE filing_id = ?", (filing_id,))
+    for index, o in enumerate(owners):
+        conn.execute(
+            """INSERT INTO insider_filing_owners
+               (filing_id, insider_cik, owner_index, is_director, is_officer,
+                is_ten_percent_owner, is_other, officer_title, other_text)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (
+                filing_id, o["cik"], index, int(bool(o.get("is_director"))),
+                int(bool(o.get("is_officer"))), int(bool(o.get("is_ten_percent_owner"))),
+                int(bool(o.get("is_other"))), o.get("officer_title"), o.get("other_text"),
+            ),
+        )
+
+
+def replace_insider_transactions(conn: sqlite3.Connection, filing_id: int,
+                                 rows: list[dict]) -> int:
+    """Store a filing's open-market rows, replacing any previous parse of it."""
+    conn.execute("DELETE FROM insider_transactions WHERE filing_id = ?", (filing_id,))
+    for r in rows:
+        conn.execute(
+            """INSERT INTO insider_transactions
+               (filing_id, tx_date, deemed_execution_date, security_title,
+                transaction_code, action, acquired_disposed, timeliness, shares,
+                price_per_share, amount_min_cents, amount_max_cents,
+                amount_exact_cents, shares_after, direct_or_indirect,
+                nature_of_ownership, footnotes, late)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                filing_id, r.get("tx_date"), r.get("deemed_execution_date"),
+                r.get("security_title"), r["transaction_code"], r["action"],
+                r.get("acquired_disposed"), r.get("timeliness"), r.get("shares"),
+                r.get("price_per_share"), r.get("amount_min_cents"),
+                r.get("amount_max_cents"), r.get("amount_exact_cents"),
+                r.get("shares_after"), r.get("direct_or_indirect"),
+                r.get("nature_of_ownership"), r.get("footnotes"), r.get("late"),
+            ),
+        )
+    return len(rows)
