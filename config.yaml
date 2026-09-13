@@ -43,3 +43,21 @@ vision:
   # and cluster statistics is not. Turn this on only if you would rather have
   # approximate coverage than none, and read the Pipeline page accordingly.
   enabled: false
+
+insiders:
+  # SEC Form 4: corporate officers, directors and 10% owners. Only open-market
+  # or private purchases and sales (codes P and S in the non-derivative table)
+  # are kept, and only when a filing's summed value in one direction reaches
+  # the floor. The rest is compensation plumbing — awards, tax withholding,
+  # option exercises, gifts. Roughly 420 Form 4s are filed every business day
+  # and the database is committed to git every three hours; this floor is what
+  # keeps that sane. Rejected filings are not stored at all.
+  enabled: true
+  min_trade_usd: 50000
+  # 30 days, not 90: Form 4 is due two business days after the trade, so a
+  # trade-date window has no 45-day reporting lag to absorb.
+  cluster_window_days: 30
+  min_insiders: 3
+  # Read now, consumed by Telegram alerts once they exist: a filing older than
+  # this on first sight is history, never a notification.
+  max_filing_age_days: 7

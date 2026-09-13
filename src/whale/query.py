@@ -130,6 +130,23 @@ def pipeline_status(config: Config) -> None:
         senate_status = db.get_state(conn, "senate_status")
         print(f"Senate eFD:   {senate_status or 'not attempted'}")
 
+        print("\nInsiders (SEC Form 4):")
+        for r in conn.execute(
+            "SELECT status, COUNT(*) n FROM insider_filings GROUP BY status ORDER BY n DESC"
+        ):
+            print(f"  {r['status']:<14} {r['n']:>5}")
+        itot = conn.execute(
+            "SELECT COUNT(*) tx, COUNT(DISTINCT f.issuer_cik) issuers "
+            "FROM insider_transactions t JOIN insider_filings f ON f.id = t.filing_id"
+        ).fetchone()
+        print(f"  open-market trades: {itot['tx']} · issuers: {itot['issuers']}")
+        for key, label in (("edgar_status", "EDGAR"), ("edgar_cursor", "cursor"),
+                           ("edgar_gap", "gap"), ("edgar_backfill_through", "backfilled through"),
+                           ("edgar_skipped", "skipped")):
+            value = db.get_state(conn, key)
+            if value:
+                print(f"  {label}: {value}")
+
         errors = conn.execute(
             "SELECT doc_id, last_error FROM filings WHERE status = 'failed' LIMIT 8"
         ).fetchall()
@@ -137,5 +154,125 @@ def pipeline_status(config: Config) -> None:
             print("\nRecent failures:")
             for e in errors:
                 print(f"  {e['doc_id']}: {(e['last_error'] or '')[:70]}")
+    finally:
+        conn.close()
+
+
+# --- insiders (SEC Form 4) ---------------------------------------------------
+
+_VALUE_NOTE = ("Values are shares × the price as filed. A filing may report a weighted-average\n"
+               "price, so treat them as approximate; rows with no price carry no value.")
+
+
+def insider_issuers(config: Config, window_days: int | None, by: str,
+                    direction: str | None, limit: int) -> None:
+    conn = db.connect(config.db_path)
+    try:
+        rows = stats.top_insider_issuers(conn, window_days, by=by, direction=direction, limit=limit)
+        if not rows:
+            print("no insider trades yet — run `whale sync-insiders` first")
+            return
+        window = f"last {window_days}d" if window_days else "all time"
+        scope = f", {direction}s only" if direction else ""
+        print(f"\nTop issuers by {by} ({window}{scope})\n")
+        print(f"{'TICKER':<8} {'ISSUER':<28} {'INSIDERS':>8} {'FILINGS':>7} {'BUY/SELL':>9} "
+              f"{'BOUGHT':>10} {'SOLD':>10}")
+        print("─" * 86)
+        for s in rows:
+            print(f"{(s.ticker or '—'):<8} {(s.issuer_name or '')[:28]:<28} {s.insider_count:>8} "
+                  f"{s.filing_count:>7} {str(s.buy_count) + '/' + str(s.sell_count):>9} "
+                  f"{usd(s.buy_volume.mid_cents):>10} {usd(s.sell_volume.mid_cents):>10}")
+        print("\nINSIDERS counts primary reporting owners; a joint filing is one insider.")
+        print(_VALUE_NOTE)
+    finally:
+        conn.close()
+
+
+def insider_detail(config: Config, ticker: str, window_days: int | None) -> None:
+    conn = db.connect(config.db_path)
+    try:
+        symbol = ticker.upper()
+        issuers = [s for s in stats.insider_issuer_stats(conn, window_days).values()
+                   if s.ticker == symbol]
+        if not issuers:
+            print(f"no insider trades for {symbol}"
+                  + (f" in the last {window_days}d" if window_days else ""))
+            return
+        for s in issuers:
+            print(f"\n{symbol} — {s.issuer_name or ''} (CIK {s.issuer_cik})")
+            print(f"{s.insider_count} insiders · {s.filing_count} filings · "
+                  f"{s.buy_count} buys / {s.sell_count} sells")
+            print(f"Bought {usd(s.buy_volume.mid_cents)} · sold {usd(s.sell_volume.mid_cents)}")
+            if s.buy_insiders:
+                print(f"\nBought by: {', '.join(s.names(s.buy_insiders))}")
+            if s.sell_insiders:
+                print(f"Sold by:   {', '.join(s.names(s.sell_insiders))}")
+
+        print("\nTransactions:")
+        for r in _insider_rows(conn, symbol, window_days):
+            value = usd(r["amount_exact_cents"]) if r["amount_exact_cents"] is not None else "—"
+            shares = f"{r['shares']:,.0f}" if r["shares"] is not None else "?"
+            price = f"@ ${r['price_per_share']:,.2f}" if r["price_per_share"] is not None else ""
+            flags = " ".join(f for f in (
+                "10b5-1" if r["aff_10b5_one"] else "",
+                "LATE" if r["late"] else "",
+                "filer-marked-late" if r["timeliness"] == "L" else "",
+            ) if f)
+            role = _role(r)
+            print(f"  {r['tx_date']}  {r['action']:<8} {shares:>10} {price:<12} {value:>10}  "
+                  f"{r['insider_name'] or '?'}{role}  {flags}")
+        print()
+        print(_VALUE_NOTE)
+    finally:
+        conn.close()
+
+
+def _insider_rows(conn: sqlite3.Connection, ticker: str,
+                  window_days: int | None) -> list[sqlite3.Row]:
+    marks = ", ".join("?" for _ in COUNTED_STATUSES)
+    sql = f"""SELECT t.*, f.aff_10b5_one, f.accession, i.name AS insider_name,
+                     o.officer_title, o.is_director, o.is_officer, o.is_ten_percent_owner
+              FROM insider_transactions t
+              JOIN insider_filings f ON f.id = t.filing_id
+              LEFT JOIN insider_filing_owners o ON o.filing_id = f.id AND o.owner_index = 0
+              LEFT JOIN insiders i ON i.cik = o.insider_cik
+              WHERE f.ticker = ? AND f.status IN ({marks})"""
+    params: list = [ticker, *COUNTED_STATUSES]
+    if window_days:
+        from datetime import date, timedelta
+        sql += " AND t.tx_date >= ?"
+        params.append((date.today() - timedelta(days=window_days)).isoformat())
+    sql += " ORDER BY t.tx_date DESC, t.id DESC"
+    return conn.execute(sql, params).fetchall()
+
+
+def _role(r: sqlite3.Row) -> str:
+    if r["officer_title"]:
+        return f" ({r['officer_title']})"
+    if r["is_director"]:
+        return " (Director)"
+    if r["is_ten_percent_owner"]:
+        return " (10% owner)"
+    return ""
+
+
+def insider_clusters(config: Config) -> None:
+    conn = db.connect(config.db_path)
+    try:
+        clusters = stats.find_insider_clusters(conn, config.insiders)
+        window = config.insiders.cluster_window_days
+        if not clusters:
+            print(f"no issuer has {config.insiders.min_insiders}+ insiders trading the same "
+                  f"way in the last {window}d")
+            return
+        print(f"\nInsider clusters (last {window}d, {config.insiders.min_insiders}+ insiders)\n")
+        for c in clusters:
+            verb = "bought" if c.direction == "buy" else "sold"
+            print(f"{c.ticker or '—':<8} {c.issuer_name or ''}")
+            print(f"         {c.insider_count} insiders {verb} · {c.trade_count} trades · "
+                  f"{usd(c.volume.mid_cents)} across {c.filing_count} filings")
+            print(f"         {', '.join(c.insiders)}")
+        print()
+        print(_VALUE_NOTE)
     finally:
         conn.close()

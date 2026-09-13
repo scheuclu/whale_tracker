@@ -1,8 +1,9 @@
 # whale_tracker
 
-Watches US congressional stock-trade disclosures, sends each new filing to
-Telegram, alerts when several members converge on the same ticker, and builds a
-queryable knowledge base of **who traded what, how much, and how many of them**.
+Watches US congressional stock-trade disclosures and SEC Form 4 insider
+filings, sends each new congressional filing to Telegram, alerts when several
+members converge on the same ticker, and builds a queryable knowledge base of
+**who traded what, how much, and how many of them**.
 
 Sibling project to `youtube_finance_bro`, same shape: a Python pipeline on
 GitHub Actions, a SQLite database committed back to the repo, and a Next.js
@@ -22,6 +23,9 @@ A GitHub Actions workflow runs every 3 hours:
    pipeline state and the knowledge base).
 5. Sends the filing to Telegram, then checks whether any ticker has crossed a
    **cluster** threshold and alerts separately if so.
+6. Pulls new **SEC Form 4** filings — corporate officers, directors and 10%
+   owners — from EDGAR's live feed, keeps the ones with meaningful open-market
+   trades, and stores them in their own tables (see *Corporate insiders*).
 
 Failures resume on the next run via a per-filing status state machine — nothing
 is parsed or announced twice.
@@ -43,6 +47,10 @@ NVDA         12      30      12/18          $3.5M   $1.2M–$5.8M
 - `python -m whale tickers [--by volume|politicians] [--since 90d]` — leaderboard
 - `python -m whale ticker NVDA` — who traded it, when, for how much
 - `python -m whale politicians` — per-member volume, breadth, disclosure delay
+- `python -m whale insiders [--since 30d] [--by value|insiders] [--direction buy|sell]` —
+  issuers ranked by insider buying and selling
+- `python -m whale insiders --clusters` — issuers where several insiders traded the same way
+- `python -m whale insider AAPL` — every stored insider trade in one issuer
 - `python -m whale status` — ingestion and coverage
 
 ### Amounts are ranges, not figures
@@ -56,6 +64,11 @@ exact amount. So:
   estimate;
 - the open-ended top bracket ("Over $50,000,000") has no maximum, so any total
   containing one is reported as `≥` rather than given a fabricated upper bound.
+
+Insider trades are the one exception: Form 4 states share counts and a price
+per share, so their value is `shares × price` — exact, but labelled as computed,
+because a filer may report a weighted-average price whose real range sits in a
+footnote. A row with no price has an unknown value, never a zero.
 
 ## Telegram
 
@@ -105,6 +118,7 @@ Settings → Secrets and variables → Actions:
 | `TELEGRAM_CHAT_ID` | yes | notifications |
 | `GEMINI_API_KEY` | no | reads scanned paper filings (~11% of PTRs) |
 | `SENATE_PROXY_URL` | no | sticky residential proxy for Senate eFD |
+| `EDGAR_USER_AGENT` | no | SEC Form 4 ingestion; SEC requires `whale-tracker you@example.com` — without it the insider step skips |
 
 ### 3. First run
 
@@ -115,6 +129,7 @@ python -m whale sync                      # index filings; only recent ones queu
 python -m whale backfill --year 2026      # parse the year's history into the DB, silently
 python -m whale run --dry-run             # preview the messages without sending
 python -m whale run
+EDGAR_USER_AGENT="whale-tracker you@example.com" python -m whale sync-insiders   # SEC Form 4
 ```
 
 `backfill` deliberately does **not** notify. Cluster alerts are meaningless
@@ -142,6 +157,35 @@ Third-party aggregators were evaluated as an alternative and rejected: the
 house/senate-stock-watcher S3 datasets return `AccessDenied`, the Capitol Trades
 backend 503s, and Quiver Quantitative is paywalled. Depending on any of them
 would trade a verifiable primary source for an unreliable secondary one.
+
+### Corporate insiders (SEC Form 4)
+
+Officers, directors and 10% owners must report their trades on **Form 4**
+within two business days. The pipeline reads EDGAR's live feed
+(`browse-edgar?action=getcurrent&type=4`) every run and stores filings in
+separate `insider_*` tables — never mixed into the congressional data.
+
+- **Only open-market trades above a floor are kept.** Roughly 420 Form 4s are
+  filed every business day and most are compensation plumbing: option
+  exercises, tax withholding, grants, gifts. A filing is stored only if its
+  open-market (or private) purchases or sales — codes `P`/`S` — sum to at least
+  `insiders.min_trade_usd` ($50,000 by default) in one direction, and only
+  those rows are stored. Rejected filings are not recorded; the run counts them
+  and the Pipeline view shows the tally.
+- **Skipped for now:** amendments (`4/A`), Forms 3 and 5, and the derivative
+  table (options, warrants).
+- **The feed remembers ~2000 entries, about two business days.** A cursor
+  marks how far each run got; if the pipeline is down longer than that, the
+  run records a gap and `python -m whale backfill-insiders --from … --to …`
+  repairs it from EDGAR's daily index. The same command loads history.
+- **Late means past two business days**, federal holidays excluded, measured
+  from the trade (or deemed execution) date to the filing date. The filer's own
+  "late" box is kept separately, as filed.
+- **Joint filings count once.** A founder and their holding company filing
+  together are one decision; "distinct insiders" counts primary reporting
+  owners only. Related parties filing *separately* still count twice.
+- SEC asks for a contact e-mail in the User-Agent and refuses undeclared
+  clients with an HTML page; `EDGAR_USER_AGENT` supplies it.
 
 ### Other limits
 
@@ -207,5 +251,7 @@ directly.
 
 Tests cover the amount bracket ladder, the PDF parser against committed real
 filings (including a multi-page one and a scan), roster matching on awkward
-congressional names, cluster thresholds and dedupe, and Telegram formatting at
-the 4096-character limit.
+congressional names, cluster thresholds and dedupe, Telegram formatting at the
+4096-character limit, and — for insiders — EDGAR feed and index parsing, Form 4
+XML against two real filings, the sync cursor's failure modes over a mock
+transport, the two-business-day clock, and the schema migration.

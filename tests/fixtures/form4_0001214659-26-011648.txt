@@ -1,0 +1,259 @@
+<SEC-DOCUMENT>0001214659-26-011648.txt : 20260911
+<SEC-HEADER>0001214659-26-011648.hdr.sgml : 20260911
+<ACCEPTANCE-DATETIME>20260911215918
+ACCESSION NUMBER:		0001214659-26-011648
+CONFORMED SUBMISSION TYPE:	4
+PUBLIC DOCUMENT COUNT:		2
+CONFORMED PERIOD OF REPORT:	20260909
+FILED AS OF DATE:		20260911
+DATE AS OF CHANGE:		20260911
+
+REPORTING-OWNER:	
+
+	OWNER DATA:	
+		COMPANY CONFORMED NAME:			AULT MILTON C III
+		CENTRAL INDEX KEY:			0001212502
+		ORGANIZATION NAME:           	
+
+	FILING VALUES:
+		FORM TYPE:		4
+		SEC ACT:		1934 Act
+		SEC FILE NUMBER:	001-12711
+
+	MAIL ADDRESS:	
+		STREET 1:		11411 SOUTHERN HIGHLANDS PARKWAY
+		STREET 2:		SUITE 190
+		CITY:			LAS VEGAS
+		STATE:			NV
+		ZIP:			89141
+
+REPORTING-OWNER:	
+
+	OWNER DATA:	
+		COMPANY CONFORMED NAME:			Ault & Company, Inc.
+		CENTRAL INDEX KEY:			0001734770
+		ORGANIZATION NAME:           	
+		STATE OF INCORPORATION:			DE
+
+	FILING VALUES:
+		FORM TYPE:		4
+		SEC ACT:		1934 Act
+		SEC FILE NUMBER:	001-12711
+
+	MAIL ADDRESS:	
+		STREET 1:		11411 SOUTHERN HIGHLANDS PARKWAY
+		STREET 2:		SUITE 190
+		CITY:			LAS VEGAS
+		STATE:			NV
+		ZIP:			89141
+
+ISSUER:		
+
+	COMPANY DATA:	
+		COMPANY CONFORMED NAME:			Hyperscale Data, Inc.
+		CENTRAL INDEX KEY:			0000896493
+		ORGANIZATION NAME:           	06 Technology
+		STATE OF INCORPORATION:			DE
+		FISCAL YEAR END:			1231
+
+	BUSINESS ADDRESS:	
+		STREET 1:		11411 SOUTHERN HIGHLANDS PARKWAY
+		STREET 2:		SUITE 240
+		CITY:			LAS VEGAS
+		STATE:			NV
+		ZIP:			89141
+
+	FORMER COMPANY:	
+		FORMER CONFORMED NAME:	Ault Alliance, Inc.
+		DATE OF NAME CHANGE:	20240102
+</SEC-HEADER>
+<DOCUMENT>
+<TYPE>4
+<SEQUENCE>1
+<FILENAME>form4.xml
+<DESCRIPTION>FORM 4
+<TEXT>
+<XML>
+<?xml version="1.0"?>
+<ownershipDocument>
+    <schemaVersion>X0609</schemaVersion>
+    <documentType>4</documentType>
+    <periodOfReport>2026-09-09</periodOfReport>
+    <notSubjectToSection16>0</notSubjectToSection16>
+    <issuer>
+        <issuerCik>0000896493</issuerCik>
+        <issuerName>Hyperscale Data, Inc.</issuerName>
+        <issuerTradingSymbol>GPUS</issuerTradingSymbol>
+        <issuerForeignTradingSymbol></issuerForeignTradingSymbol>
+    </issuer>
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0001212502</rptOwnerCik>
+            <rptOwnerName>AULT MILTON C III</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerNonUSAddressFlag>false</rptOwnerNonUSAddressFlag>
+            <rptOwnerStreet1>11411 SOUTHERN HIGHLANDS PARKWAY</rptOwnerStreet1>
+            <rptOwnerStreet2>SUITE 190</rptOwnerStreet2>
+            <rptOwnerCity>LAS VEGAS</rptOwnerCity>
+            <rptOwnerState>NV</rptOwnerState>
+            <rptOwnerZipCode>89141</rptOwnerZipCode>
+            <rptOwnerStateDescription></rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>true</isDirector>
+            <isOfficer>true</isOfficer>
+            <isTenPercentOwner>true</isTenPercentOwner>
+            <isOther>false</isOther>
+            <officerTitle>Executive Chairman</officerTitle>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0001734770</rptOwnerCik>
+            <rptOwnerName>Ault &amp; Company, Inc.</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerNonUSAddressFlag>false</rptOwnerNonUSAddressFlag>
+            <rptOwnerStreet1>11411 SOUTHERN HIGHLANDS PARKWAY</rptOwnerStreet1>
+            <rptOwnerStreet2>SUITE 190</rptOwnerStreet2>
+            <rptOwnerCity>LAS VEGAS</rptOwnerCity>
+            <rptOwnerState>NV</rptOwnerState>
+            <rptOwnerZipCode>89141</rptOwnerZipCode>
+            <rptOwnerStateDescription></rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>false</isDirector>
+            <isOfficer>false</isOfficer>
+            <isTenPercentOwner>true</isTenPercentOwner>
+            <isOther>true</isOther>
+            <otherText>See Remark</otherText>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+    <aff10b5One>0</aff10b5One>
+    <nonDerivativeTable>
+        <nonDerivativeTransaction>
+            <securityTitle><value>Class A Common Stock</value></securityTitle>
+            <transactionDate><value>2026-09-09</value></transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>P</transactionCode>
+                <equitySwapInvolved>0</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares><value>5500</value></transactionShares>
+                <transactionPricePerShare>
+                    <value>0.1887</value>
+                    <footnoteId id="F1"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode><value>A</value></transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction><value>685000</value></sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership><value>D</value></directOrIndirectOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle><value>Class A Common Stock</value></securityTitle>
+            <transactionDate><value>2026-09-10</value></transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>P</transactionCode>
+                <equitySwapInvolved>0</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares><value>22800</value></transactionShares>
+                <transactionPricePerShare>
+                    <value>0.1857</value>
+                    <footnoteId id="F2"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode><value>A</value></transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction><value>707800</value></sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership><value>D</value></directOrIndirectOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle><value>Class A Common Stock</value></securityTitle>
+            <transactionDate><value>2026-09-11</value></transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>P</transactionCode>
+                <equitySwapInvolved>0</equitySwapInvolved>
+            </transactionCoding>
+            <transactionAmounts>
+                <transactionShares><value>150000</value></transactionShares>
+                <transactionPricePerShare><value>0.1892</value></transactionPricePerShare>
+                <transactionAcquiredDisposedCode><value>A</value></transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction><value>2763692</value></sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership><value>I</value></directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>By Ault &amp; Company, Inc.</value>
+                    <footnoteId id="F3"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeHolding>
+            <securityTitle><value>13% Series D Cumulative Redeemable Perpetual Preferred Stock</value></securityTitle>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction><value>149</value></sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership><value>D</value></directOrIndirectOwnership>
+            </ownershipNature>
+        </nonDerivativeHolding>
+        <nonDerivativeHolding>
+            <securityTitle><value>13% Series D Cumulative Redeemable Perpetual Preferred Stock</value></securityTitle>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction><value>200</value></sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership><value>I</value></directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>By Ault &amp; Company, Inc.</value>
+                    <footnoteId id="F3"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeHolding>
+    </nonDerivativeTable>
+    <footnotes>
+        <footnote id="F1">The common stock was purchased in open market transactions with a volume weighted average purchase price of $0.1887. Range: $0.1878 to $0.1893 per share.</footnote>
+        <footnote id="F2">The common stock was purchased in open market transactions with a volume weighted average purchase price of $0.1857. Range: $0.1852 to $0.1898 per share.</footnote>
+        <footnote id="F3">Milton C. Ault, III, is the Chief Executive Officer of "Ault &amp; Company, Inc." and is deemed to beneficially own shares held by it.</footnote>
+    </footnotes>
+    <remarks>Mr. Ault, Chief Executive Officer of Ault &amp; Co., is a director of the Issuer. Ault &amp; Co. may be deemed a director by deputization regarding Section 16.</remarks>
+    <ownerSignature>
+        <signatureName>By: /s/ Milton C. Ault, III</signatureName>
+        <signatureDate>2026-09-11</signatureDate>
+    </ownerSignature>
+    <ownerSignature>
+        <signatureName>By: /s/ Milton C. Ault, III, Chief Executive Officer of Ault &amp; Company, Inc.</signatureName>
+        <signatureDate>2026-09-11</signatureDate>
+    </ownerSignature>
+</ownershipDocument>
+</XML>
+</TEXT>
+</DOCUMENT>
+<DOCUMENT>
+<TYPE>EX-24
+<SEQUENCE>2
+<FILENAME>ex24.txt
+<DESCRIPTION>POWER OF ATTORNEY
+<TEXT>
+POWER OF ATTORNEY
+
+Know all by these presents, that the undersigned hereby constitutes and appoints
+each of Milton C. Ault, III and David J. Katzoff, signing singly, the
+undersigned's true and lawful attorney-in-fact to execute Forms 3, 4 and 5.
+</TEXT>
+</DOCUMENT>
+</SEC-DOCUMENT>

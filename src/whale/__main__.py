@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+from datetime import date, timedelta
 
 from . import db
 from .config import load_config
@@ -16,7 +17,8 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     parser = argparse.ArgumentParser(
-        prog="whale", description="Congressional stock-trade disclosure tracker"
+        prog="whale",
+        description="Congressional and corporate-insider stock-trade disclosure tracker",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -46,6 +48,33 @@ def main(argv: list[str] | None = None) -> int:
     p_people = sub.add_parser("politicians", help="most active members")
     p_people.add_argument("--since", type=_parse_since, default=None, metavar="90d")
     p_people.add_argument("--limit", type=int, default=25)
+
+    # SEC Form 4 (corporate insiders)
+    sub.add_parser("sync-insiders", help="pull new SEC Form 4 filings (no notifications)")
+
+    p_bfi = sub.add_parser(
+        "backfill-insiders", help="load Form 4 history from EDGAR's daily index")
+    p_bfi.add_argument("--from", dest="start", type=date.fromisoformat, metavar="YYYY-MM-DD",
+                       help="first day, inclusive")
+    p_bfi.add_argument("--to", dest="end", type=date.fromisoformat, metavar="YYYY-MM-DD",
+                       help="last day, inclusive (default: yesterday)")
+    p_bfi.add_argument("--budget-seconds", type=float, default=480,
+                       help="stop after this long and say where to resume (default 480)")
+    p_bfi.add_argument("--limit", type=int, help="max filings to examine")
+    p_bfi.add_argument("--recompute-late", action="store_true",
+                       help="only rebuild the derived late flag, then exit")
+
+    p_ins = sub.add_parser("insiders", help="issuer leaderboard for insider trades")
+    p_ins.add_argument("--since", type=_parse_since, default=None, metavar="30d")
+    p_ins.add_argument("--by", choices=("value", "insiders"), default="value")
+    p_ins.add_argument("--direction", choices=("buy", "sell"), default=None)
+    p_ins.add_argument("--limit", type=int, default=25)
+    p_ins.add_argument("--clusters", action="store_true",
+                       help="issuers where several insiders traded the same way")
+
+    p_insider = sub.add_parser("insider", help="insider trades in one issuer")
+    p_insider.add_argument("symbol")
+    p_insider.add_argument("--since", type=_parse_since, default=None, metavar="90d")
 
     args = parser.parse_args(argv)
     config = load_config()
@@ -78,6 +107,36 @@ def main(argv: list[str] | None = None) -> int:
         print(f"parsed {count} filing(s) into the knowledge base (no notifications sent)")
         return 0
 
+    if args.command == "sync-insiders":
+        from . import insiders
+
+        conn = db.connect(config.db_path)
+        try:
+            result = insiders.sync(conn, config)
+        finally:
+            conn.close()
+        print(f"insiders: {result.summary()}")
+        return 0
+
+    if args.command == "backfill-insiders":
+        from . import insiders
+
+        conn = db.connect(config.db_path)
+        try:
+            if args.recompute_late:
+                print(f"recomputed the late flag on {insiders.recompute_late(conn)} row(s)")
+                return 0
+            if args.start is None:
+                parser.error("backfill-insiders requires --from YYYY-MM-DD")
+            end = args.end or (date.today() - timedelta(days=1))
+            result = insiders.backfill_range(conn, config, args.start, end,
+                                             budget_seconds=args.budget_seconds,
+                                             limit=args.limit)
+        finally:
+            conn.close()
+        print(f"insiders backfill: {result.summary()}")
+        return 0
+
     from . import query
 
     if args.command == "tickers":
@@ -86,6 +145,13 @@ def main(argv: list[str] | None = None) -> int:
         query.ticker_detail(config, args.symbol, args.since)
     elif args.command == "politicians":
         query.politicians(config, args.since, args.limit)
+    elif args.command == "insiders":
+        if args.clusters:
+            query.insider_clusters(config)
+        else:
+            query.insider_issuers(config, args.since, args.by, args.direction, args.limit)
+    elif args.command == "insider":
+        query.insider_detail(config, args.symbol, args.since)
     elif args.command == "status":
         query.pipeline_status(config)
     return 0

@@ -17,7 +17,7 @@ import sqlite3
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
-from .config import AlertSettings
+from .config import AlertSettings, InsiderSettings
 from .db import COUNTED_STATUSES
 
 # Actions that move money in a direction we can aggregate. Exchanges have no
@@ -313,3 +313,222 @@ def dates_inconsistent(tx_date: str | None, notification_date: str | None) -> bo
         return date.fromisoformat(notification_date) < date.fromisoformat(tx_date)
     except ValueError:
         return False
+
+
+# --- insiders (SEC Form 4) ---------------------------------------------------
+#
+# Insider values are exact — shares × the price as filed — so `Volume` carries
+# them through `exact`. Everything here counts *primary* reporting owners
+# (owner_index 0): a founder and their holding company on one filing are one
+# decision, not two insiders.
+
+# Form 4 is due before the end of the second business day after the trade
+# (Exchange Act §16(a)(2)(C)). EDGAR does not accept filings on federal
+# holidays, so they do not count against the clock.
+FORM4_DEADLINE_BUSINESS_DAYS = 2
+
+_MON, _THU = 0, 3
+
+
+def federal_holidays(year: int) -> set[date]:
+    """US federal holidays as observed (Saturday -> Friday, Sunday -> Monday)."""
+    def nth_weekday(month: int, weekday: int, n: int) -> date:
+        first = date(year, month, 1)
+        offset = (weekday - first.weekday()) % 7
+        return first + timedelta(days=offset + 7 * (n - 1))
+
+    def last_weekday(month: int, weekday: int) -> date:
+        last = date(year + (month == 12), (month % 12) + 1, 1) - timedelta(days=1)
+        return last - timedelta(days=(last.weekday() - weekday) % 7)
+
+    observed = {
+        nth_weekday(1, _MON, 3),    # Martin Luther King Jr. Day
+        nth_weekday(2, _MON, 3),    # Washington's Birthday
+        last_weekday(5, _MON),      # Memorial Day
+        nth_weekday(9, _MON, 1),    # Labor Day
+        nth_weekday(10, _MON, 2),   # Columbus Day
+        nth_weekday(11, _THU, 4),   # Thanksgiving
+    }
+    for month, day in ((1, 1), (6, 19), (7, 4), (11, 11), (12, 25)):
+        d = date(year, month, day)
+        if d.weekday() == 5:
+            d -= timedelta(days=1)
+        elif d.weekday() == 6:
+            d += timedelta(days=1)
+        observed.add(d)
+    return observed
+
+
+def business_days_between(start: date, end: date) -> int:
+    """Business days after `start` up to and including `end`."""
+    if end <= start:
+        return 0
+    holidays: set[date] = set()
+    for year in range(start.year, end.year + 2):
+        holidays |= federal_holidays(year)
+    n = 0
+    d = start
+    while d < end:
+        d += timedelta(days=1)
+        if d.weekday() < 5 and d not in holidays:
+            n += 1
+    return n
+
+
+def form4_is_late(tx_date: str | None, filing_date: str | None) -> bool | None:
+    """Whether a Form 4 row was filed past its two-business-day deadline.
+
+    Derived once at ingest and stored (`insider_transactions.late`): the
+    holiday logic has no defensible SQL twin, and a definition that lived in
+    two places would drift. None when the dates are missing or contradict
+    each other — a filer's typo is not a fact about their punctuality.
+    """
+    if _day_gap(tx_date, filing_date) is None:
+        return None
+    return business_days_between(date.fromisoformat(tx_date),
+                                 date.fromisoformat(filing_date)) > FORM4_DEADLINE_BUSINESS_DAYS
+
+
+@dataclass
+class IssuerStat:
+    issuer_cik: str
+    ticker: str | None = None
+    issuer_name: str | None = None
+    filing_ids: set[int] = field(default_factory=set)
+    trade_count: int = 0
+    buy_count: int = 0
+    sell_count: int = 0
+    buy_insiders: set[str] = field(default_factory=set)
+    sell_insiders: set[str] = field(default_factory=set)
+    insider_names: dict[str, str] = field(default_factory=dict)
+    volume: Volume = field(default_factory=Volume)
+    buy_volume: Volume = field(default_factory=Volume)
+    sell_volume: Volume = field(default_factory=Volume)
+    last_tx_date: str | None = None
+
+    @property
+    def filing_count(self) -> int:
+        return len(self.filing_ids)
+
+    @property
+    def insider_count(self) -> int:
+        return len(self.buy_insiders | self.sell_insiders)
+
+    def names(self, ciks: set[str]) -> list[str]:
+        return sorted(self.insider_names.get(c, c) for c in ciks)
+
+
+def _insider_rows(conn: sqlite3.Connection, since: str | None,
+                  today: date | None = None) -> list[sqlite3.Row]:
+    marks = ", ".join("?" for _ in COUNTED_STATUSES)
+    sql = f"""
+        SELECT t.*, f.issuer_cik, f.issuer_name, f.ticker, f.filing_date, f.aff_10b5_one,
+               o.insider_cik, i.name AS insider_name
+        FROM insider_transactions t
+        JOIN insider_filings f ON f.id = t.filing_id
+        LEFT JOIN insider_filing_owners o ON o.filing_id = f.id AND o.owner_index = 0
+        LEFT JOIN insiders i ON i.cik = o.insider_cik
+        WHERE f.status IN ({marks})
+    """
+    params: list = list(COUNTED_STATUSES)
+    if since:
+        # Bounded above as well, like `_rows`: a mistyped future trade date
+        # would otherwise sit inside every rolling window forever.
+        sql += " AND t.tx_date >= ? AND t.tx_date <= ?"
+        params.append(since)
+        params.append((today or date.today()).isoformat())
+    sql += " ORDER BY t.tx_date, t.id"
+    return conn.execute(sql, params).fetchall()
+
+
+def insider_issuer_stats(conn: sqlite3.Connection, window_days: int | None = None,
+                         today: date | None = None) -> dict[str, IssuerStat]:
+    """Roll insider trades up per issuer, keyed by issuer CIK."""
+    since = _window_start(window_days, today) if window_days else None
+    out: dict[str, IssuerStat] = {}
+    for r in _insider_rows(conn, since, today):
+        s = out.setdefault(r["issuer_cik"], IssuerStat(
+            issuer_cik=r["issuer_cik"], ticker=r["ticker"], issuer_name=r["issuer_name"]))
+        s.ticker = s.ticker or r["ticker"]
+        s.filing_ids.add(r["filing_id"])
+        s.trade_count += 1
+        who = r["insider_cik"] or "unknown"
+        if r["insider_name"]:
+            s.insider_names[who] = r["insider_name"]
+        amounts = (r["amount_min_cents"], r["amount_max_cents"], r["amount_exact_cents"])
+        # A row without a price has an unknown value, not an open-ended one:
+        # it counts as a trade and adds nothing to any total.
+        priced = any(a is not None for a in amounts)
+        if priced:
+            s.volume.add(*amounts)
+        if r["action"] in BUY_ACTIONS:
+            s.buy_count += 1
+            s.buy_insiders.add(who)
+            if priced:
+                s.buy_volume.add(*amounts)
+        elif r["action"] in SELL_ACTIONS:
+            s.sell_count += 1
+            s.sell_insiders.add(who)
+            if priced:
+                s.sell_volume.add(*amounts)
+        if r["tx_date"] and (s.last_tx_date is None or r["tx_date"] > s.last_tx_date):
+            s.last_tx_date = r["tx_date"]
+    return out
+
+
+def top_insider_issuers(conn: sqlite3.Connection, window_days: int | None = None,
+                        by: str = "value", direction: str | None = None,
+                        limit: int = 25, today: date | None = None) -> list[IssuerStat]:
+    """Issuer leaderboard by traded value or by number of distinct insiders."""
+    issuers = list(insider_issuer_stats(conn, window_days, today).values())
+    if direction == "buy":
+        issuers = [s for s in issuers if s.buy_count]
+        value = lambda s: s.buy_volume.mid_cents  # noqa: E731
+        people = lambda s: len(s.buy_insiders)  # noqa: E731
+    elif direction == "sell":
+        issuers = [s for s in issuers if s.sell_count]
+        value = lambda s: s.sell_volume.mid_cents  # noqa: E731
+        people = lambda s: len(s.sell_insiders)  # noqa: E731
+    else:
+        value = lambda s: s.volume.mid_cents  # noqa: E731
+        people = lambda s: s.insider_count  # noqa: E731
+    key = (lambda s: (people(s), value(s))) if by == "insiders" else (lambda s: (value(s), people(s)))
+    return sorted(issuers, key=key, reverse=True)[:limit]
+
+
+@dataclass
+class InsiderCluster:
+    issuer_cik: str
+    ticker: str | None
+    issuer_name: str | None
+    direction: str
+    insider_count: int
+    filing_count: int
+    trade_count: int
+    insiders: list[str]
+    volume: Volume
+
+
+def find_insider_clusters(conn: sqlite3.Connection, settings: InsiderSettings,
+                          today: date | None = None) -> list[InsiderCluster]:
+    """Issuers where several distinct insiders traded the same way in the window.
+
+    Buys and sells are evaluated separately and never pooled. The count is of
+    primary reporting owners, so a joint filing contributes one insider.
+    """
+    clusters = []
+    for s in insider_issuer_stats(conn, settings.cluster_window_days, today).values():
+        for direction, insiders, count, volume in (
+            ("buy", s.buy_insiders, s.buy_count, s.buy_volume),
+            ("sell", s.sell_insiders, s.sell_count, s.sell_volume),
+        ):
+            if len(insiders) < settings.min_insiders:
+                continue
+            clusters.append(InsiderCluster(
+                issuer_cik=s.issuer_cik, ticker=s.ticker, issuer_name=s.issuer_name,
+                direction=direction, insider_count=len(insiders),
+                filing_count=s.filing_count, trade_count=count,
+                insiders=s.names(insiders), volume=volume,
+            ))
+    clusters.sort(key=lambda c: (c.insider_count, c.volume.mid_cents), reverse=True)
+    return clusters
