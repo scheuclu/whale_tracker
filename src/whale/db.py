@@ -352,12 +352,20 @@ def transactions_for_filing(conn: sqlite3.Connection, filing_id: int) -> list[sq
 # --- alerts -----------------------------------------------------------------
 
 
-def last_alert(conn: sqlite3.Connection, ticker: str, direction: str) -> sqlite3.Row | None:
-    return conn.execute(
-        "SELECT * FROM alerts WHERE ticker = ? AND direction = ? "
-        "ORDER BY fired_at DESC LIMIT 1",
-        (ticker, direction),
-    ).fetchone()
+def last_alert(conn: sqlite3.Connection, ticker: str, direction: str,
+               kind: str | None = None) -> sqlite3.Row | None:
+    """The most recent alert for this key.
+
+    `kind` scopes the lookup to one alert family. Two sources can converge on
+    the same ticker, and a congressional cluster must not suppress an insider
+    one; `politician_count` holds whichever participant count the kind counts.
+    """
+    sql = "SELECT * FROM alerts WHERE ticker = ? AND direction = ?"
+    params: list = [ticker, direction]
+    if kind is not None:
+        sql += " AND kind = ?"
+        params.append(kind)
+    return conn.execute(sql + " ORDER BY fired_at DESC LIMIT 1", params).fetchone()
 
 
 def record_alert(conn: sqlite3.Connection, kind: str, ticker: str, direction: str,
@@ -431,6 +439,13 @@ def insider_filing_id(conn: sqlite3.Connection, accession: str) -> int | None:
         "SELECT id FROM insider_filings WHERE accession = ?", (accession,)
     ).fetchone()
     return row["id"] if row else None
+
+
+def mark_insider_notified(conn: sqlite3.Connection, filing_id: int) -> None:
+    conn.execute(
+        "UPDATE insider_filings SET notified_at = ?, updated_at = ? WHERE id = ?",
+        (now_iso(), now_iso(), filing_id),
+    )
 
 
 def set_insider_status(conn: sqlite3.Connection, filing_id: int, status: str,

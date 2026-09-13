@@ -37,6 +37,103 @@ class IngestSettings:
     max_filing_age_days: int = 7
 
 
+# What a rule may say. Anything else is a typo, and a typo that silently
+# never matches is worse than a crash at startup.
+RULE_KEYS = frozenset({
+    "name", "kind", "direction", "min_value_usd", "roles", "titles",
+    "exclude_10b5_1", "require_10b5_1", "min_insiders", "window_days",
+})
+RULE_KINDS = frozenset({"filing", "cluster"})
+RULE_DIRECTIONS = frozenset({"buy", "sell", "any"})
+RULE_ROLES = frozenset({"director", "officer", "ten_percent_owner", "other"})
+
+
+class ConfigError(ValueError):
+    """config.yaml says something this code cannot honour."""
+
+
+@dataclass
+class InsiderRule:
+    """One alert criterion, as written in config.yaml.
+
+    A `filing` rule is evaluated against each newly stored Form 4: the
+    conditions describe one direction's open-market trades within that filing.
+    A `cluster` rule is evaluated against issuers where several insiders
+    traded the same way inside a window. Rules are tried in order and the
+    first match names the alert, so put the specific ones first.
+    """
+
+    name: str
+    kind: str = "filing"
+    direction: str = "any"
+    min_value_usd: int = 0
+    # Empty means "any" for both: a rule that lists no roles does not care.
+    roles: list[str] = field(default_factory=list)
+    # Case-insensitive substrings matched against the officer title as filed.
+    titles: list[str] = field(default_factory=list)
+    exclude_10b5_1: bool = False
+    require_10b5_1: bool = False
+    # Cluster rules only.
+    min_insiders: int = 3
+    window_days: int | None = None
+
+    @property
+    def min_value_cents(self) -> int:
+        return self.min_value_usd * 100
+
+    def wants(self, direction: str) -> bool:
+        return self.direction in ("any", direction)
+
+
+def _parse_rule(raw: dict, index: int) -> InsiderRule:
+    where = f"insiders.alerts[{index}]"
+    if not isinstance(raw, dict):
+        raise ConfigError(f"{where} must be a mapping, not {type(raw).__name__}")
+    unknown = set(raw) - RULE_KEYS
+    if unknown:
+        raise ConfigError(
+            f"{where} has unknown key(s) {sorted(unknown)}; "
+            f"allowed: {sorted(RULE_KEYS)}"
+        )
+    name = str(raw.get("name") or "").strip()
+    if not name:
+        raise ConfigError(f"{where} needs a name — it is what the alert is called")
+
+    kind = str(raw.get("kind", "filing")).lower()
+    if kind not in RULE_KINDS:
+        raise ConfigError(f"{where} kind {kind!r} must be one of {sorted(RULE_KINDS)}")
+    direction = str(raw.get("direction", "any")).lower()
+    if direction not in RULE_DIRECTIONS:
+        raise ConfigError(
+            f"{where} direction {direction!r} must be one of {sorted(RULE_DIRECTIONS)}")
+    roles = [str(r).lower() for r in (raw.get("roles") or [])]
+    bad_roles = set(roles) - RULE_ROLES
+    if bad_roles:
+        raise ConfigError(f"{where} role(s) {sorted(bad_roles)} unknown; "
+                          f"allowed: {sorted(RULE_ROLES)}")
+    rule = InsiderRule(
+        name=name,
+        kind=kind,
+        direction=direction,
+        min_value_usd=int(raw.get("min_value_usd", 0)),
+        roles=roles,
+        titles=[str(t).lower() for t in (raw.get("titles") or [])],
+        exclude_10b5_1=bool(raw.get("exclude_10b5_1", False)),
+        require_10b5_1=bool(raw.get("require_10b5_1", False)),
+        min_insiders=int(raw.get("min_insiders", 3)),
+        window_days=(None if raw.get("window_days") is None else int(raw["window_days"])),
+    )
+    if rule.exclude_10b5_1 and rule.require_10b5_1:
+        raise ConfigError(f"{where} cannot both require and exclude the 10b5-1 flag")
+    if rule.kind == "cluster" and (rule.roles or rule.titles):
+        # A cluster is counted per issuer across filings, so a per-person
+        # condition has nothing to attach to. Say so rather than ignore it.
+        raise ConfigError(
+            f"{where} is a cluster rule, so roles/titles do not apply — "
+            "they describe one filer, and a cluster spans several")
+    return rule
+
+
 @dataclass
 class InsiderSettings:
     """SEC Form 4 ingestion. See config.yaml for the reasoning behind each."""
@@ -50,13 +147,23 @@ class InsiderSettings:
     # trade-date window has no reporting lag to absorb.
     cluster_window_days: int = 30
     min_insiders: int = 3
-    # Consumed by insider alerts once they exist; read now so the flip is a
-    # one-line change.
+    # A filing older than this on first sight is history, never a
+    # notification: it stops a backlog being replayed into Telegram.
     max_filing_age_days: int = 7
+    # No rules means no insider alerts, which is the safe default: an absent
+    # config block must never start sending.
+    alerts: list[InsiderRule] = field(default_factory=list)
 
     @property
     def min_trade_cents(self) -> int:
         return self.min_trade_usd * 100
+
+    @property
+    def alerting(self) -> bool:
+        return bool(self.alerts)
+
+    def rules_of_kind(self, kind: str) -> list[InsiderRule]:
+        return [r for r in self.alerts if r.kind == kind]
 
 
 @dataclass
@@ -118,6 +225,7 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
         cluster_window_days=int(n.get("cluster_window_days", 30)),
         min_insiders=int(n.get("min_insiders", 3)),
         max_filing_age_days=int(n.get("max_filing_age_days", 7)),
+        alerts=[_parse_rule(r, i) for i, r in enumerate(n.get("alerts") or [])],
     )
 
     return Config(

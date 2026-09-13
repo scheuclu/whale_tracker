@@ -96,9 +96,33 @@ parser stays faithful to the PDF and the UI flags the row rather than
 - The insider cluster window is 30 days, not 90: Form 4 has a 2-business-day
   deadline, so there is no reporting lag to absorb.
 - `4/A`, Forms 3/5 and the derivative table are not ingested yet (counted in
-  `sync_state.edgar_skipped`). Kept filings enter as `backfilled` until insider
-  alerts exist; the alerts PR flips recent filings to `parsed` at ingest.
+  `sync_state.edgar_skipped`).
 - `insiders.sync` runs **last** in `pipeline.run` and must never raise into it.
+
+## Insider alerts
+
+- Alerts fire only from the user's rules in `insiders.alerts`. **No rules means
+  no alerts**, and `insiders.ingest_status` then stores every filing as
+  `backfilled` — nothing may enter the `parsed` queue that nothing can drain.
+- Rules are tried **in order and the first match wins**, so a general rule
+  placed above a specific one silently swallows it. Keep the specific ones
+  first in `config.yaml`, and in any example.
+- An unknown rule key or value raises `ConfigError` at load. That is
+  deliberate: a typo'd condition that never matches is exactly the silent
+  failure this project exists to avoid. Extend `RULE_KEYS` when adding one.
+- A rule's value floor is compared against the summed value of **one
+  direction** within **one filing**, and an unpriced direction can never clear
+  it — an unknown value is not a large one.
+- `roles`/`titles` are satisfied by any one reporting owner on the filing (a
+  joint filing is one economic act), but a single owner must satisfy both when
+  both are given. Cluster rules reject them: they describe one filer.
+- Insider cluster dedupe lives in `alerts` with `kind='insider_cluster'`;
+  `db.last_alert` **must** be called with a kind, or a congressional cluster on
+  a ticker suppresses an insider one. `alerts.politician_count` holds whichever
+  participant count the kind counts.
+- A `--dry-run` must not demote, notify or record anything: previewing the
+  queue never consumes it. `whale insider-alerts` is the tuning tool and
+  ignores notification state so rules can be tested against history.
 
 ## Data-viz
 

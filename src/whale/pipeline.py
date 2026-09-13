@@ -9,8 +9,9 @@ from __future__ import annotations
 import io
 import logging
 import sqlite3
+from datetime import date
 
-from . import db, house, insiders, roster, senate, stats, telegram
+from . import db, house, insider_alerts, insiders, roster, senate, stats, telegram
 from .amounts import parse_amount
 from .config import Config
 from .ptr import ParsedFiling, ScannedFilingError, parse_pdf
@@ -27,6 +28,7 @@ def run(config: Config, dry_run: bool = False) -> None:
         notify_pending(conn, config, dry_run=dry_run)
         notify_clusters(conn, config, dry_run=dry_run)
         _sync_insiders(conn, config)
+        notify_insiders(conn, config, dry_run=dry_run)
     finally:
         conn.close()
 
@@ -127,6 +129,76 @@ def _sync_insiders(conn: sqlite3.Connection, config: Config) -> None:
         conn.commit()
         return
     log.info("insiders: %s", result.summary())
+
+
+def notify_insiders(conn: sqlite3.Connection, config: Config, dry_run: bool = False,
+                    today: date | None = None) -> int:
+    """Alert on Form 4 filings and clusters that match a rule in config.yaml.
+
+    Rules are the whole mechanism: with none configured nothing is stored as
+    pending in the first place, so this is a no-op rather than a firehose.
+    """
+    settings = config.insiders
+    if not (settings.enabled and settings.alerting):
+        return 0
+    if not (config.telegram_configured or dry_run):
+        log.warning("Telegram secrets not set; skipping insider notifications")
+        return 0
+
+    sent = 0
+    filing_rules = settings.rules_of_kind("filing")
+    for filing in db.insider_filings_by_status(conn, insiders.PENDING_STATUS,
+                                               unnotified_only=True):
+        rows, owners = insider_alerts.load_filing(conn, filing["id"])
+        match = insider_alerts.first_filing_match(filing, owners, rows, filing_rules)
+        if match is None:
+            # No rule wants it. Demote to history so it is not re-examined
+            # every run; the dashboard still counts it. Not on a dry run:
+            # previewing the queue must never consume it.
+            if not dry_run:
+                db.set_insider_status(conn, filing["id"], insiders.HISTORY_STATUS)
+                conn.commit()
+            continue
+
+        context = None
+        if filing["ticker"]:
+            context = _insider_context(conn, settings, filing["ticker"], match.direction,
+                                       today)
+        text = telegram.format_insider_filing(match, context)
+        if _deliver(config, text, dry_run) and not dry_run:
+            db.set_insider_status(conn, filing["id"], "notified")
+            db.mark_insider_notified(conn, filing["id"])
+            sent += 1
+            log.info("insider alert %r for %s", match.rule.name, filing["accession"])
+        conn.commit()
+
+    for cluster, rule, window in insider_alerts.cluster_matches(conn, settings, today):
+        if not stats.is_new_insider_cluster(conn, cluster):
+            continue
+        text = telegram.format_insider_cluster(cluster, rule.name, window)
+        if _deliver(config, text, dry_run) and not dry_run:
+            db.record_alert(conn, stats.INSIDER_CLUSTER_KIND,
+                            cluster.ticker or cluster.issuer_cik, cluster.direction,
+                            window, cluster.insider_count, cluster.volume.mid_cents)
+            sent += 1
+            log.info("insider cluster alert %r for %s", rule.name,
+                     cluster.ticker or cluster.issuer_cik)
+        conn.commit()
+    return sent
+
+
+def _insider_context(conn: sqlite3.Connection, settings, ticker: str, direction: str,
+                     today: date | None = None) -> stats.InsiderCluster | None:
+    """Whether other insiders have moved the same way recently.
+
+    One insider buying is a data point; several is the reason this project
+    exists, so the message carries that context when it is true.
+    """
+    wanted = "buy" if direction == "purchase" else "sell"
+    for cluster in stats.find_insider_clusters(conn, settings, today=today, min_insiders=2):
+        if cluster.direction == wanted and (cluster.ticker or "") == ticker:
+            return cluster
+    return None
 
 
 # --- parse ------------------------------------------------------------------

@@ -13,7 +13,7 @@ import time
 import httpx
 
 from .amounts import format_amount, usd
-from .stats import Cluster, TickerStat
+from .stats import Cluster, InsiderCluster, TickerStat
 
 log = logging.getLogger(__name__)
 
@@ -193,6 +193,122 @@ def format_unparsed(member: str, party: str | None, state: str | None,
         f"⚠️ Could not parse ({esc(reason)}) — open the PDF.\n"
         f"{esc(pdf_url)}"
     )
+
+
+# --- insiders (SEC Form 4) ---------------------------------------------------
+
+
+def _shares(n: float | None) -> str:
+    if n is None:
+        return "?"
+    return f"{n:,.0f}" if float(n).is_integer() else f"{n:,.2f}"
+
+
+def _price(n: float | None) -> str:
+    return "—" if n is None else f"${n:,.2f}" if n >= 1 else f"${n:,.4f}"
+
+
+def _insider_row(row) -> str:
+    """One transaction, with its inputs shown rather than just the product.
+
+    A Form 4 value is shares × the price as filed. Printing the arithmetic is
+    the label: nobody has to wonder whether the figure was disclosed or
+    derived, and a weighted-average price is visible as the odd number it is.
+    """
+    emoji = ACTION_EMOJI.get(row["action"], "⚪️")
+    shares = _shares(row["shares"])
+    if row["amount_exact_cents"] is None:
+        return f"{emoji} {esc(shares)} sh · <i>no price filed</i>"
+    return (f"{emoji} {esc(shares)} sh @ {esc(_price(row['price_per_share']))}"
+            f" = <b>{esc(usd(row['amount_exact_cents']))}</b>")
+
+
+def owner_label(owner) -> str:
+    """A reporting owner and the relationship they declared."""
+    if owner is None:
+        return "unknown filer"
+    roles = [
+        owner["officer_title"] or ("Officer" if owner["is_officer"] else None),
+        "Director" if owner["is_director"] else None,
+        "10% owner" if owner["is_ten_percent_owner"] else None,
+    ]
+    role = ", ".join(r for r in roles if r)
+    name = (owner["name"] or owner["insider_cik"]).strip()
+    return f"<b>{esc(name)}</b>" + (f" ({esc(role)})" if role else "")
+
+
+def format_insider_filing(match, cluster_context: InsiderCluster | None = None) -> str:
+    """One message per Form 4 that a rule claimed.
+
+    The rule's name is the headline, so the chat says *why* this filing was
+    worth interrupting for.
+    """
+    filing = match.filing
+    verb = "bought" if match.direction == "purchase" else "sold"
+    emoji = ACTION_EMOJI.get(match.direction, "⚪️")
+    symbol = filing["ticker"] or filing["issuer_name"] or "unknown issuer"
+    value = usd(match.value_cents) if match.value_cents is not None else "an unpriced amount"
+
+    who = owner_label(match.primary)
+    joint = len(match.owners) - 1
+    if joint > 0:
+        who += f" +{joint} joint filer" + ("s" if joint > 1 else "")
+
+    traded = sorted({r["tx_date"] for r in match.rows if r["tx_date"]})
+    detail = [f"Filed {esc(filing['filing_date'])}"]
+    if traded:
+        span = traded[0] if len(traded) == 1 else f"{traded[0]}–{traded[-1]}"
+        detail.append(f"traded {esc(span)}")
+    if any(r["late"] == 1 for r in match.rows):
+        detail.append("<b>filed late</b>")
+    if filing["aff_10b5_one"] == 1:
+        detail.append("10b5-1 plan")
+
+    def build(max_rows: int) -> str:
+        parts = [
+            f"{emoji} <b>{esc(match.rule.name)} — {esc(symbol)}</b>",
+            f"{who} {verb} <b>{esc(value)}</b> of {esc(filing['issuer_name'] or 'the issuer')}",
+            " · ".join(detail),
+            "",
+        ]
+        parts += [_insider_row(r) for r in match.rows[:max_rows]]
+        if len(match.rows) > max_rows:
+            parts.append(f"…+{len(match.rows) - max_rows} more")
+        if cluster_context and cluster_context.insider_count > 1:
+            moved = "bought" if cluster_context.direction == "buy" else "sold"
+            parts += ["", f"<i>{cluster_context.insider_count} insiders {moved} "
+                          f"{esc(symbol)} recently · "
+                          f"{esc(usd(cluster_context.volume.mid_cents))}</i>"]
+        parts += ["", esc(filing["source_url"])]
+        return "\n".join(parts)
+
+    for max_rows in (len(match.rows) or 1, 25, 10, 5):
+        msg = build(max_rows)
+        if len(msg) <= TELEGRAM_LIMIT:
+            return msg
+    return build(3)[:TELEGRAM_LIMIT]
+
+
+def format_insider_cluster(cluster: InsiderCluster, rule_name: str,
+                           window_days: int) -> str:
+    """Several insiders converging on one issuer."""
+    verb = "bought" if cluster.direction == "buy" else "sold"
+    symbol = cluster.ticker or f"CIK {cluster.issuer_cik}"
+    parts = [
+        f"🔥 <b>{esc(rule_name)} — {esc(symbol)}</b>",
+        f"{cluster.insider_count} insiders {verb} {esc(cluster.issuer_name or 'this issuer')} "
+        f"in the last {window_days} days",
+        f"{esc(usd(cluster.volume.mid_cents))} across {cluster.filing_count} filing"
+        + ("s" if cluster.filing_count != 1 else "")
+        + f" · {cluster.trade_count} " + ("buys" if cluster.direction == "buy" else "sells"),
+        esc(", ".join(cluster.insiders)),
+    ]
+    msg = "\n".join(parts)
+    if len(msg) > TELEGRAM_LIMIT:
+        keep = cluster.insiders[:10]
+        parts[-1] = esc(", ".join(keep)) + f" …+{len(cluster.insiders) - len(keep)} more"
+        msg = "\n".join(parts)
+    return msg[:TELEGRAM_LIMIT]
 
 
 def send_message(bot_token: str, chat_id: str, text: str, max_attempts: int = 3) -> None:

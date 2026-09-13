@@ -51,6 +51,8 @@ NVDA         12      30      12/18          $3.5M   $1.2M–$5.8M
   issuers ranked by insider buying and selling
 - `python -m whale insiders --clusters` — issuers where several insiders traded the same way
 - `python -m whale insider AAPL` — every stored insider trade in one issuer
+- `python -m whale insider-alerts [--show-message]` — which stored filings the
+  configured alert rules match, without sending anything
 - `python -m whale status` — ingestion and coverage
 - `python -m whale audit` — data-integrity and pipeline-health report
 
@@ -100,6 +102,60 @@ Daniel Meuser, Gilbert Ray Cisneros, Jr., Jared Moskowitz, John J. McGuire III
 Thresholds live in `config.yaml`: 3+ distinct members in the same direction, or
 $500k+ estimated volume, inside a rolling window. A `(ticker, direction)` only
 re-alerts once more members join it.
+
+**Insider alerts** — Form 4 filings are far too numerous to announce wholesale,
+so they alert only against rules you write. Each new filing is tested in order
+and the **first match names the alert**:
+
+```
+🟢 CEO or CFO buying — PVH
+Larsson Stefan (Chief Executive Officer, Director) bought $1M of PVH CORP. /DE/
+Filed 2026-09-11 · traded 2026-09-11
+
+🟢 14,179.10 sh @ $70.53 = $1M
+
+https://www.sec.gov/Archives/edgar/data/1558755/.../0001123292-26-001286-index.htm
+```
+
+The line shows the arithmetic on purpose: a Form 4 value is shares × the price
+as filed, and printing the inputs means nobody has to wonder whether the figure
+was disclosed or derived.
+
+```yaml
+insiders:
+  alerts:
+    - name: Insider cluster buying     # several insiders at once
+      kind: cluster
+      direction: buy
+      min_insiders: 3
+      window_days: 30
+
+    - name: CEO or CFO buying          # specific rules go first
+      direction: buy
+      titles: ["chief executive", "ceo", "chief financial", "cfo"]
+      min_value_usd: 100000
+
+    - name: Unplanned executive sale
+      direction: sell
+      roles: [officer]
+      min_value_usd: 2000000
+      exclude_10b5_1: true             # a planned sale was scheduled months ago
+```
+
+A rule may set `direction` (buy/sell/any), `min_value_usd` (summed per
+direction within one filing), `roles` (director / officer / ten_percent_owner /
+other), `titles` (case-insensitive substrings of the officer title as filed),
+`exclude_10b5_1` or `require_10b5_1`, and for `kind: cluster`, `min_insiders`
+and `window_days`. An unknown key or value is an error at startup, not a rule
+that silently never matches. An empty `alerts` list means no insider alerts.
+
+Preview rules against filings already stored before trusting them — nothing is
+sent:
+
+```sh
+python -m whale insider-alerts --since 30d          # what the rules would catch
+python -m whale insider-alerts --show-message       # the exact Telegram output
+```
 
 ## Setup
 
