@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { Landmark } from "lucide-react";
 import { getPipeline } from "@/lib/queries";
+import { getInsiderTotals } from "@/lib/insider-queries";
 import { relativeTime } from "@/lib/format";
 import { Tabs, ThemeToggle } from "./nav";
 import "./globals.css";
@@ -12,11 +13,13 @@ const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
   title: "Whale Tracker",
-  description: "US congressional stock-trade disclosures: tickers, volume, and who is trading",
+  description:
+    "US congressional and corporate-insider stock trades: tickers, volume, and who is trading",
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   let transactions = 0;
+  let insiderTrades = 0;
   let synced = "unavailable";
   try {
     const p = await getPipeline();
@@ -24,6 +27,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     synced = relativeTime(p.lastUpdated);
   } catch {
     /* header degrades to "unavailable" */
+  }
+  try {
+    insiderTrades = (await getInsiderTotals()).trades;
+  } catch {
+    /* a database from before the insider source has no such tables */
   }
 
   return (
@@ -44,7 +52,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   Whale <span className="text-primary">Tracker</span>
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  {transactions.toLocaleString()} disclosed trades
+                  {transactions.toLocaleString()} congressional
+                  {insiderTrades ? ` · ${insiderTrades.toLocaleString()} insider` : ""} trades
                 </div>
               </div>
               <div className="flex-1" />
@@ -63,10 +72,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           </header>
           <main className="mx-auto max-w-6xl px-6 py-8 pb-28">{children}</main>
           <footer className="mx-auto max-w-6xl px-6 pb-10 text-xs leading-relaxed text-muted-foreground">
-            Source: US House Clerk periodic transaction reports (STOCK Act
-            disclosures). Members disclose an <strong>amount bracket</strong>, not an
-            exact figure — every total here is a range, and any midpoint is an
-            estimate. Senate coverage is not currently available; see Pipeline.
+            Sources: US House Clerk periodic transaction reports (STOCK Act
+            disclosures) and SEC EDGAR Form 4 filings. Members disclose an{" "}
+            <strong>amount bracket</strong>, not an exact figure — every congressional
+            total here is a range, and any midpoint is an estimate. Insider values
+            are <strong>shares × the reported price</strong>, which the filer may state
+            as a weighted average. Senate coverage is not currently available; see
+            Pipeline.
           </footer>
         </ThemeProvider>
       </body>

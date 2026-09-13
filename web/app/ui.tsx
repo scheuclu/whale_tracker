@@ -120,7 +120,16 @@ export function PartyBadge({ party }: { party: string | null }) {
   );
 }
 
-export function TickerChip({ ticker, type }: { ticker: string | null; type?: string | null }) {
+export function TickerChip({
+  ticker,
+  type,
+  href,
+}: {
+  ticker: string | null;
+  type?: string | null;
+  /** Defaults to the congressional ticker page; insider pages link to their own. */
+  href?: string;
+}) {
   if (!ticker) {
     return (
       <span
@@ -133,7 +142,7 @@ export function TickerChip({ ticker, type }: { ticker: string | null; type?: str
   }
   return (
     <Link
-      href={`/tickers?t=${encodeURIComponent(ticker)}`}
+      href={href ?? `/tickers?t=${encodeURIComponent(ticker)}`}
       className="inline-flex items-center rounded-md border border-border bg-card px-2 py-0.5 font-mono text-xs font-semibold tracking-tight transition-colors hover:border-primary/40 hover:bg-accent"
     >
       {ticker}
@@ -180,6 +189,115 @@ export function DelayTag({ days, inconsistent }: { days: number | null; inconsis
       }
     >
       {days}d{late ? " late" : ""}
+    </span>
+  );
+}
+
+/**
+ * Form 4's deadline is two business days, so the congressional DelayTag (45
+ * days, STOCK Act copy) does not apply. `late` is derived once at ingest with
+ * federal holidays excluded; the filer's own "late" box is shown separately
+ * because it is a filed fact, not our computation.
+ */
+export function InsiderDelayTag({
+  days,
+  late,
+  timeliness,
+}: {
+  days: number | null;
+  late: number | null;
+  timeliness: string | null;
+}) {
+  if (days == null) {
+    return (
+      <span
+        className="text-[11px] text-amber-600 dark:text-amber-400"
+        title="The trade and filing dates could not be compared (malformed or contradictory) — reproduced as filed"
+      >
+        date as filed
+      </span>
+    );
+  }
+  const isLate = late === 1;
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span
+        className={cn(
+          "tabular text-[11px]",
+          isLate ? "font-medium text-red-600 dark:text-red-400" : "text-muted-foreground"
+        )}
+        title={
+          isLate
+            ? "Filed more than two business days after the trade — Form 4's deadline"
+            : "Days from the trade to the filing reaching EDGAR"
+        }
+      >
+        {days}d{isLate ? " late" : ""}
+      </span>
+      {timeliness === "L" ? (
+        <span
+          className="text-[10px] text-amber-600 dark:text-amber-400"
+          title="The filer ticked the form's own 'late' box"
+        >
+          marked late by filer
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/** The reporting owner's relationship to the issuer, as declared on the filing. */
+export function RoleTag({
+  isDirector,
+  isOfficer,
+  isTenPercentOwner,
+  officerTitle,
+  ownerCount,
+}: {
+  isDirector: number | null;
+  isOfficer: number | null;
+  isTenPercentOwner: number | null;
+  officerTitle: string | null;
+  ownerCount?: number;
+}) {
+  const parts = [
+    isOfficer ? officerTitle ?? "Officer" : null,
+    isDirector ? "Director" : null,
+    isTenPercentOwner ? "10% owner" : null,
+  ].filter(Boolean) as string[];
+  const joint = ownerCount && ownerCount > 1 ? `+${ownerCount - 1} joint` : null;
+  if (!parts.length && !joint) return null;
+  return (
+    <span className="inline-flex items-center gap-1">
+      {parts.length ? (
+        <span
+          className="max-w-[16rem] truncate rounded bg-muted px-1.5 py-px text-[10px] text-muted-foreground"
+          title={parts.join(" · ")}
+        >
+          {parts.join(" · ")}
+        </span>
+      ) : null}
+      {joint ? (
+        <span
+          className="rounded bg-muted px-1.5 py-px text-[10px] text-muted-foreground"
+          title="Filed jointly with related reporting owners — counted as one insider"
+        >
+          {joint}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/** The Rule 10b5-1 checkbox: the filer asserts the trade ran under a pre-arranged plan. */
+export function PlanTag({ value }: { value: number | null }) {
+  if (value !== 1) return null;
+  return (
+    <span
+      className="rounded border border-border px-1.5 py-px text-[10px] text-muted-foreground"
+      title="Filer asserts the trade was made under a pre-arranged Rule 10b5-1 trading plan"
+    >
+      10b5-1 plan
     </span>
   );
 }

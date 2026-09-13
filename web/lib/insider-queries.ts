@@ -1,0 +1,290 @@
+import { getDb } from "./db";
+import { COUNTED, DELAY, MID, sinceClause } from "./queries";
+
+/**
+ * SEC Form 4 insider trades — separate tables, separate queries (see
+ * CLAUDE.md). Two things differ from the congressional queries:
+ *
+ * - Values are exact: `shares × price as filed`, so `MID` collapses to the
+ *   exact figure and is NULL (never 0) when the filing gave no price.
+ * - "Insiders" always means *primary* reporting owners (`owner_index = 0`),
+ *   so a founder filing jointly with their holding company counts once.
+ *   `filings` is shown beside `insiders` because related parties filing
+ *   separately still count twice.
+ */
+
+const FROM = `FROM insider_transactions t
+  JOIN insider_filings f ON f.id = t.filing_id
+  LEFT JOIN insider_filing_owners o ON o.filing_id = f.id AND o.owner_index = 0
+  LEFT JOIN insiders i ON i.cik = o.insider_cik`;
+
+const BUY_VALUE = `COALESCE(SUM(CASE WHEN t.action = 'purchase' THEN ${MID} END), 0)`;
+const SELL_VALUE = `COALESCE(SUM(CASE WHEN t.action = 'sale' THEN ${MID} END), 0)`;
+
+export type InsiderTotals = {
+  filings: number;
+  trades: number;
+  buys: number;
+  sells: number;
+  issuers: number;
+  insiders: number;
+  buy_value: number;
+  sell_value: number;
+  late_trades: number;
+  unpriced: number;
+};
+
+/** Whole-dataset headline figures — never a page slice. */
+export async function getInsiderTotals(): Promise<InsiderTotals> {
+  const db = await getDb();
+  return db
+    .prepare(
+      `SELECT COUNT(DISTINCT f.id) AS filings,
+              COUNT(*) AS trades,
+              SUM(t.action = 'purchase') AS buys,
+              SUM(t.action = 'sale') AS sells,
+              COUNT(DISTINCT f.issuer_cik) AS issuers,
+              COUNT(DISTINCT o.insider_cik) AS insiders,
+              ${BUY_VALUE} AS buy_value,
+              ${SELL_VALUE} AS sell_value,
+              COALESCE(SUM(t.late), 0) AS late_trades,
+              COALESCE(SUM(t.amount_exact_cents IS NULL), 0) AS unpriced
+       ${FROM}
+       WHERE f.status IN ${COUNTED}`
+    )
+    .get() as InsiderTotals;
+}
+
+export type IssuerRow = {
+  issuer_cik: string;
+  ticker: string | null;
+  issuer_name: string | null;
+  insiders: number;
+  buy_insiders: number;
+  sell_insiders: number;
+  filings: number;
+  trades: number;
+  buys: number;
+  sells: number;
+  buy_value: number;
+  sell_value: number;
+  last_tx_date: string | null;
+};
+
+const ISSUER_SELECT = `SELECT f.issuer_cik,
+       MIN(f.ticker) AS ticker,
+       MIN(f.issuer_name) AS issuer_name,
+       COUNT(DISTINCT o.insider_cik) AS insiders,
+       COUNT(DISTINCT CASE WHEN t.action = 'purchase' THEN o.insider_cik END) AS buy_insiders,
+       COUNT(DISTINCT CASE WHEN t.action = 'sale' THEN o.insider_cik END) AS sell_insiders,
+       COUNT(DISTINCT f.id) AS filings,
+       COUNT(*) AS trades,
+       SUM(t.action = 'purchase') AS buys,
+       SUM(t.action = 'sale') AS sells,
+       ${BUY_VALUE} AS buy_value,
+       ${SELL_VALUE} AS sell_value,
+       MAX(t.tx_date) AS last_tx_date
+  ${FROM}`;
+
+export async function getInsiderIssuers(days?: number, limit = 40): Promise<IssuerRow[]> {
+  const db = await getDb();
+  return db
+    .prepare(
+      `${ISSUER_SELECT}
+       WHERE f.status IN ${COUNTED} ${sinceClause(days)}
+       GROUP BY f.issuer_cik
+       ORDER BY buy_value + sell_value DESC
+       LIMIT ?`
+    )
+    .all(limit) as IssuerRow[];
+}
+
+export async function getInsiderIssuer(ticker: string): Promise<IssuerRow | null> {
+  const db = await getDb();
+  const row = db
+    .prepare(
+      `${ISSUER_SELECT}
+       WHERE f.status IN ${COUNTED} AND f.ticker = ?
+       GROUP BY f.issuer_cik
+       ORDER BY trades DESC
+       LIMIT 1`
+    )
+    .get(ticker.toUpperCase()) as IssuerRow | undefined;
+  return row ?? null;
+}
+
+/**
+ * Issuers where several distinct insiders traded the same way inside the
+ * window. Mirrors `stats.find_insider_clusters` in src/whale/stats.py —
+ * keep the two in agreement (window on trade date, primary owners, buys
+ * and sells never pooled).
+ */
+export async function getInsiderClusters(days = 30, minInsiders = 3, limit = 12): Promise<IssuerRow[]> {
+  const db = await getDb();
+  return db
+    .prepare(
+      `${ISSUER_SELECT}
+       WHERE f.status IN ${COUNTED} ${sinceClause(days)}
+       GROUP BY f.issuer_cik
+       HAVING buy_insiders >= ? OR sell_insiders >= ?
+       ORDER BY MAX(buy_insiders, sell_insiders) DESC, buy_value + sell_value DESC
+       LIMIT ?`
+    )
+    .all(minInsiders, minInsiders, limit) as IssuerRow[];
+}
+
+export type InsiderTradeRow = {
+  id: number;
+  tx_date: string | null;
+  action: string;
+  transaction_code: string;
+  shares: number | null;
+  price_per_share: number | null;
+  amount_min_cents: number | null;
+  amount_max_cents: number | null;
+  amount_exact_cents: number | null;
+  security_title: string | null;
+  direct_or_indirect: string | null;
+  nature_of_ownership: string | null;
+  /** 'E' early, 'L' late — the filer's own box, as filed. */
+  timeliness: string | null;
+  /** Derived once at ingest (two business days); NULL when the dates contradict. */
+  late: number | null;
+  footnotes: string | null;
+  accession: string;
+  ticker: string | null;
+  issuer_name: string | null;
+  issuer_cik: string | null;
+  filing_date: string;
+  aff_10b5_one: number | null;
+  source_url: string;
+  insider_name: string | null;
+  insider_cik: string | null;
+  is_director: number | null;
+  is_officer: number | null;
+  is_ten_percent_owner: number | null;
+  officer_title: string | null;
+  owner_count: number;
+  delay_days: number | null;
+};
+
+export async function getInsiderTrades(opts: {
+  ticker?: string;
+  cik?: string;
+  action?: string;
+  days?: number;
+  limit?: number;
+} = {}): Promise<InsiderTradeRow[]> {
+  const db = await getDb();
+  const where: string[] = [`f.status IN ${COUNTED}`];
+  const params: unknown[] = [];
+  if (opts.ticker) {
+    where.push("f.ticker = ?");
+    params.push(opts.ticker.toUpperCase());
+  }
+  if (opts.cik) {
+    where.push("o.insider_cik = ?");
+    params.push(opts.cik);
+  }
+  if (opts.action === "buy") where.push("t.action = 'purchase'");
+  if (opts.action === "sell") where.push("t.action = 'sale'");
+  params.push(opts.limit ?? 100);
+
+  return db
+    .prepare(
+      `SELECT t.id, t.tx_date, t.action, t.transaction_code, t.shares, t.price_per_share,
+              t.amount_min_cents, t.amount_max_cents, t.amount_exact_cents,
+              t.security_title, t.direct_or_indirect, t.nature_of_ownership,
+              t.timeliness, t.late, t.footnotes,
+              f.accession, f.ticker, f.issuer_name, f.issuer_cik, f.filing_date,
+              f.aff_10b5_one, f.source_url,
+              i.name AS insider_name, o.insider_cik, o.is_director, o.is_officer,
+              o.is_ten_percent_owner, o.officer_title,
+              (SELECT COUNT(*) FROM insider_filing_owners x WHERE x.filing_id = f.id) AS owner_count,
+              ${DELAY} AS delay_days
+       ${FROM}
+       WHERE ${where.join(" AND ")} ${sinceClause(opts.days)}
+       ORDER BY t.tx_date DESC, t.id DESC
+       LIMIT ?`
+    )
+    .all(...params) as InsiderTradeRow[];
+}
+
+export type IssuerInsiderRow = {
+  cik: string;
+  name: string;
+  is_director: number;
+  is_officer: number;
+  is_ten_percent_owner: number;
+  officer_title: string | null;
+  filings: number;
+  buys: number;
+  sells: number;
+  bought: number;
+  sold: number;
+};
+
+/** The primary reporting owners behind one issuer's stored filings. */
+export async function getIssuerInsiders(ticker: string): Promise<IssuerInsiderRow[]> {
+  const db = await getDb();
+  return db
+    .prepare(
+      `SELECT i.cik, i.name,
+              MAX(o.is_director) AS is_director,
+              MAX(o.is_officer) AS is_officer,
+              MAX(o.is_ten_percent_owner) AS is_ten_percent_owner,
+              MAX(o.officer_title) AS officer_title,
+              COUNT(DISTINCT f.id) AS filings,
+              SUM(t.action = 'purchase') AS buys,
+              SUM(t.action = 'sale') AS sells,
+              ${BUY_VALUE} AS bought,
+              ${SELL_VALUE} AS sold
+       ${FROM}
+       WHERE f.status IN ${COUNTED} AND f.ticker = ? AND o.insider_cik IS NOT NULL
+       GROUP BY i.cik
+       ORDER BY bought + sold DESC`
+    )
+    .all(ticker.toUpperCase()) as IssuerInsiderRow[];
+}
+
+export type InsiderPipeline = {
+  byStatus: { status: string; source: string; n: number }[];
+  totals: { filings: number; trades: number; issuers: number };
+  state: Record<string, string | null>;
+  failures: { accession: string; issuer_name: string | null; last_error: string | null; source_url: string }[];
+};
+
+const STATE_KEYS = ["edgar_status", "edgar_cursor", "edgar_skipped", "edgar_gap", "edgar_backfill_through"];
+
+/** Null when the insider tables do not exist yet (a database from before the source was added). */
+export async function getInsiderPipeline(): Promise<InsiderPipeline | null> {
+  const db = await getDb();
+  try {
+    const byStatus = db
+      .prepare(
+        "SELECT status, source, COUNT(*) AS n FROM insider_filings GROUP BY status, source ORDER BY n DESC"
+      )
+      .all() as InsiderPipeline["byStatus"];
+    const totals = db
+      .prepare(
+        `SELECT (SELECT COUNT(*) FROM insider_filings) AS filings,
+                (SELECT COUNT(*) FROM insider_transactions) AS trades,
+                (SELECT COUNT(DISTINCT issuer_cik) FROM insider_filings) AS issuers`
+      )
+      .get() as InsiderPipeline["totals"];
+    const rows = db
+      .prepare("SELECT key, value FROM sync_state WHERE key LIKE 'edgar_%'")
+      .all() as { key: string; value: string | null }[];
+    const state: Record<string, string | null> = Object.fromEntries(STATE_KEYS.map((k) => [k, null]));
+    for (const r of rows) state[r.key] = r.value;
+    const failures = db
+      .prepare(
+        `SELECT accession, issuer_name, last_error, source_url FROM insider_filings
+         WHERE status = 'failed' ORDER BY filing_date DESC LIMIT 10`
+      )
+      .all() as InsiderPipeline["failures"];
+    return { byStatus, totals, state, failures };
+  } catch {
+    return null;
+  }
+}
