@@ -114,7 +114,19 @@ export default async function InsidersPage({
               data={clusters.map((c) => ({
                 key: c.issuer_cik,
                 label: c.ticker ?? "—",
-                sublabel: c.issuer_name?.slice(0, 26) ?? undefined,
+                // Direction first, in words: with one arm empty the bar's side
+                // alone is easy to misread, and colour must never carry it alone.
+                sublabel: [
+                  [
+                    c.buy_insiders ? `${c.buy_insiders} bought` : null,
+                    c.sell_insiders ? `${c.sell_insiders} sold` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(", "),
+                  c.issuer_name?.slice(0, 22),
+                ]
+                  .filter(Boolean)
+                  .join(" · "),
                 buy: c.buy_insiders,
                 sell: c.sell_insiders,
                 href: c.ticker ? issuerHref(c.ticker) : undefined,
@@ -124,8 +136,11 @@ export default async function InsidersPage({
             <Empty>No issuer has three or more insiders trading in one direction this month.</Empty>
           )}
           <p className="mt-3 text-[11px] text-muted-foreground">
-            Counts primary reporting owners: a founder and their holding company on one filing
-            are one insider. Related parties filing separately still count twice.
+            Bought bars extend left, sold bars right. Insiders sell far more often than they buy —{" "}
+            {totals.sells.toLocaleString()} of the {totals.trades.toLocaleString()} stored trades are
+            sales — so a cluster of buyers is the scarcer signal. Counts primary reporting owners: a
+            founder and their holding company on one filing are one insider; related parties filing
+            separately still count twice.
           </p>
         </Card>
       </section>
