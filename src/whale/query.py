@@ -276,3 +276,64 @@ def insider_clusters(config: Config) -> None:
         print(_VALUE_NOTE)
     finally:
         conn.close()
+
+
+def insider_alert_preview(config: Config, window_days: int | None, limit: int,
+                          show_message: bool = False) -> None:
+    """What the configured rules would alert on, without sending anything."""
+    from . import insider_alerts, telegram
+
+    rules = config.insiders.alerts
+    if not rules:
+        print("no insider alert rules configured — see the `insiders.alerts` "
+              "list in config.yaml")
+        return
+
+    print("\nConfigured rules, in match order:\n")
+    for i, r in enumerate(rules, 1):
+        conditions = []
+        if r.direction != "any":
+            conditions.append(f"direction={r.direction}")
+        if r.min_value_usd:
+            conditions.append(f"≥{usd(r.min_value_cents)}")
+        if r.roles:
+            conditions.append("roles=" + "/".join(r.roles))
+        if r.titles:
+            conditions.append("title~" + "/".join(r.titles))
+        if r.exclude_10b5_1:
+            conditions.append("not 10b5-1")
+        if r.require_10b5_1:
+            conditions.append("10b5-1 only")
+        if r.kind == "cluster":
+            window = r.window_days or config.insiders.cluster_window_days
+            conditions.append(f"{r.min_insiders}+ insiders in {window}d")
+        print(f"  {i}. [{r.kind}] {r.name} — {', '.join(conditions) or 'anything'}")
+
+    conn = db.connect(config.db_path)
+    try:
+        matches = insider_alerts.preview(conn, config.insiders, window_days, limit)
+        window = f"last {window_days}d" if window_days else "all stored filings"
+        print(f"\nFiling rules matched {len(matches)} filing(s) ({window}"
+              + (f", showing {limit} at most" if len(matches) >= limit else "") + "):\n")
+        for m in matches:
+            verb = "bought" if m.direction == "purchase" else "sold"
+            value = usd(m.value_cents) if m.value_cents is not None else "unpriced"
+            who = (m.primary["name"] if m.primary else "?") or "?"
+            print(f"  {m.filing['filing_date']}  {(m.filing['ticker'] or '—'):<6} "
+                  f"{value:>9} {verb:<6}  {who[:28]:<28} → {m.rule.name}")
+            if show_message:
+                print("\n" + telegram.format_insider_filing(m) + "\n")
+
+        clusters = insider_alerts.cluster_matches(conn, config.insiders)
+        print(f"\nCluster rules matched {len(clusters)} issuer(s):\n")
+        for cluster, rule, cwindow in clusters:
+            verb = "buying" if cluster.direction == "buy" else "selling"
+            print(f"  {(cluster.ticker or cluster.issuer_cik):<8} "
+                  f"{cluster.insider_count} insiders {verb} · "
+                  f"{usd(cluster.volume.mid_cents):>9} → {rule.name} ({cwindow}d)")
+            if show_message:
+                print("\n" + telegram.format_insider_cluster(cluster, rule.name, cwindow) + "\n")
+        print("\nNothing was sent. Alerts fire from `whale run` on newly stored filings;")
+        print("already-examined filings are demoted to history and never re-alerted.")
+    finally:
+        conn.close()

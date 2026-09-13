@@ -335,3 +335,52 @@ def test_backfill_honours_its_budget_and_says_where_to_resume(conn, caplog):
     assert result.aborted == "budget"
     assert db.get_state(conn, insiders.STATE_BACKFILL_THROUGH) is None
     assert "resume with --from 2026-09-11" in caplog.text
+
+
+# --- is a stored filing owed a notification? --------------------------------
+
+
+def _alert_config(*, rules=True, max_age=7) -> Config:
+    from whale.config import _parse_rule
+
+    config = _config(max_filing_age_days=max_age)
+    if rules:
+        config.insiders.alerts = [_parse_rule({"name": "Any buy", "direction": "buy"}, 0)]
+    return config
+
+
+def test_recent_filing_is_queued_for_notification():
+    assert insiders.ingest_status(_alert_config(), "2026-09-11", TODAY) == "parsed"
+
+
+def test_older_filing_is_stored_as_history():
+    # The age gate is what stops a first run replaying days into Telegram.
+    assert insiders.ingest_status(_alert_config(), "2026-08-01", TODAY) == "backfilled"
+
+
+def test_without_rules_nothing_is_queued():
+    # Nothing would ever read 'parsed', so queueing would strand the filing.
+    assert insiders.ingest_status(_alert_config(rules=False), "2026-09-11", TODAY) == "backfilled"
+
+
+def test_a_filing_with_no_date_is_history():
+    assert insiders.ingest_status(_alert_config(), None, TODAY) == "backfilled"
+
+
+def test_sync_queues_a_recent_filing_when_rules_exist(conn):
+    sec = Edgar().feed(*APPLE_ENTRIES).submission(APPLE_ACCESSION, submission(APPLE_ACCESSION, APPLE_XML))
+    config = _alert_config(max_age=7)
+    insiders.sync(conn, config, client=sec.client, today=TODAY)
+    assert conn.execute("SELECT status FROM insider_filings").fetchone()["status"] == "parsed"
+
+
+def test_backfill_never_queues_a_notification(conn):
+    # A daily-index run may cover today, but history must stay silent.
+    index_text = (FIXTURES / "form.20260911.idx").read_text()
+    aflac = "0001104659-26-107065"
+    sec = (Edgar().index(date(2026, 9, 11), index_text)
+           .submission(aflac, submission(aflac, APPLE_XML, filed="20260911",
+                                         issuer=("0000004977", "AFLAC INC"))))
+    insiders.backfill_range(conn, _alert_config(), date(2026, 9, 11), date(2026, 9, 11),
+                            client=sec.client)
+    assert conn.execute("SELECT status FROM insider_filings").fetchone()["status"] == "backfilled"

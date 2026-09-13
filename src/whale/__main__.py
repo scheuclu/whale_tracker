@@ -83,6 +83,14 @@ def main(argv: list[str] | None = None) -> int:
     p_insider.add_argument("symbol")
     p_insider.add_argument("--since", type=_parse_since, default=None, metavar="90d")
 
+    p_ialerts = sub.add_parser(
+        "insider-alerts",
+        help="preview which stored filings the configured alert rules match")
+    p_ialerts.add_argument("--since", type=_parse_since, default=None, metavar="30d")
+    p_ialerts.add_argument("--limit", type=int, default=20)
+    p_ialerts.add_argument("--show-message", action="store_true",
+                           help="print the Telegram message each match would send")
+
     args = parser.parse_args(argv)
     config = load_config()
 
@@ -174,6 +182,8 @@ def main(argv: list[str] | None = None) -> int:
             query.insider_issuers(config, args.since, args.by, args.direction, args.limit)
     elif args.command == "insider":
         query.insider_detail(config, args.symbol, args.since)
+    elif args.command == "insider-alerts":
+        query.insider_alert_preview(config, args.since, args.limit, args.show_message)
     elif args.command == "status":
         query.pipeline_status(config)
     return 0

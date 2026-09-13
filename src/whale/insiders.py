@@ -15,9 +15,11 @@ If the feed has forgotten more than it remembers — an outage longer than
 about two business days — the run records a gap for `backfill-insiders` to
 repair from the daily index.
 
-Phase one stores every kept filing as `backfilled`: history for the
-dashboard, never announced. Insider alerts, when they arrive, flip recent
-filings to `parsed` at ingest and leave everything older alone.
+A kept filing enters as `parsed` only when alert rules exist and it is recent
+enough to be worth interrupting for; otherwise it enters as `backfilled`,
+which is history for the dashboard and never announced. That gate is what
+stops a first run — or a long backfill — replaying days of filings into
+Telegram.
 """
 
 from __future__ import annotations
@@ -32,7 +34,7 @@ from datetime import date, timedelta
 
 import httpx
 
-from . import db, edgar, form4, stats
+from . import db, edgar, form4, house, stats
 from .config import Config
 from .edgar import EdgarClient, EdgarThrottled, FilingRef
 from .form4 import Form4, SecHeader, Transaction
@@ -49,8 +51,10 @@ STATE_SKIPPED = "edgar_skipped"
 STATE_GAP = "edgar_gap"
 STATE_BACKFILL_THROUGH = "edgar_backfill_through"
 
-# Phase one: history only. See the module docstring.
-INGEST_STATUS = "backfilled"
+# History: stored for the dashboard, never announced.
+HISTORY_STATUS = "backfilled"
+# Owed a notification. `notify_insiders` decides whether a rule wants it.
+PENDING_STATUS = "parsed"
 
 
 @dataclass
@@ -113,7 +117,8 @@ def sync(conn: sqlite3.Connection, config: Config, client: EdgarClient | None = 
                 outcome = "known"
             else:
                 try:
-                    outcome = process_filing(conn, config, client, ref, source="feed")
+                    outcome = process_filing(conn, config, client, ref, source="feed",
+                                             today=today)
                 except (EdgarThrottled, httpx.HTTPError) as exc:
                     # Transient: stop here, cursor stays at the last success.
                     result.aborted = _abort_reason(exc)
@@ -191,8 +196,23 @@ def _finish_sync(conn: sqlite3.Connection, result: SyncResult, reached: bool,
 # --- one filing --------------------------------------------------------------
 
 
+def ingest_status(config: Config, filing_date: str | None,
+                  today: date | None = None) -> str:
+    """Whether a newly stored filing is owed a notification.
+
+    With no rules configured nothing would ever read `parsed`, and a filing
+    already older than the age gate is history — both land as history so a
+    first run cannot replay days of filings into Telegram.
+    """
+    if not config.insiders.alerting:
+        return HISTORY_STATUS
+    recent = house.is_recent(filing_date, config.insiders.max_filing_age_days, today)
+    return PENDING_STATUS if recent else HISTORY_STATUS
+
+
 def process_filing(conn: sqlite3.Connection, config: Config, client: EdgarClient,
-                   ref: FilingRef, source: str, status: str = INGEST_STATUS) -> str:
+                   ref: FilingRef, source: str, status: str | None = None,
+                   today: date | None = None) -> str:
     """Fetch, parse, filter and maybe store one filing. Returns the outcome:
     stored | below_floor | no_price | no_open_market | other_form | not_found | parse_failed."""
     text = edgar.fetch_submission(client, ref)
@@ -217,6 +237,8 @@ def process_filing(conn: sqlite3.Connection, config: Config, client: EdgarClient
         # An unknown value cannot clear a value floor; say which it was.
         return "no_price" if all(t.value_cents is None for t in rows) else "below_floor"
 
+    if status is None:
+        status = ingest_status(config, header.filed_date or ref.filed_date, today)
     store_filing(conn, header, doc, ref, source, status)
     return "stored"
 
@@ -396,7 +418,9 @@ def backfill_range(conn: sqlite3.Connection, config: Config, start: date, end: d
                 if ref.accession in known:
                     continue
                 try:
-                    outcome = process_filing(conn, config, client, ref, source="index")
+                    # History never notifies, however recent the day's index.
+                    outcome = process_filing(conn, config, client, ref, source="index",
+                                             status=HISTORY_STATUS)
                 except (EdgarThrottled, httpx.HTTPError) as exc:
                     result.aborted = _abort_reason(exc)
                     stopped = True

@@ -208,6 +208,10 @@ def find_clusters(conn: sqlite3.Connection, settings: AlertSettings,
     return clusters
 
 
+CLUSTER_KIND = "cluster"
+INSIDER_CLUSTER_KIND = "insider_cluster"
+
+
 def is_new_cluster(conn: sqlite3.Connection, cluster: Cluster) -> bool:
     """Whether this cluster is worth sending.
 
@@ -216,10 +220,25 @@ def is_new_cluster(conn: sqlite3.Connection, cluster: Cluster) -> bool:
     """
     from . import db as _db
 
-    previous = _db.last_alert(conn, cluster.ticker, cluster.direction)
+    previous = _db.last_alert(conn, cluster.ticker, cluster.direction, CLUSTER_KIND)
     if previous is None:
         return True
     return cluster.politician_count > previous["politician_count"]
+
+
+def is_new_insider_cluster(conn: sqlite3.Connection, cluster: InsiderCluster) -> bool:
+    """Same rule for insiders, but keyed on its own alert kind.
+
+    Without the kind, a congressional cluster on NVDA would suppress an
+    insider cluster on NVDA — two unrelated facts sharing a dedupe row.
+    """
+    from . import db as _db
+
+    key = cluster.ticker or cluster.issuer_cik
+    previous = _db.last_alert(conn, key, cluster.direction, INSIDER_CLUSTER_KIND)
+    if previous is None:
+        return True
+    return cluster.insider_count > previous["politician_count"]
 
 
 def politician_stats(conn: sqlite3.Connection, window_days: int | None = None,
@@ -510,19 +529,26 @@ class InsiderCluster:
 
 
 def find_insider_clusters(conn: sqlite3.Connection, settings: InsiderSettings,
-                          today: date | None = None) -> list[InsiderCluster]:
+                          today: date | None = None, window_days: int | None = None,
+                          min_insiders: int | None = None) -> list[InsiderCluster]:
     """Issuers where several distinct insiders traded the same way in the window.
 
     Buys and sells are evaluated separately and never pooled. The count is of
     primary reporting owners, so a joint filing contributes one insider.
+
+    `window_days` and `min_insiders` override the configured defaults, which is
+    what lets one alert rule ask for "3 buyers in 30 days" while another asks
+    for "5 in 90".
     """
+    window = window_days or settings.cluster_window_days
+    floor = settings.min_insiders if min_insiders is None else min_insiders
     clusters = []
-    for s in insider_issuer_stats(conn, settings.cluster_window_days, today).values():
+    for s in insider_issuer_stats(conn, window, today).values():
         for direction, insiders, count, volume in (
             ("buy", s.buy_insiders, s.buy_count, s.buy_volume),
             ("sell", s.sell_insiders, s.sell_count, s.sell_volume),
         ):
-            if len(insiders) < settings.min_insiders:
+            if len(insiders) < floor:
                 continue
             clusters.append(InsiderCluster(
                 issuer_cik=s.issuer_cik, ticker=s.ticker, issuer_name=s.issuer_name,

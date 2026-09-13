@@ -58,6 +58,62 @@ insiders:
   # trade-date window has no 45-day reporting lag to absorb.
   cluster_window_days: 30
   min_insiders: 3
-  # Read now, consumed by Telegram alerts once they exist: a filing older than
-  # this on first sight is history, never a notification.
+  # A filing older than this on first sight is history, never a notification.
+  # It is what stops a first run, or a backfill, replaying days into Telegram.
   max_filing_age_days: 7
+
+  # Alert rules. Each new filing is tested against them in order and the FIRST
+  # match names the alert, so specific rules must sit above general ones —
+  # "Large insider buy" placed first would claim the CEO's purchase before the
+  # CEO rule ever saw it. An empty list means no insider alerts at all.
+  #
+  # Conditions a rule may set:
+  #   direction       buy | sell | any            (default any)
+  #   min_value_usd   summed value of that direction's trades in one filing
+  #   roles           director | officer | ten_percent_owner | other
+  #   titles          case-insensitive substrings of the officer title as filed
+  #   exclude_10b5_1  skip trades the filer marked as a pre-arranged plan
+  #   require_10b5_1  only those trades
+  #   kind: cluster   + min_insiders, window_days — several insiders at once
+  #
+  # A value threshold below `min_trade_usd` above cannot fire: filings under
+  # that floor are never stored in the first place.
+  #
+  # Insiders sell vastly more than they buy — 878 of the first 944 stored
+  # trades were sales, since selling is how equity compensation is realised.
+  # A purchase is the scarcer signal, so it earns a lower threshold.
+  alerts:
+    - name: Insider cluster buying
+      kind: cluster
+      direction: buy
+      min_insiders: 3
+      window_days: 30
+
+    # Someone who sets the guidance buying their own stock, at any size worth
+    # storing. Title substrings, because the form's free-text titles vary
+    # ("CEO", "Chief Executive Officer", "President and CEO").
+    - name: CEO or CFO buying
+      direction: buy
+      titles: ["chief executive", "ceo", "chief financial", "cfo"]
+      min_value_usd: 100000
+
+    - name: Large insider buy
+      direction: buy
+      min_value_usd: 250000
+
+    # Sales are routine, so this asks for three things at once: an officer, a
+    # large amount, and no 10b5-1 plan. A planned sale was scheduled months
+    # ago and says little; an unplanned one was a decision made that week.
+    - name: Unplanned executive sale
+      direction: sell
+      roles: [officer]
+      min_value_usd: 2000000
+      exclude_10b5_1: true
+
+    # Available but off by default: insider *selling* clusters fire often —
+    # every cluster in the first corpus was a sell — so this would be noisy.
+    # - name: Insider cluster selling
+    #   kind: cluster
+    #   direction: sell
+    #   min_insiders: 4
+    #   window_days: 30

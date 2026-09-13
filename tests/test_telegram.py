@@ -148,3 +148,104 @@ def test_send_message_retries_then_raises_on_rate_limit(monkeypatch):
     else:
         raise AssertionError("expected RuntimeError after exhausting retries")
     assert len(calls) == 3
+
+
+# --- insiders (SEC Form 4) --------------------------------------------------
+
+
+class _Row(dict):
+    """sqlite3.Row is read-only and not constructible; the formatters only
+    subscript, so a dict stands in."""
+
+    def __getitem__(self, key):
+        return self.get(key)
+
+
+def _insider_match(rows, *, rule_name="Large insider buy", direction="purchase",
+                   issuer="Acme & Co.", ticker="ACME", plan=None,
+                   owners=None, value=None):
+    from whale.config import _parse_rule
+    from whale.insider_alerts import FilingMatch
+
+    filing = _Row(accession="0000000000-26-000001", ticker=ticker, issuer_name=issuer,
+                  filing_date="2026-06-20", aff_10b5_one=plan,
+                  source_url="http://sec/x-index.htm")
+    owners = owners or [_Row(insider_cik="0000000010", name="Alex Officer",
+                             is_officer=1, is_director=0, is_ten_percent_owner=0,
+                             officer_title="Chief Executive Officer")]
+    if value is None:
+        value = sum(r["amount_exact_cents"] or 0 for r in rows) or None
+    return FilingMatch(_parse_rule({"name": rule_name}, 0), filing, direction,
+                       value, rows, owners)
+
+
+def _insider_row(**over):
+    row = {"action": "purchase", "shares": 1000.0, "price_per_share": 10.0,
+           "amount_exact_cents": 1_000_000, "tx_date": "2026-06-18", "late": 0}
+    row.update(over)
+    return _Row(row)
+
+
+def test_insider_message_leads_with_the_rule_name_and_shows_the_arithmetic():
+    msg = telegram.format_insider_filing(_insider_match([_insider_row()]))
+    assert msg.startswith("🟢 <b>Large insider buy — ACME</b>")
+    # The inputs are the label: nobody has to wonder whether the figure was
+    # disclosed or derived.
+    assert "1,000 sh @ $10.00 = <b>$10k</b>" in msg
+    assert "Chief Executive Officer" in msg
+    assert "http://sec/x-index.htm" in msg
+
+
+def test_insider_message_escapes_html_in_names():
+    msg = telegram.format_insider_filing(
+        _insider_match([_insider_row()], issuer="Smith & <Sons>"))
+    assert "Smith &amp; &lt;Sons&gt;" in msg
+    assert "<Sons>" not in msg
+
+
+def test_insider_row_without_a_price_says_so_rather_than_showing_zero():
+    msg = telegram.format_insider_filing(
+        _insider_match([_insider_row(price_per_share=None, amount_exact_cents=None)]))
+    assert "no price filed" in msg
+    assert "$0" not in msg
+
+
+def test_insider_message_flags_a_late_filing_and_a_plan():
+    msg = telegram.format_insider_filing(
+        _insider_match([_insider_row(late=1)], plan=1))
+    assert "filed late" in msg and "10b5-1 plan" in msg
+
+
+def test_insider_message_notes_joint_filers():
+    owners = [
+        _Row(insider_cik="1", name="Fran Founder", is_officer=1, is_director=0,
+             is_ten_percent_owner=0, officer_title="CEO"),
+        _Row(insider_cik="2", name="Founder LLC", is_officer=0, is_director=0,
+             is_ten_percent_owner=1, officer_title=None),
+    ]
+    msg = telegram.format_insider_filing(_insider_match([_insider_row()], owners=owners))
+    assert "+1 joint filer" in msg
+
+
+def test_insider_message_with_many_rows_stays_within_one_telegram_message():
+    rows = [_insider_row(shares=float(i), tx_date=f"2026-06-{i % 28 + 1:02d}")
+            for i in range(400)]
+    msg = telegram.format_insider_filing(_insider_match(rows))
+    assert len(msg) <= telegram.TELEGRAM_LIMIT
+    assert "more" in msg  # the list was capped, not the message truncated
+    assert msg.rstrip().endswith("x-index.htm")
+
+
+def test_insider_cluster_message():
+    from whale.stats import InsiderCluster, Volume
+
+    vol = Volume()
+    vol.add(None, None, 12_400_000_00)
+    cluster = InsiderCluster(issuer_cik="0000000001", ticker="ESTC",
+                             issuer_name="Elastic N.V.", direction="sell",
+                             insider_count=6, filing_count=8, trade_count=14,
+                             insiders=["Alice A", "Bob B"], volume=vol)
+    msg = telegram.format_insider_cluster(cluster, "Insider cluster selling", 30)
+    assert msg.startswith("🔥 <b>Insider cluster selling — ESTC</b>")
+    assert "6 insiders sold Elastic N.V. in the last 30 days" in msg
+    assert "across 8 filings · 14 sells" in msg
