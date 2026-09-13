@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import logging
 from datetime import date, timedelta
+from pathlib import Path
 
 from . import db
 from .config import load_config
@@ -25,6 +26,12 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("init-db", help="create the database")
     sub.add_parser("sync", help="refresh the roster and filing index only")
     sub.add_parser("status", help="pipeline and coverage status")
+
+    p_audit = sub.add_parser(
+        "audit", help="data-integrity and pipeline-health checks (markdown report)")
+    p_audit.add_argument("--out", type=Path, help="write the report here instead of stdout")
+    p_audit.add_argument("--fail-on", choices=("error", "warning"), default=None,
+                         help="exit non-zero when a finding at this severity or worse exists")
 
     p_run = sub.add_parser("run", help="run the full pipeline once")
     p_run.add_argument("--dry-run", action="store_true",
@@ -82,6 +89,21 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "init-db":
         db.connect(config.db_path).close()
         print(f"database ready at {config.db_path}")
+        return 0
+
+    if args.command == "audit":
+        from . import audit
+
+        text, findings = audit.report(config.db_path)
+        if args.out:
+            args.out.write_text(text)
+            print(f"audit written to {args.out}")
+        else:
+            print(text)
+        if args.fail_on:
+            worst = {"error": (audit.ERROR,), "warning": (audit.ERROR, audit.WARN)}[args.fail_on]
+            if any(f.severity in worst for f in findings):
+                return 1
         return 0
 
     if args.command == "sync":

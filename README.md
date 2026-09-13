@@ -52,6 +52,7 @@ NVDA         12      30      12/18          $3.5M   $1.2M–$5.8M
 - `python -m whale insiders --clusters` — issuers where several insiders traded the same way
 - `python -m whale insider AAPL` — every stored insider trade in one issuer
 - `python -m whale status` — ingestion and coverage
+- `python -m whale audit` — data-integrity and pipeline-health report
 
 ### Amounts are ranges, not figures
 
@@ -244,6 +245,39 @@ bot's commits without redeploying.
 
 Locally, no configuration is needed — it reads `../data/trades.sqlite3`
 directly.
+
+## Weekly self-review
+
+A second workflow (`.github/workflows/weekly-review.yml`) runs Mondays. It
+gathers evidence deterministically — `whale audit` over the database, plus a
+digest of the `poll` workflow's runs and failure logs — then has Claude decide
+whether anything is genuinely wrong and, if so, open a **draft** PR fixing the
+single most valuable thing.
+
+The audit is the substance and is useful on its own:
+
+```sh
+python -m whale audit                 # markdown report
+python -m whale audit --fail-on error # exit 1 on an error-severity finding
+```
+
+It looks for the failure mode this project actually has — plausible-looking
+wrong numbers rather than crashes — and covers both sources, which fail
+differently.
+
+For House PTRs, where the risk is a mis-split PDF column: filings that parsed
+to zero transactions, amounts off the statutory bracket ladder, tickers that
+are really CUSIPs, filings stuck in the queue, unmatched filers, and a drop in
+rows-per-filing that would signal the Clerk changing the PDF template.
+
+For SEC Form 4s, where the XML rarely fails to parse but *coverage* does: a
+throttled or stalled EDGAR sync (which reports success while storing nothing),
+a feed gap that needs a daily-index backfill, a stored filing with no rows or
+no primary reporting owner, and values that no longer equal shares × the filed
+price.
+
+Needs `ANTHROPIC_API_KEY` as a repo secret. Without it the audit still runs and
+is uploaded as a build artifact; only the analysis and PR step is skipped.
 
 ## Development
 

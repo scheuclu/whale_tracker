@@ -1,0 +1,237 @@
+name: weekly-review
+
+# Reviews a week of pipeline output and proposes fixes as draft PRs.
+#
+# The evidence is gathered deterministically first — `whale audit` over the
+# database, plus a digest of the poll workflow's runs and failure logs — and
+# only then handed to Claude. That keeps the run cheap and reproducible, and
+# means the checks are unit-tested rather than re-derived by a model each week.
+
+on:
+  schedule:
+    # Mondays 07:00 UTC — after the weekend's filings have been ingested.
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Produce the evidence and the analysis, but open no PR"
+        type: boolean
+        default: false
+
+# Never overlap with itself; a second review of the same state is pure cost.
+concurrency:
+  group: whale-weekly-review
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: read # required to read the poll workflow's run history and logs
+  id-token: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -e ".[dev]"
+
+      # Fail loudly and early rather than opaquely at the Claude step, and
+      # skip the rest instead of red-flagging the repo every Monday.
+      - name: Check credentials
+        id: creds
+        env:
+          KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::ANTHROPIC_API_KEY is not set — the audit will run and be" \
+                 "uploaded as an artifact, but no analysis or PR will be produced."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Audit the data
+        run: python -m whale audit --out /tmp/audit.md
+
+      # Best-effort: a log-fetch hiccup must not cost us the data audit, which
+      # is the more valuable half of the evidence.
+      - name: Digest the poll workflow's CI history
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          OUT=/tmp/ci.md
+          echo "# poll workflow — last 7 days" > "$OUT"
+          echo >> "$OUT"
+
+          gh run list --workflow=poll.yml --limit 60 \
+            --json databaseId,conclusion,createdAt,durationMs,event \
+            > /tmp/runs.json
+
+          python - <<'PY' >> "$OUT"
+          import json, datetime
+          runs = json.load(open("/tmp/runs.json"))
+          cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=7)
+          recent = [r for r in runs
+                    if datetime.datetime.fromisoformat(r["createdAt"].replace("Z", "+00:00")) > cutoff]
+          by = {}
+          for r in recent:
+              by[r["conclusion"] or "in_progress"] = by.get(r["conclusion"] or "in_progress", 0) + 1
+          print(f"- runs in window: **{len(recent)}** (expected ~56 at every 3h)")
+          print(f"- outcomes: {by or 'none'}")
+          durations = [r["durationMs"] / 1000 for r in recent if r.get("durationMs")]
+          if durations:
+              durations.sort()
+              print(f"- duration: median {durations[len(durations)//2]:.0f}s, "
+                    f"max {durations[-1]:.0f}s")
+          failed = [r["databaseId"] for r in recent if r["conclusion"] == "failure"]
+          print(f"- failed run ids: {failed or 'none'}")
+          open("/tmp/failed_ids.txt", "w").write("\n".join(str(i) for i in failed))
+          PY
+
+          # Failure logs, trimmed — full logs are far too long to reason over.
+          if [ -s /tmp/failed_ids.txt ]; then
+            echo >> "$OUT"; echo "## Failure logs" >> "$OUT"
+            while read -r id; do
+              [ -n "$id" ] || continue
+              echo >> "$OUT"; echo "### run $id" >> "$OUT"
+              echo '```' >> "$OUT"
+              gh run view "$id" --log-failed 2>/dev/null | tail -60 >> "$OUT" || \
+                echo "(logs unavailable — may have expired)" >> "$OUT"
+              echo '```' >> "$OUT"
+            done < /tmp/failed_ids.txt
+          fi
+
+          # A run can succeed and still do nothing useful. Warnings in a green
+          # run are the most under-watched signal in the pipeline.
+          echo >> "$OUT"; echo "## Warnings in successful runs" >> "$OUT"
+          echo '```' >> "$OUT"
+          LATEST=$(jq -r '[.[] | select(.conclusion=="success")][0].databaseId' /tmp/runs.json)
+          if [ "$LATEST" != "null" ]; then
+            gh run view "$LATEST" --log 2>/dev/null \
+              | grep -iE "warning|error|exception|traceback|failed|skipping" \
+              | grep -viE "no DB changes" | tail -40 >> "$OUT" || echo "(none)" >> "$OUT"
+          fi
+          echo '```' >> "$OUT"
+
+          cat "$OUT"
+
+      - name: Combine the evidence
+        run: |
+          [ -f /tmp/ci.md ] || echo "# poll workflow
+
+          CI digest unavailable this run — treat the pipeline's run history as
+          unknown rather than healthy." > /tmp/ci.md
+          {
+            cat /tmp/audit.md
+            echo; echo "---"; echo
+            cat /tmp/ci.md
+          } > /tmp/evidence.md
+          wc -c /tmp/evidence.md
+
+      # Keep the evidence even when no analysis runs — it is the week's record.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: weekly-evidence
+          path: /tmp/evidence.md
+          retention-days: 90
+
+      - uses: anthropics/claude-code-action@v1
+        if: steps.creds.outputs.configured == 'true'
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: |
+            --model claude-opus-5
+            --allowedTools "Read,Grep,Glob,Edit,Write,Bash(python:*),Bash(git:*),Bash(gh pr:*),Bash(gh issue:*),Bash(sqlite3:*),Bash(cat:*),Bash(ls:*)"
+            --max-turns 60
+          prompt: |
+            You are reviewing one week of output from the whale_tracker
+            pipeline, which tracks two sources: US House STOCK Act disclosures
+            (PDF, bracketed amounts) and SEC Form 4 corporate-insider filings
+            (XML, exact values). Read CLAUDE.md first — it states the project's
+            invariants for both, and they bind you too.
+
+            The evidence is at /tmp/evidence.md: a data audit produced by
+            `python -m whale audit` (checks live in src/whale/audit.py) and a
+            digest of the `poll` workflow's runs and logs. Read it in full before
+            forming a view.
+
+            YOUR JOB
+
+            Decide whether anything is actually wrong or clearly worth improving,
+            and if so open ONE draft pull request fixing the single most valuable
+            thing. Depth over breadth: one well-understood fix with a regression
+            test beats five speculative edits.
+
+            HOW TO JUDGE
+
+            - Investigate before believing. An audit finding is evidence, not a
+              verdict. Read the code path and, where it helps, query
+              data/trades.sqlite3 to see the actual rows. Several checks have
+              produced false positives before — a ticker colliding with an
+              asset-type code (ST is Sensata) and "Spouse/DC Over $1,000,000"
+              both looked like bugs and were not.
+            - A check that fires every week on something benign is itself a
+              defect. Fixing the check is a legitimate outcome.
+            - Prefer silent-corruption bugs over cosmetics. This project's
+              failure mode is plausible-looking wrong numbers, not crashes.
+            - The two sources fail differently. A House PTR is parsed out of a
+              PDF by word coordinates, so suspect a mis-split column. A Form 4
+              is structured XML, so parsing rarely breaks — suspect *coverage*
+              instead: a throttled or stalled EDGAR sync stores nothing and
+              reports success, and the insider totals quietly stop growing.
+              `edgar_status`, `edgar_cursor` and `edgar_gap` in `sync_state`
+              are the evidence; the audit surfaces them.
+
+            DO NOT
+
+            - Do not open a PR if nothing merits one. Saying "nothing to fix" is
+              the correct and expected outcome most weeks. Never invent work.
+            - Do not re-report known, documented limitations. These are
+              decisions, not bugs: scanned filings and vision accuracy (issue
+              #1), Senate eFD being blocked, congressional amounts being
+              ranges, filer date typos, and — on the insider side — the $50k
+              open-market floor, amendments (4/A), Forms 3 and 5 and the
+              derivative table not being ingested, insider Telegram alerts not
+              existing yet, and the feed's ~2-business-day memory.
+            - Insider invariants worth knowing before you call something a bug:
+              a value is `shares × price as filed` stored as min = max = exact
+              (NULL, never 0, when the filing gives no price); `late` is derived
+              once in Python against a two-business-day deadline and SQL only
+              reads it; "distinct insiders" means primary reporting owners, so
+              a joint filing counts once.
+            - Do not modify data/trades.sqlite3. It is pipeline state owned by the
+              poll workflow, and a PR touching it will conflict.
+            - Do not edit .github/workflows/ — the Actions token cannot push
+              workflow changes and the push will fail. Describe such a change in
+              the PR body instead.
+            - Do not relax or delete a test to make something pass.
+
+            IF YOU OPEN A PR
+
+            - Branch from main, named `weekly-review/<short-slug>`.
+            - Run `python -m pytest -q` and make sure it passes.
+            - Add a regression test that fails without your fix.
+            - Open it as a DRAFT: `gh pr create --draft`.
+            - In the body: the evidence that led you here, why it is a real
+              defect, what you changed, and what you deliberately left alone.
+              State your uncertainty plainly where you have any.
+
+            IF YOU DO NOT
+
+            Post nothing and create nothing. Print a short summary of what you
+            checked and why it was fine — the run log is the record.
+
+            ${{ inputs.dry_run && 'DRY RUN: analyse and report, but do not create a branch or PR.' || '' }}

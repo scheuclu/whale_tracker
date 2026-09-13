@@ -82,3 +82,23 @@ def test_asset_name_wrapping_across_lines():
 def test_scanned_filing_is_detected_not_silently_empty():
     with pytest.raises(ScannedFilingError):
         parse_pdf(SCANNED)
+
+
+def test_treasury_cusip_is_not_stored_as_a_ticker():
+    # Treasury and agency debt put a CUSIP in the "(...)" slot. Storing
+    # "91282CGH8" as a ticker pollutes the ticker namespace with identifiers no
+    # equity will ever match.
+    r = parse_pdf(TREASURY)
+    assert r.transactions[0].ticker is None
+    assert r.transactions[0].asset_type == "GS"
+
+
+def test_short_symbols_colliding_with_asset_codes_are_kept():
+    # Sensata really does trade as ST and AllianceBernstein as AB, so a symbol
+    # matching an asset-type code must not be discarded.
+    from whale.ptr import CUSIP_RE
+
+    assert CUSIP_RE.match("91282CGH8")
+    assert not CUSIP_RE.match("ST")
+    assert not CUSIP_RE.match("GOOGL")
+    assert not CUSIP_RE.match("ABCDEFGHI")   # nine letters, no digit: not a CUSIP
