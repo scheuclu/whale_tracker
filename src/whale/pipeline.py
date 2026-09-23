@@ -57,6 +57,14 @@ def sync(conn: sqlite3.Connection, config: Config) -> int:
                 continue
             member = matcher.match(entry.filer_name, entry.state_district, "house")
             recent = house.is_recent(entry.filing_date, config.ingest.max_filing_age_days)
+            if not recent and config.watchlist.match(
+                    member["bioguide_id"] if member else None, entry.filer_name):
+                # A watched member is watched regardless of how late the Clerk
+                # published the filing. The age cutoff exists to stop a first
+                # run replaying a year of everyone's history; someone named
+                # explicitly in config.yaml is the case it is not protecting
+                # against. Bounded by ingest.years, so it is that year at most.
+                recent = True
             db.insert_filing(
                 conn,
                 chamber="house",
@@ -353,7 +361,28 @@ def notify_pending(conn: sqlite3.Connection, config: Config, dry_run: bool = Fal
         return 0
 
     sent = 0
-    for filing in db.filings_by_status(conn, "parsed", unnotified_only=True):
+    pending = db.filings_by_status(conn, "parsed", unnotified_only=True)
+    # Watched members first: their alerts are the ones the user asked to be
+    # interrupted for, so they must not queue behind a batch of routine ones.
+    watched = []
+    for f in pending:
+        member = config.watchlist.match(f["bioguide_id"], f["filer_name"])
+        if member is None:
+            continue
+        rows = [dict(r) for r in db.transactions_for_filing(conn, f["id"])]
+        if not rows:
+            # Nothing to split per transaction. Left to the filing-level path
+            # below, which still reports it and consumes it from the queue.
+            continue
+        watched.append((f, member, rows))
+    watched_ids = {f["id"] for f, _, _ in watched}
+
+    for filing, member, rows in watched:
+        sent += _notify_watched_filing(conn, config, filing, member, rows, dry_run)
+
+    for filing in pending:
+        if filing["id"] in watched_ids:
+            continue
         rows = [dict(r) for r in db.transactions_for_filing(conn, filing["id"])]
         for r in rows:
             r["delay_days"] = stats.disclosure_delay_days(r["tx_date"], filing["filing_date"])
@@ -399,6 +428,49 @@ def notify_pending(conn: sqlite3.Connection, config: Config, dry_run: bool = Fal
             sent += 1
         conn.commit()
     return sent
+
+
+def _notify_watched_filing(conn: sqlite3.Connection, config: Config, filing,
+                           member, rows: list[dict], dry_run: bool) -> int:
+    """One alert per transaction for a member named in `watchlist`.
+
+    The default path sends one message per filing, and degrades it — dropping
+    context, then asset detail, then transactions themselves — to stay inside
+    Telegram's limit. For a watched member that is the wrong trade-off: the
+    point of watching someone is that each trade is worth its own alert, and a
+    filing with 40 transactions is exactly when the truncation would bite.
+
+    The filing is marked notified only when every transaction was delivered.
+    A partial failure therefore replays the whole filing next run: duplicate
+    alerts for a watched member are a smaller harm than a silently missing one.
+    """
+    total = len(rows)
+    delivered = 0
+    for index, row in enumerate(rows, start=1):
+        row["delay_days"] = stats.disclosure_delay_days(row["tx_date"],
+                                                        filing["filing_date"])
+        context = (stats.ticker_context(conn, row["ticker"], config.alerts.window_days)
+                   if row["ticker"] else None)
+        text = telegram.format_watchlist_transaction(
+            member=filing["member_name"] or filing["filer_name"],
+            party=filing["party"], state=_state_of(filing),
+            district=_district_of(filing),
+            chamber=filing["member_chamber"] or filing["chamber"],
+            filing_date=filing["filing_date"], pdf_url=filing["pdf_url"],
+            tx=row, index=index, total=total, context=context,
+        )
+        if _deliver(config, text, dry_run):
+            delivered += 1
+
+    if dry_run:
+        return 0
+    if delivered == total:
+        db.set_status(conn, filing["id"], "notified", None)
+        db.mark_notified(conn, filing["id"])
+        log.info("watchlist alert for %s: %d transaction(s)",
+                 member.name, total)
+    conn.commit()
+    return delivered if delivered == total else 0
 
 
 def notify_clusters(conn: sqlite3.Connection, config: Config, dry_run: bool = False) -> int:

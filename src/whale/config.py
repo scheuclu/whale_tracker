@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -191,11 +192,88 @@ class InsiderSettings:
         return [r for r in self.alerts if r.kind == kind]
 
 
+# What a watchlist entry may say. Same contract as the insider rules: an
+# unrecognised key is a typo, and a typo here would silently watch nobody.
+WATCH_KEYS = frozenset({"name", "bioguide_id", "every_trade"})
+
+
+@dataclass
+class WatchedMember:
+    """A member whose trades are worth an immediate, individual alert."""
+
+    name: str
+    bioguide_id: str | None = None
+    # Off would mean "watch but say nothing", which is what an absent entry
+    # already does; it exists so the intent is explicit in config.yaml.
+    every_trade: bool = True
+
+    def matches(self, bioguide_id: str | None, filer_name: str | None) -> bool:
+        """Whether this filing is theirs.
+
+        The bioguide ID is authoritative when the roster matched the filing.
+        The name is a fallback for when it did not: an unmatched filing still
+        carries the name printed on the PDF, and a watched member going
+        unreported because the roster missed them is the failure this is for.
+        """
+        if self.bioguide_id and bioguide_id:
+            return self.bioguide_id.upper() == bioguide_id.upper()
+        return bool(filer_name) and _normalise_name(filer_name) == _normalise_name(self.name)
+
+
+def _normalise_name(name: str) -> str:
+    # Filings print "Hon. Nancy Pelosi" and "Nancy  Pelosi" alike.
+    cleaned = re.sub(r"\b(hon|mr|mrs|ms|dr)\.?\s+", "", name.strip(), flags=re.I)
+    return " ".join(cleaned.lower().replace(".", " ").split())
+
+
+@dataclass
+class WatchlistSettings:
+    """Members flagged for per-trade alerting. Empty means the feature is off."""
+
+    members: list[WatchedMember] = field(default_factory=list)
+
+    @property
+    def active(self) -> bool:
+        return any(m.every_trade for m in self.members)
+
+    def match(self, bioguide_id: str | None,
+              filer_name: str | None) -> WatchedMember | None:
+        for m in self.members:
+            if m.every_trade and m.matches(bioguide_id, filer_name):
+                return m
+        return None
+
+
+def _parse_watch(raw: dict, index: int) -> WatchedMember:
+    where = f"watchlist[{index}]"
+    if not isinstance(raw, dict):
+        raise ConfigError(f"{where} must be a mapping, not {type(raw).__name__}")
+    unknown = set(raw) - WATCH_KEYS
+    if unknown:
+        raise ConfigError(
+            f"{where} has unknown key(s) {sorted(unknown)}; allowed: {sorted(WATCH_KEYS)}")
+    name = str(raw.get("name") or "").strip()
+    if not name:
+        raise ConfigError(
+            f"{where} needs a name — it identifies the member and labels the alert")
+    bioguide = raw.get("bioguide_id")
+    bioguide = str(bioguide).strip().upper() if bioguide else None
+    if bioguide and not re.fullmatch(r"[A-Z]\d{6}", bioguide):
+        # A malformed ID would fall through to the name match and look like it
+        # worked, which hides the typo until someone checks why alerts differ.
+        raise ConfigError(
+            f"{where} bioguide_id {bioguide!r} is not a bioguide ID "
+            "(a letter followed by six digits, e.g. P000197)")
+    return WatchedMember(name=name, bioguide_id=bioguide,
+                         every_trade=bool(raw.get("every_trade", True)))
+
+
 @dataclass
 class Config:
     alerts: AlertSettings = field(default_factory=AlertSettings)
     ingest: IngestSettings = field(default_factory=IngestSettings)
     insiders: InsiderSettings = field(default_factory=InsiderSettings)
+    watchlist: WatchlistSettings = field(default_factory=WatchlistSettings)
     senate_enabled: bool = True
     # Scanned-PDF transcription is opt-in; see config.yaml for the measured
     # accuracy that makes it off by default.
@@ -254,10 +332,14 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
         alerts=[_parse_rule(r, i) for i, r in enumerate(n.get("alerts") or [])],
     )
 
+    watchlist = WatchlistSettings(
+        members=[_parse_watch(w, i) for i, w in enumerate(raw.get("watchlist") or [])])
+
     return Config(
         alerts=alerts,
         ingest=ingest,
         insiders=insiders,
+        watchlist=watchlist,
         senate_enabled=bool((raw.get("senate") or {}).get("enabled", True)),
         vision_enabled=bool((raw.get("vision") or {}).get("enabled", False)),
         db_path=db_path,

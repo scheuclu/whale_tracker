@@ -289,7 +289,8 @@ def insert_filing(conn: sqlite3.Connection, **fields) -> int | None:
 def filings_by_status(conn: sqlite3.Connection, *statuses: str,
                       unnotified_only: bool = False) -> list[sqlite3.Row]:
     marks = ", ".join("?" for _ in statuses)
-    sql = f"""SELECT f.*, p.full_name AS member_name, p.party, p.chamber AS member_chamber
+    sql = f"""SELECT f.*, p.full_name AS member_name, p.party, p.bioguide_id,
+                     p.chamber AS member_chamber
               FROM filings f LEFT JOIN politicians p ON p.id = f.politician_id
               WHERE f.status IN ({marks})"""
     if unnotified_only:

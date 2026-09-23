@@ -66,6 +66,32 @@ parser stays faithful to the PDF and the UI flags the row rather than
   foreign symbols like `ASX:LNW`.
 - Tests: `.venv/bin/python -m pytest -q` (run before every PR).
 
+## Watchlist (per-member alerting)
+
+- `watchlist` in `config.yaml` names members whose **every transaction** is its
+  own alert. Empty or absent means the feature is off; `every_trade: false`
+  keeps an entry documented but inert.
+- A watched filing is **split per transaction** rather than sent through
+  `telegram.format_filing`. That formatter degrades to fit Telegram's 4096
+  characters — dropping context, then asset detail, then transactions — and a
+  40-transaction filing is exactly when the truncation would hide the trade
+  being watched for. Each message carries `transaction i of n` so the filing
+  stays reconstructable.
+- Watched filings **bypass `ingest.max_filing_age_days`** in `sync`. That
+  cutoff stops a first run replaying a year of everyone's history; a member
+  named explicitly is the case it is not protecting against. Still bounded by
+  `ingest.years`.
+- `bioguide_id` is authoritative and checked first; `name` is the fallback for
+  a filing the roster failed to match, since an unmatched filing still carries
+  the name printed on the PDF. A malformed `bioguide_id` raises `ConfigError`
+  rather than falling through to the name match and looking like it worked —
+  extend `WATCH_KEYS` when adding a key.
+- The filing is marked notified only when **every** transaction was delivered,
+  so a partial failure replays the whole filing. For a watched member a
+  duplicate alert is a smaller harm than a missing one.
+- Watched filings are sent **before** routine ones and must stay exempt from
+  any batching or suppression added later — that exemption is the feature.
+
 ## SEC Form 4 (corporate insiders)
 
 - Insider data lives in its own tables (`insiders`, `insider_filings`,

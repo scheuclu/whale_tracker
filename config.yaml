@@ -18,6 +18,29 @@ alerts:
   # including them would bury the signal under housekeeping.
   cluster_asset_types: [ST, OP, EF, ET, CT, RS, SA]
 
+# Members whose every trade is worth its own alert, immediately.
+#
+# A watched member's filing is split: each transaction arrives as its own
+# WATCHLIST message rather than one per-filing digest, because the digest
+# degrades (context, then asset detail, then transactions) to fit Telegram's
+# 4096-character limit — and a 40-transaction filing is exactly when that
+# truncation would hide the trade you were watching for.
+#
+# Watched filings also ignore `ingest.max_filing_age_days`: that cutoff exists
+# to stop a first run replaying a year of everyone's history, and someone
+# named here is the case it is not protecting against. It is still bounded by
+# `ingest.years`, so the most a first run can replay is that year's filings
+# for these members (Pelosi files ~3 times a year).
+#
+# `bioguide_id` is authoritative and is checked first; `name` is the fallback
+# for a filing the roster failed to match, and is what labels the alert. A
+# malformed bioguide_id is refused at load rather than quietly falling back to
+# the name, which would look like it worked.
+watchlist:
+  - name: Nancy Pelosi
+    bioguide_id: P000197
+    every_trade: true
+
 ingest:
   years: [2026]
   # On first sight of a filing, anything older than this is recorded but never

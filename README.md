@@ -103,6 +103,32 @@ Thresholds live in `config.yaml`: 3+ distinct members in the same direction, or
 $500k+ estimated volume, inside a rolling window. A `(ticker, direction)` only
 re-alerts once more members join it.
 
+**Watchlist** — members whose every trade is worth its own alert. Their filing
+is split so each transaction arrives separately, rather than as one line inside
+a per-filing digest that may have been truncated to fit:
+
+```
+🚨 WATCHLIST — Rep. Nancy Pelosi (D-CA11)
+🟢 BUY  GOOGL  $250k–$500k
+     Alphabet Inc. - Class A Common Stock · traded 12/30 (24d delay) · spouse
+
+Filed 2026-01-23 · transaction 3 of 18
+30d on GOOGL: 5 politicians · $132k net sell
+```
+
+```yaml
+watchlist:
+  - name: Nancy Pelosi
+    bioguide_id: P000197     # authoritative; `name` is the fallback
+    every_trade: true
+```
+
+Watched filings also ignore `ingest.max_filing_age_days` — that cutoff exists
+to stop a first run replaying a year of everyone's history, and a member named
+here is the case it is not protecting against. An unknown key or a malformed
+`bioguide_id` is an error at startup, not an entry that silently watches
+nobody. An empty (or absent) `watchlist` turns the feature off.
+
 **Insider alerts** — Form 4 filings are far too numerous to announce wholesale,
 so they alert only against rules you write. Each new filing is tested in order
 and the **first match names the alert**:
