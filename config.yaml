@@ -58,6 +58,14 @@ insiders:
   # trade-date window has no 45-day reporting lag to absorb.
   cluster_window_days: 30
   min_insiders: 3
+  # How much bigger a cluster must get before it is reported a second time.
+  # 1.5 = "half as many insiders again". Form 4's two-business-day deadline
+  # means a coordinated purchase lands as a burst over a day or two, so the
+  # cluster grows on nearly every poll: Banco Bradesco went 4 -> 5 -> 10 -> 21
+  # buyers in 24 hours and sent four alerts for one board purchase. Set to 1.0
+  # to report every additional insider; below 1.0 is refused, because it would
+  # read as tuning while doing nothing.
+  cluster_refire_growth: 1.5
   # A filing older than this on first sight is history, never a notification.
   # It is what stops a first run, or a backfill, replaying days into Telegram.
   max_filing_age_days: 7
@@ -97,9 +105,14 @@ insiders:
       titles: ["chief executive", "ceo", "chief financial", "cfo"]
       min_value_usd: 100000
 
+    # The catch-all: anyone else buying enough to be worth a message. At
+    # $250k this was 82 of the 173 insider alerts sent in the 16 days to
+    # 2026-09-23 — more than the other three rules combined, and mostly
+    # directors and 10% holders rather than the people who set guidance.
+    # $1M keeps the conviction buys and drops the routine half.
     - name: Large insider buy
       direction: buy
-      min_value_usd: 250000
+      min_value_usd: 1000000
 
     # Sales are routine, so this asks for three things at once: an officer, a
     # large amount, and no 10b5-1 plan. A planned sale was scheduled months
@@ -107,7 +120,10 @@ insiders:
     - name: Unplanned executive sale
       direction: sell
       roles: [officer]
-      min_value_usd: 2000000
+      # $5M, not $2M: at the lower floor this fired 43 times in 16 days and
+      # every one of them was already $1M+. Selling is how equity comp is
+      # realised, so the bar for a sale being news is higher than for a buy.
+      min_value_usd: 5000000
       exclude_10b5_1: true
 
     # Available but off by default: insider *selling* clusters fire often —

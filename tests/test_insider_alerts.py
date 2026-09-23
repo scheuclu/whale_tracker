@@ -10,7 +10,8 @@ from datetime import date
 import pytest
 
 from whale import db, insider_alerts, pipeline, stats, telegram
-from whale.config import Config, ConfigError, InsiderRule, InsiderSettings, _parse_rule
+from whale.config import (Config, ConfigError, InsiderRule, InsiderSettings,
+                          _parse_rule, _refire_growth)
 
 TODAY = date(2026, 7, 1)
 
@@ -386,17 +387,147 @@ def test_cluster_alert_is_sent_and_deduped(conn, sent):
     assert len(sent) == 1
 
 
-def test_a_cluster_refires_when_another_insider_joins(conn, sent):
-    _cluster_setup(conn, n=3)
-    config = _config(_parse_rule({"name": "Cluster buying", "kind": "cluster",
-                                  "direction": "buy", "min_insiders": 3}, 0))
-    pipeline.notify_insiders(conn, config, today=TODAY)
-    fid = _filing(conn, accession="0000000000-26-19999", ticker="CLU",
-                  owners=(("0000000199", "Insider 9", {"is_officer": True}),))
-    db.replace_insider_transactions(conn, fid, [_tx(tx_date="2026-06-25")])
+def _join_cluster(conn, i, ticker="CLU", action="purchase", tx_date="2026-06-25"):
+    """One more insider converging on the same issuer."""
+    # 9xx CIKs: _cluster_setup already owns 010x.
+    fid = _filing(conn, accession=f"0000000000-26-199{i:02d}", ticker=ticker,
+                  owners=((f"00000009{i:02d}", f"Insider 9{i}", {"is_officer": True}),))
+    db.replace_insider_transactions(conn, fid, [_tx(action=action, tx_date=tx_date)])
     conn.commit()
+
+
+def _cluster_config():
+    return _config(_parse_rule({"name": "Cluster buying", "kind": "cluster",
+                                "direction": "buy", "min_insiders": 3}, 0))
+
+
+def test_a_cluster_refires_only_when_materially_bigger(conn, sent):
+    # Form 4 is due in two business days, so a coordinated purchase arrives as
+    # a burst and the cluster grows on nearly every poll. One more insider is
+    # the normal shape of one event, not a second event: BBD went 4 -> 5 -> 10
+    # -> 21 in a day and sent four alerts describing one board purchase.
+    _cluster_setup(conn, n=3)
+    config = _cluster_config()
+    assert pipeline.notify_insiders(conn, config, today=TODAY) == 1
+    assert "3 insiders bought" in sent[-1]
+
+    _join_cluster(conn, 1)  # 3 -> 4: same event, still growing
+    assert pipeline.notify_insiders(conn, config, today=TODAY) == 0
+    assert len(sent) == 1
+
+    _join_cluster(conn, 2)  # 3 -> 5: half as many again, worth saying
+    assert pipeline.notify_insiders(conn, config, today=TODAY) == 1
+    assert "5 insiders bought" in sent[-1]
+
+
+def test_the_refire_growth_factor_is_configurable(conn, sent):
+    _cluster_setup(conn, n=3)
+    config = _cluster_config()
+    config.insiders.cluster_refire_growth = 1.0  # every extra insider speaks
+    assert pipeline.notify_insiders(conn, config, today=TODAY) == 1
+    _join_cluster(conn, 1)
     assert pipeline.notify_insiders(conn, config, today=TODAY) == 1
     assert "4 insiders bought" in sent[-1]
+
+
+def test_a_growth_factor_that_cannot_damp_anything_is_rejected():
+    # Below 1.0 the test collapses to "one more insider" — the behaviour it
+    # reads as replacing. A silent no-op is the failure this project avoids.
+    with pytest.raises(ConfigError, match="at least 1.0"):
+        _refire_growth(0.5)
+    with pytest.raises(ConfigError, match="must be a number"):
+        _refire_growth("soon")
+
+
+# --- a cluster's members must not each repeat it ----------------------------
+
+
+def test_cluster_members_do_not_also_alert_individually(conn, sent):
+    # The BBD case: 21 board members bought on the same day, each filing
+    # cleared the "large buy" floor, and the user got 21 messages plus the
+    # cluster alert for one corporate event.
+    _cluster_setup(conn, n=3)
+    config = _config(
+        _parse_rule({"name": "Cluster buying", "kind": "cluster",
+                     "direction": "buy", "min_insiders": 3}, 0),
+        _parse_rule({"name": "Large buy", "min_value_usd": 1}, 1),
+    )
+    assert pipeline.notify_insiders(conn, config, today=TODAY) == 1
+    assert len(sent) == 1 and "Cluster buying" in sent[0]
+
+    # Folded in, not lost: demoted to history so the dashboard still counts it.
+    statuses = {r["status"] for r in conn.execute("SELECT status FROM insider_filings")}
+    assert statuses == {"backfilled"}
+
+
+def test_a_filing_outside_the_cluster_still_alerts(conn, sent):
+    # Suppression is scoped to the converging issuer and direction, not to
+    # every filing that happens to arrive alongside one.
+    _cluster_setup(conn, n=3)
+    fid = _filing(conn, accession="0000000000-26-20001", ticker="OTHER")
+    conn.execute("UPDATE insider_filings SET issuer_cik = '0000000002' WHERE id = ?",
+                 (fid,))
+    db.replace_insider_transactions(conn, fid, [_tx(value=500_000_00)])
+    conn.commit()
+    config = _config(
+        _parse_rule({"name": "Cluster buying", "kind": "cluster",
+                     "direction": "buy", "min_insiders": 3}, 0),
+        _parse_rule({"name": "Large buy", "min_value_usd": 250_000}, 1),
+    )
+    assert pipeline.notify_insiders(conn, config, today=TODAY) == 2
+    assert any("Cluster buying" in m for m in sent)
+    assert any("Large buy" in m for m in sent)
+
+
+def test_a_sale_is_not_suppressed_by_a_buying_cluster(conn, sent):
+    # Direction is part of the key: insiders buying says nothing about the
+    # officer selling the same stock.
+    _cluster_setup(conn, n=3)
+    fid = _filing(conn, accession="0000000000-26-20002", ticker="CLU")
+    db.replace_insider_transactions(conn, fid, [_tx(action="sale", value=500_000_00)])
+    conn.commit()
+    config = _config(
+        _parse_rule({"name": "Cluster buying", "kind": "cluster",
+                     "direction": "buy", "min_insiders": 3}, 0),
+        _parse_rule({"name": "Big sale", "direction": "sell",
+                     "min_value_usd": 250_000}, 1),
+    )
+    assert pipeline.notify_insiders(conn, config, today=TODAY) == 2
+    assert any("Big sale" in m for m in sent)
+
+
+def test_members_stay_suppressed_once_the_cluster_has_been_reported(conn, sent):
+    # The cluster alerted last run and has not grown enough to speak again.
+    # A member arriving now is still part of a convergence the user knows
+    # about, so it must not resurface as an individual alert.
+    _cluster_setup(conn, n=3)
+    config = _config(
+        _parse_rule({"name": "Cluster buying", "kind": "cluster",
+                     "direction": "buy", "min_insiders": 3}, 0),
+        _parse_rule({"name": "Large buy", "min_value_usd": 1}, 1),
+    )
+    assert pipeline.notify_insiders(conn, config, today=TODAY) == 1
+    _join_cluster(conn, 1)
+    assert pipeline.notify_insiders(conn, config, today=TODAY) == 0
+    assert len(sent) == 1
+
+
+def test_a_member_still_alerts_when_the_cluster_message_failed(conn, sent,
+                                                               monkeypatch):
+    # An undelivered cluster alert must not swallow its members: the user
+    # would otherwise hear nothing at all about the convergence.
+    _cluster_setup(conn, n=3)
+    monkeypatch.setattr(telegram, "send_message",
+                        lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("down")))
+    config = _config(
+        _parse_rule({"name": "Cluster buying", "kind": "cluster",
+                     "direction": "buy", "min_insiders": 3}, 0),
+        _parse_rule({"name": "Large buy", "min_value_usd": 1}, 1),
+    )
+    pipeline.notify_insiders(conn, config, today=TODAY)
+    # Nothing was delivered, so nothing was consumed and nothing was folded in.
+    statuses = {r["status"] for r in conn.execute("SELECT status FROM insider_filings")}
+    assert statuses == {"parsed"}
 
 
 def test_a_congressional_cluster_does_not_suppress_an_insider_one(conn, sent):

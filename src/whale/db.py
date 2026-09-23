@@ -359,13 +359,18 @@ def last_alert(conn: sqlite3.Connection, ticker: str, direction: str,
     `kind` scopes the lookup to one alert family. Two sources can converge on
     the same ticker, and a congressional cluster must not suppress an insider
     one; `politician_count` holds whichever participant count the kind counts.
+
+    Ordered by id as well as time: `fired_at` has one-second resolution, so
+    two alerts on the same key in the same second tie, and the dedupe would
+    then compare against an arbitrary one of them — re-sending a cluster
+    because it read the smaller count. `id` breaks the tie by insertion order.
     """
     sql = "SELECT * FROM alerts WHERE ticker = ? AND direction = ?"
     params: list = [ticker, direction]
     if kind is not None:
         sql += " AND kind = ?"
         params.append(kind)
-    return conn.execute(sql + " ORDER BY fired_at DESC LIMIT 1", params).fetchone()
+    return conn.execute(sql + " ORDER BY fired_at DESC, id DESC LIMIT 1", params).fetchone()
 
 
 def record_alert(conn: sqlite3.Connection, kind: str, ticker: str, direction: str,

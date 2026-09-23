@@ -196,6 +196,27 @@ def test_cluster_dedupe_suppresses_repeat_and_allows_growth(conn):
     assert stats.is_new_cluster(conn, grown) is True
 
 
+def test_dedupe_reads_the_newest_alert_when_timestamps_tie(conn):
+    # fired_at has one-second resolution. Two alerts on the same key in the
+    # same second tie, and if the lookup breaks the tie arbitrarily the dedupe
+    # can compare against the smaller, older count and re-send a cluster that
+    # has already been reported at its current size.
+    _seed(conn, [(f"M{i}", [_tx("NVDA", "purchase", 100_100, 1_500_000)]) for i in range(4)])
+    cluster = stats.find_clusters(conn, SETTINGS, today=TODAY)[0]
+    assert cluster.politician_count == 4
+
+    same_second = "2026-07-01T12:00:00Z"
+    for count in (3, 4):
+        conn.execute(
+            "INSERT INTO alerts (kind, ticker, direction, window_days,"
+            " politician_count, volume_mid_cents, fired_at) VALUES (?,?,?,?,?,?,?)",
+            ("cluster", "NVDA", "buy", 30, count, 1, same_second))
+    conn.commit()
+
+    assert db.last_alert(conn, "NVDA", "buy", "cluster")["politician_count"] == 4
+    assert stats.is_new_cluster(conn, cluster) is False
+
+
 # --- politician rollups -----------------------------------------------------
 
 

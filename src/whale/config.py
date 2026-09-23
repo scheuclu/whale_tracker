@@ -134,6 +134,26 @@ def _parse_rule(raw: dict, index: int) -> InsiderRule:
     return rule
 
 
+def _refire_growth(raw) -> float:
+    """The cluster re-fire factor, which must be able to damp anything.
+
+    Below 1.0 the growth test collapses into "one more insider" — the old
+    every-poll behaviour — but reads in config.yaml as if it were tuned. That
+    is exactly the silent no-op this project refuses to ship, so it raises.
+    """
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        raise ConfigError(
+            f"insiders.cluster_refire_growth must be a number, not {raw!r}") from None
+    if value < 1.0:
+        raise ConfigError(
+            f"insiders.cluster_refire_growth is {value}; it must be at least 1.0 "
+            "(1.0 = re-fire on every extra insider, 1.5 = only when half as "
+            "many again have joined)")
+    return value
+
+
 @dataclass
 class InsiderSettings:
     """SEC Form 4 ingestion. See config.yaml for the reasoning behind each."""
@@ -147,6 +167,11 @@ class InsiderSettings:
     # trade-date window has no reporting lag to absorb.
     cluster_window_days: int = 30
     min_insiders: int = 3
+    # How much bigger a cluster must get before it is worth reporting again.
+    # 1.5 = "half as many insiders again". Form 4's two-day deadline makes a
+    # coordinated purchase arrive as a burst, so +1 insider per poll is the
+    # normal shape of one event, not news. See stats.is_new_insider_cluster.
+    cluster_refire_growth: float = 1.5
     # A filing older than this on first sight is history, never a
     # notification: it stops a backlog being replayed into Telegram.
     max_filing_age_days: int = 7
@@ -224,6 +249,7 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
         min_trade_usd=int(n.get("min_trade_usd", 50_000)),
         cluster_window_days=int(n.get("cluster_window_days", 30)),
         min_insiders=int(n.get("min_insiders", 3)),
+        cluster_refire_growth=_refire_growth(n.get("cluster_refire_growth", 1.5)),
         max_filing_age_days=int(n.get("max_filing_age_days", 7)),
         alerts=[_parse_rule(r, i) for i, r in enumerate(n.get("alerts") or [])],
     )

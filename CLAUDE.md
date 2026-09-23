@@ -119,7 +119,23 @@ parser stays faithful to the PDF and the UI flags the row rather than
 - Insider cluster dedupe lives in `alerts` with `kind='insider_cluster'`;
   `db.last_alert` **must** be called with a kind, or a congressional cluster on
   a ticker suppresses an insider one. `alerts.politician_count` holds whichever
-  participant count the kind counts.
+  participant count the kind counts. It orders by `fired_at DESC, id DESC`:
+  `fired_at` is second-resolution, and a tie read the wrong way re-sends a
+  cluster already reported at its current size.
+- **One convergence is one message.** `pipeline.notify_insiders` settles
+  clusters *first* and then suppresses any pending filing whose
+  `(issuer_cik, direction)` a reported cluster already covers — folding it to
+  history rather than dropping it, so the dashboard still counts it. Without
+  this a coordinated purchase reports itself twice over: Banco Bradesco's
+  board sent 21 individual alerts plus 4 cluster alerts for one event. A
+  cluster whose *delivery failed* must stay uncovered, or its members vanish
+  into a message that was never sent.
+- An insider cluster re-fires only when it is `cluster_refire_growth`× the
+  size last reported (default 1.5), not on every extra insider. Form 4's
+  two-business-day deadline makes one event arrive as a burst over a day or
+  two, so +1 insider per poll is the normal shape of a single decision. The
+  congressional side keeps the plain `> previous` rule — a 45-day deadline
+  spreads those filings out, so there is no burst to damp.
 - A `--dry-run` must not demote, notify or record anything: previewing the
   queue never consumes it. `whale insider-alerts` is the tuning tool and
   ignores notification state so rules can be tested against history.

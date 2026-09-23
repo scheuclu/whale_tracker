@@ -138,9 +138,16 @@ insiders:
     - name: Unplanned executive sale
       direction: sell
       roles: [officer]
-      min_value_usd: 2000000
+      min_value_usd: 5000000
       exclude_10b5_1: true             # a planned sale was scheduled months ago
 ```
+
+A cluster and its members describe the same event, so the members are folded
+into the cluster alert rather than sent alongside it, and a cluster speaks
+again only once it is `insiders.cluster_refire_growth`× the size last reported
+(default 1.5). Form 4 is due two business days after the trade, so a
+coordinated purchase arrives as a burst and would otherwise re-alert on every
+poll — one board's buying produced 25 messages for one decision before this.
 
 A rule may set `direction` (buy/sell/any), `min_value_usd` (summed per
 direction within one filing), `roles` (director / officer / ten_percent_owner /

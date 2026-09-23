@@ -13,6 +13,7 @@ caller is expected to render it as "≥".
 
 from __future__ import annotations
 
+import math
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -24,6 +25,11 @@ from .db import COUNTED_STATUSES
 # net direction and are excluded from buy/sell rollups.
 # The STOCK Act's reporting deadline, measured from the transaction date.
 STOCK_ACT_DEADLINE_DAYS = 45
+
+# How much bigger an insider cluster must get before it is worth a second
+# message. See `is_new_insider_cluster`; `insiders.cluster_refire_growth`
+# overrides it.
+DEFAULT_CLUSTER_REFIRE_GROWTH = 1.5
 
 BUY_ACTIONS = ("purchase",)
 SELL_ACTIONS = ("sale", "sale_partial")
@@ -226,11 +232,20 @@ def is_new_cluster(conn: sqlite3.Connection, cluster: Cluster) -> bool:
     return cluster.politician_count > previous["politician_count"]
 
 
-def is_new_insider_cluster(conn: sqlite3.Connection, cluster: InsiderCluster) -> bool:
-    """Same rule for insiders, but keyed on its own alert kind.
+def is_new_insider_cluster(conn: sqlite3.Connection, cluster: InsiderCluster,
+                           growth: float = DEFAULT_CLUSTER_REFIRE_GROWTH) -> bool:
+    """Same rule for insiders, but keyed on its own alert kind and damped.
 
     Without the kind, a congressional cluster on NVDA would suppress an
     insider cluster on NVDA — two unrelated facts sharing a dedupe row.
+
+    Unlike the congressional side, one more insider is not on its own worth a
+    second message. Form 4 is due in two business days, so a coordinated board
+    purchase lands as a burst of filings over a day or two and the cluster
+    grows on nearly every poll: Banco Bradesco (BBD) went 4 → 5 → 10 → 21
+    buyers in 24 hours and sent four alerts describing one event. Re-firing
+    therefore needs the convergence to be materially bigger — `growth` times
+    the size last reported — so 3 → 5 speaks up and 20 → 21 does not.
     """
     from . import db as _db
 
@@ -238,7 +253,10 @@ def is_new_insider_cluster(conn: sqlite3.Connection, cluster: InsiderCluster) ->
     previous = _db.last_alert(conn, key, cluster.direction, INSIDER_CLUSTER_KIND)
     if previous is None:
         return True
-    return cluster.insider_count > previous["politician_count"]
+    before = previous["politician_count"]
+    # At least one more insider, and at least `growth`× the reported size.
+    # ceil() so a fractional threshold rounds towards fewer messages.
+    return cluster.insider_count >= max(before + 1, math.ceil(before * growth))
 
 
 def politician_stats(conn: sqlite3.Connection, window_days: int | None = None,
