@@ -146,6 +146,12 @@ def notify_insiders(conn: sqlite3.Connection, config: Config, dry_run: bool = Fa
         return 0
 
     sent = 0
+    # Clusters are settled first, because a convergence is the stronger claim
+    # and its member filings must not each repeat it. `covered` holds the
+    # (issuer, direction) pairs the user has now been told about.
+    sent_clusters, covered = _notify_insider_clusters(conn, config, dry_run, today)
+    sent += sent_clusters
+
     filing_rules = settings.rules_of_kind("filing")
     for filing in db.insider_filings_by_status(conn, insiders.PENDING_STATUS,
                                                unnotified_only=True):
@@ -160,6 +166,19 @@ def notify_insiders(conn: sqlite3.Connection, config: Config, dry_run: bool = Fa
                 conn.commit()
             continue
 
+        if (filing["issuer_cik"], _CLUSTER_DIRECTION[match.direction]) in covered:
+            # This filing is one member of a convergence already reported as a
+            # cluster. Sending it too describes the same event twice: one
+            # Banco Bradesco board purchase produced 21 of these alongside its
+            # cluster alert. Demoted, not dropped — the dashboard still counts
+            # it and the cluster message carries the aggregate.
+            if not dry_run:
+                db.set_insider_status(conn, filing["id"], insiders.HISTORY_STATUS)
+                conn.commit()
+            log.info("insider filing %s folded into the %s cluster alert",
+                     filing["accession"], filing["ticker"] or filing["issuer_cik"])
+            continue
+
         context = None
         if filing["ticker"]:
             context = _insider_context(conn, settings, filing["ticker"], match.direction,
@@ -171,20 +190,47 @@ def notify_insiders(conn: sqlite3.Connection, config: Config, dry_run: bool = Fa
             sent += 1
             log.info("insider alert %r for %s", match.rule.name, filing["accession"])
         conn.commit()
+    return sent
 
+
+# config.yaml and the cluster finder speak buy/sell; a filing match carries the
+# database's purchase/sale.
+_CLUSTER_DIRECTION = {"purchase": "buy", "sale": "sell"}
+
+
+def _notify_insider_clusters(conn: sqlite3.Connection, config: Config, dry_run: bool,
+                             today: date | None) -> tuple[int, set[tuple[str, str]]]:
+    """Send the cluster alerts and report which convergences are now covered.
+
+    A convergence counts as covered once the user has a message describing it,
+    whether that was sent on this run or an earlier one. An unreported cluster
+    — one whose delivery failed — is deliberately left uncovered, so its member
+    filings still alert individually rather than vanishing into a message that
+    was never sent.
+    """
+    settings = config.insiders
+    sent = 0
+    covered: set[tuple[str, str]] = set()
     for cluster, rule, window in insider_alerts.cluster_matches(conn, settings, today):
-        if not stats.is_new_insider_cluster(conn, cluster):
+        key = (cluster.issuer_cik, cluster.direction)
+        if not stats.is_new_insider_cluster(conn, cluster,
+                                            settings.cluster_refire_growth):
+            # Already reported, at this size or a smaller one. Still covered:
+            # the user knows these insiders are converging.
+            covered.add(key)
             continue
         text = telegram.format_insider_cluster(cluster, rule.name, window)
-        if _deliver(config, text, dry_run) and not dry_run:
-            db.record_alert(conn, stats.INSIDER_CLUSTER_KIND,
-                            cluster.ticker or cluster.issuer_cik, cluster.direction,
-                            window, cluster.insider_count, cluster.volume.mid_cents)
-            sent += 1
-            log.info("insider cluster alert %r for %s", rule.name,
-                     cluster.ticker or cluster.issuer_cik)
+        if _deliver(config, text, dry_run):
+            covered.add(key)
+            if not dry_run:
+                db.record_alert(conn, stats.INSIDER_CLUSTER_KIND,
+                                cluster.ticker or cluster.issuer_cik, cluster.direction,
+                                window, cluster.insider_count, cluster.volume.mid_cents)
+                sent += 1
+                log.info("insider cluster alert %r for %s", rule.name,
+                         cluster.ticker or cluster.issuer_cik)
         conn.commit()
-    return sent
+    return sent, covered
 
 
 def _insider_context(conn: sqlite3.Connection, settings, ticker: str, direction: str,
