@@ -122,6 +122,38 @@ def format_filing(member: str, party: str | None, state: str | None,
     return build(False, False, 5)[:TELEGRAM_LIMIT]
 
 
+def format_watchlist_transaction(member: str, party: str | None, state: str | None,
+                                 district: str | None, chamber: str | None,
+                                 filing_date: str | None, pdf_url: str, tx: dict,
+                                 index: int, total: int,
+                                 context: TickerStat | None = None) -> str:
+    """One message per transaction by a watched member.
+
+    Deliberately not `format_filing`: a watched member's filing is split so
+    each trade arrives as its own alert rather than one line inside a digest
+    that may have been degraded to fit. `index`/`total` keep the filing
+    reconstructable, so a 7-trade filing reads as 7 of one event, not 7 events.
+    """
+    header = member_label(member, party, state, district, chamber)
+    parts = [
+        f"🚨 <b>WATCHLIST — {esc(header)}</b>",
+        _tx_line(tx),
+        "",
+        f"Filed {esc(filing_date or 'unknown')} · transaction {index} of {total}",
+    ]
+    if context is not None:
+        line = _context_line(context)
+        if line:
+            parts.append(line)
+    parts += ["", esc(pdf_url)]
+    msg = "\n".join(parts)
+    if len(msg) <= TELEGRAM_LIMIT:
+        return msg
+    # One transaction cannot plausibly overflow, but a pathological asset name
+    # must truncate rather than fail the send.
+    return msg[:TELEGRAM_LIMIT]
+
+
 def _tx_line_compact(tx: dict) -> str:
     emoji = ACTION_EMOJI.get(tx["action"], "⚪️")
     label = ACTION_LABEL.get(tx["action"], tx["action"].upper())
@@ -129,6 +161,21 @@ def _tx_line_compact(tx: dict) -> str:
     amount = format_amount(tx.get("amount_min_cents"), tx.get("amount_max_cents"),
                            tx.get("amount_exact_cents"))
     return f"{emoji} {esc(label)} <b>{esc(symbol)}</b> {esc(amount)}"
+
+
+def _context_line(ctx: TickerStat | None) -> str | None:
+    """How the rest of Congress has traded this ticker lately.
+
+    None when there is nothing to say: a single member trading a ticker is
+    just the filing being reported, not context for it.
+    """
+    if not ctx or ctx.politician_count < 2:
+        return None
+    direction = ctx.net_direction
+    verb = {"buy": "net buy", "sell": "net sell", "flat": "mixed"}[direction]
+    vol = ctx.buy_volume if direction == "buy" else ctx.sell_volume
+    return (f"<i>30d on {esc(ctx.ticker)}: {ctx.politician_count} politicians · "
+            f"{esc(usd(vol.mid_cents))} {verb}</i>")
 
 
 def _context_lines(transactions: list[dict], contexts: dict[str, TickerStat]) -> list[str]:
@@ -141,16 +188,9 @@ def _context_lines(transactions: list[dict], contexts: dict[str, TickerStat]) ->
         if not ticker or ticker in seen:
             continue
         seen.add(ticker)
-        ctx = contexts.get(ticker)
-        if not ctx or ctx.politician_count < 2:
-            continue
-        direction = ctx.net_direction
-        verb = {"buy": "net buy", "sell": "net sell", "flat": "mixed"}[direction]
-        vol = ctx.buy_volume if direction == "buy" else ctx.sell_volume
-        lines.append(
-            f"<i>30d on {esc(ticker)}: {ctx.politician_count} politicians · "
-            f"{esc(usd(vol.mid_cents))} {verb}</i>"
-        )
+        line = _context_line(contexts.get(ticker))
+        if line:
+            lines.append(line)
     return lines[:5]
 
 
