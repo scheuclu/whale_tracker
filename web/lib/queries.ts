@@ -268,6 +268,87 @@ export async function getPoliticianTotals(): Promise<PoliticianTotals> {
     .get() as PoliticianTotals;
 }
 
+export type PoliticianDetail = PoliticianRow & {
+  bioguide_id: string | null;
+  filings: number;
+  volume_min: number;
+  /** NULL when any trade sits in the open-ended top bracket. */
+  volume_max: number | null;
+  first_tx_date: string | null;
+  last_tx_date: string | null;
+};
+
+/**
+ * One member's whole record, aggregated over every counted trade — never
+ * the slice a page renders. Keyed on the display name because that is how
+ * `getPoliticians` groups: an unmatched filing has no roster row, only the
+ * name printed on the PDF.
+ */
+export async function getPoliticianDetail(member: string): Promise<PoliticianDetail | null> {
+  const db = await getDb();
+  const row = db
+    .prepare(
+      `SELECT COALESCE(p.full_name, f.filer_name) AS member_name,
+              p.bioguide_id, p.party, p.state, p.district, p.chamber,
+              COUNT(*) AS trades,
+              COUNT(DISTINCT f.id) AS filings,
+              COUNT(DISTINCT t.ticker) AS tickers,
+              SUM(t.action='purchase') AS buys,
+              SUM(t.action IN ('sale','sale_partial')) AS sells,
+              SUM(COALESCE(t.amount_min_cents,0)) AS volume_min,
+              CASE WHEN SUM(t.amount_max_cents IS NULL AND t.amount_exact_cents IS NULL) > 0
+                   THEN NULL ELSE SUM(COALESCE(t.amount_max_cents, t.amount_exact_cents, 0)) END AS volume_max,
+              SUM(COALESCE(${MID},0)) AS volume_mid,
+              AVG(${DELAY}) AS avg_delay,
+              AVG(${LAG}) AS avg_lag,
+              SUM(CASE WHEN ${DELAY} > 45 THEN 1 ELSE 0 END) AS late_count,
+              MIN(t.tx_date) AS first_tx_date,
+              MAX(t.tx_date) AS last_tx_date
+       FROM transactions t
+       JOIN filings f ON f.id = t.filing_id
+       LEFT JOIN politicians p ON p.id = t.politician_id
+       WHERE f.status IN ${COUNTED} AND COALESCE(p.full_name, f.filer_name) = ?
+       GROUP BY member_name`
+    )
+    .get(member) as PoliticianDetail | undefined;
+  return row ?? null;
+}
+
+export type PoliticianTickerRow = {
+  ticker: string;
+  asset_name: string | null;
+  trades: number;
+  buys: number;
+  sells: number;
+  volume_mid: number;
+  last_tx_date: string | null;
+};
+
+/** The tickers one member traded, by estimated volume. Assets with no ticker
+ *  (Treasuries, funds) are left to the trade list, where the type is shown. */
+export async function getPoliticianTickers(member: string, limit = 40): Promise<PoliticianTickerRow[]> {
+  const db = await getDb();
+  return db
+    .prepare(
+      `SELECT t.ticker,
+              MIN(t.asset_name) AS asset_name,
+              COUNT(*) AS trades,
+              SUM(t.action='purchase') AS buys,
+              SUM(t.action IN ('sale','sale_partial')) AS sells,
+              SUM(COALESCE(${MID},0)) AS volume_mid,
+              MAX(t.tx_date) AS last_tx_date
+       FROM transactions t
+       JOIN filings f ON f.id = t.filing_id
+       LEFT JOIN politicians p ON p.id = t.politician_id
+       WHERE f.status IN ${COUNTED} AND COALESCE(p.full_name, f.filer_name) = ?
+         AND t.ticker IS NOT NULL AND t.ticker != ''
+       GROUP BY t.ticker
+       ORDER BY volume_mid DESC, trades DESC
+       LIMIT ?`
+    )
+    .all(member, limit) as PoliticianTickerRow[];
+}
+
 export async function getTickerDetail(ticker: string) {
   const rows = await getTickers(undefined, 5000);
   return rows.find((r) => r.ticker === ticker.toUpperCase()) ?? null;

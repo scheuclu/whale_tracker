@@ -1,5 +1,6 @@
+import { redirect } from "next/navigation";
 import { getConsensusTickers, getPipeline, getTransactions } from "@/lib/queries";
-import { memberLabel, shortDate, usd } from "@/lib/format";
+import { memberHref, memberLabel, shortDate, usd } from "@/lib/format";
 import { Card, DivergingSplit, Empty, SectionTitle, StatTile } from "./charts";
 import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, TickerChip } from "./ui";
 
@@ -11,11 +12,13 @@ export default async function FeedPage({
   searchParams: Promise<{ action?: string; member?: string }>;
 }) {
   const params = await searchParams;
+  // The feed used to double as the member view; the member page replaced it.
+  if (params.member) redirect(memberHref(params.member, params.action));
 
   let rows, consensus, pipeline;
   try {
     [rows, consensus, pipeline] = await Promise.all([
-      getTransactions({ action: params.action, member: params.member, limit: 120 }),
+      getTransactions({ action: params.action, limit: 120 }),
       getConsensusTickers(90, 6),
       getPipeline(),
     ]);
@@ -82,7 +85,7 @@ export default async function FeedPage({
             </div>
           }
         >
-          {params.member ? `Trades — ${params.member}` : "Recent trades"}
+          Recent trades
         </SectionTitle>
 
         {rows.length ? (
@@ -109,10 +112,7 @@ export default async function FeedPage({
                   </div>
                   <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
                     <PartyBadge party={r.party} />
-                    <a
-                      href={`/?member=${encodeURIComponent(r.member_name)}`}
-                      className="font-medium hover:text-primary"
-                    >
+                    <a href={memberHref(r.member_name)} className="font-medium hover:text-primary">
                       {memberLabel(r.member_name, null, r.state, r.district, r.chamber)}
                     </a>
                     <OwnerTag owner={r.owner} />

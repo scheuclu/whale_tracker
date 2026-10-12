@@ -88,6 +88,12 @@ export function memberLabel(
   return where ? `${title} ${name} (${where})` : `${title} ${name}`;
 }
 
+/** The member's page. Keyed on the display name: that is how the leaderboard
+ *  groups, and an unmatched filing has only the name printed on the PDF. */
+export function memberHref(name: string, action?: string): string {
+  return `/politicians?m=${encodeURIComponent(name)}${action ? `&action=${action}` : ""}`;
+}
+
 export function shortDate(iso: string | null): string {
   if (!iso) return "—";
   const [y, m, d] = iso.split("-");

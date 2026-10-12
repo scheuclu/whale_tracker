@@ -1,5 +1,5 @@
 import { getTickers, getTransactions } from "@/lib/queries";
-import { memberLabel, shortDate, usd } from "@/lib/format";
+import { memberHref, memberLabel, shortDate, usd } from "@/lib/format";
 import {
   Card,
   DivergingSplit,
@@ -202,7 +202,7 @@ async function TickerDetail({ ticker }: { ticker: string }) {
                 <ActionBadge action={r.action} />
                 <Amount min={r.amount_min_cents} max={r.amount_max_cents} exact={r.amount_exact_cents} />
                 <PartyBadge party={r.party} />
-                <a href={`/?member=${encodeURIComponent(r.member_name)}`} className="text-[13px] font-medium hover:text-primary">
+                <a href={memberHref(r.member_name)} className="text-[13px] font-medium hover:text-primary">
                   {memberLabel(r.member_name, null, r.state, r.district, r.chamber)}
                 </a>
                 <OwnerTag owner={r.owner} />
