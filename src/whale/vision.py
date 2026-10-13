@@ -25,7 +25,7 @@ from .ptr import ParsedFiling, Transaction
 
 log = logging.getLogger(__name__)
 
-MODEL = "gemini-3.6-flash"
+MODEL = "gemini-3.8-flash"
 
 PROMPT = """This is a scanned US House "Periodic Transaction Report" (STOCK Act disclosure).
 
@@ -95,7 +95,9 @@ def parse_scanned(pdf_bytes: bytes, api_key: str | None) -> ParsedFiling:
             types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
             PROMPT,
         ],
-        config={"response_mime_type": "application/json", "temperature": 0},
+        # Gemini 3.x deprecates the sampling parameters (temperature, top_p,
+        # top_k); the migration guide says to drop them rather than pin them.
+        config={"response_mime_type": "application/json"},
     )
     text = (response.text or "").strip()
     if not text:
