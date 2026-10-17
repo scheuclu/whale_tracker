@@ -35,7 +35,7 @@ from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS politicians (
@@ -235,6 +235,46 @@ CREATE TABLE IF NOT EXISTS insider_alert_cooldowns (
 );
 """
 
+# Scanned paper filings, captured for inspection (`scan_capture.py`): every
+# page as a small 1-bit PNG, oriented the way the grid reader turned it, and
+# every row the reader found with enough geometry to draw its decision on
+# the page. In this database rather than beside it because the dashboard
+# fetches exactly one file and the workflow commits exactly one; the whole
+# 2026 corpus of scans is under 6 MB at 110 dpi, budgeted at 15.
+_SCAN_DDL = """
+CREATE TABLE IF NOT EXISTS scan_pages (
+  filing_id INTEGER NOT NULL REFERENCES filings(id) ON DELETE CASCADE,
+  page_no INTEGER NOT NULL,            -- 1-based
+  width INTEGER NOT NULL,              -- of the PNG, after rotation
+  height INTEGER NOT NULL,
+  dpi INTEGER NOT NULL,
+  rotation INTEGER NOT NULL,           -- degrees the reader turned the page: 0, 90, 180, 270
+  png BLOB NOT NULL,
+  error TEXT,                          -- why the reader could not decompose the page, if it could not
+  PRIMARY KEY (filing_id, page_no)
+);
+
+CREATE TABLE IF NOT EXISTS scan_rows (
+  id INTEGER PRIMARY KEY,
+  filing_id INTEGER NOT NULL REFERENCES filings(id) ON DELETE CASCADE,
+  page_no INTEGER NOT NULL,
+  row_index INTEGER NOT NULL,          -- across the filing, page order; the join order of vision.join
+  y0 INTEGER NOT NULL,                 -- row band, in PNG pixels
+  y1 INTEGER NOT NULL,
+  amount_cols TEXT NOT NULL,           -- JSON: x-edges of the amount columns, PNG pixels (n + 1)
+  type_cols TEXT NOT NULL,             -- JSON: x-edges of the type columns
+  amount_marks TEXT NOT NULL,          -- JSON: indexes of the amount cells read as ticked
+  type_marks TEXT NOT NULL,            -- JSON: indexes of the type cells read as ticked
+  amount_letter TEXT,                  -- the single ticked column, or NULL
+  amount_margin REAL,                  -- strongest cell's lead over the row median
+  action TEXT,
+  type_margin REAL,
+  status TEXT NOT NULL,                -- read | unknown_amount | unknown_type | unknown
+  transaction_id INTEGER REFERENCES transactions(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_scan_rows_filing ON scan_rows(filing_id, page_no, row_index);
+"""
+
 # Statuses whose transactions count toward statistics. A filing that failed to
 # parse contributes nothing, and one that is merely 'new' has no rows yet.
 COUNTED_STATUSES = ("parsed", "notified", "backfilled")
@@ -289,6 +329,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
         # Numbered past a concurrent version-4 migration so the two can be
         # reconciled at merge; idempotent, so running it on either side is safe.
         conn.executescript(_COOLDOWN_DDL)
+    if version < 8:
+        # Scan capture tables. Empty until `whale capture-scans` runs or the
+        # pipeline meets a scan; nothing to backfill at migration time.
+        conn.executescript(_SCAN_DDL)
     if version < SCHEMA_VERSION:
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         conn.commit()
@@ -446,6 +490,85 @@ def transactions_for_filing(conn: sqlite3.Connection, filing_id: int) -> list[sq
            FROM transactions t JOIN filings f ON f.id = t.filing_id
            WHERE t.filing_id = ? ORDER BY t.id""", (filing_id,)
     ).fetchall()
+
+
+# --- scan capture -----------------------------------------------------------
+
+# Parse methods a House filing has when it is a scan: never attempted,
+# transcribed, or refused.
+SCAN_METHODS = ("scanned", "vision", "vision_failed")
+
+
+def uncaptured_scans(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """House scans with no pages stored yet, oldest filing first."""
+    marks = ", ".join("?" for _ in SCAN_METHODS)
+    return conn.execute(
+        f"""SELECT f.* FROM filings f
+            WHERE f.chamber = 'house' AND f.parse_method IN ({marks})
+              AND NOT EXISTS (SELECT 1 FROM scan_pages s WHERE s.filing_id = f.id)
+            ORDER BY f.filing_date, f.id""", SCAN_METHODS
+    ).fetchall()
+
+
+def replace_scan_pages(conn: sqlite3.Connection, filing_id: int, pages: list[dict]) -> int:
+    """Store a filing's page images, replacing any earlier capture."""
+    conn.execute("DELETE FROM scan_pages WHERE filing_id = ?", (filing_id,))
+    for p in pages:
+        conn.execute(
+            """INSERT INTO scan_pages
+               (filing_id, page_no, width, height, dpi, rotation, png, error)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (filing_id, p["page_no"], p["width"], p["height"], p["dpi"], p["rotation"],
+             p["png"], p.get("error")),
+        )
+    return len(pages)
+
+
+def replace_scan_rows(conn: sqlite3.Connection, filing_id: int, rows: list[dict]) -> int:
+    """Store the grid reader's rows for a filing, replacing any earlier ones."""
+    conn.execute("DELETE FROM scan_rows WHERE filing_id = ?", (filing_id,))
+    for r in rows:
+        conn.execute(
+            """INSERT INTO scan_rows
+               (filing_id, page_no, row_index, y0, y1, amount_cols, type_cols,
+                amount_marks, type_marks, amount_letter, amount_margin, action,
+                type_margin, status, transaction_id)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (filing_id, r["page_no"], r["row_index"], r["y0"], r["y1"], r["amount_cols"],
+             r["type_cols"], r["amount_marks"], r["type_marks"], r.get("amount_letter"),
+             r.get("amount_margin"), r.get("action"), r.get("type_margin"), r["status"],
+             r.get("transaction_id")),
+        )
+    return len(rows)
+
+
+def link_scan_rows(conn: sqlite3.Connection, filing_id: int) -> int:
+    """Point a filing's scan rows at its transactions, by order.
+
+    `vision.join` builds transactions from the reader's rows in page order,
+    and `replace_transactions` inserts them in that order, so the n-th scan
+    row is the n-th transaction. Returns how many were linked; none when the
+    counts differ (a filing re-read since capture) or there are no
+    transactions (a scan vision never read).
+    """
+    rows = conn.execute(
+        "SELECT id FROM scan_rows WHERE filing_id = ? ORDER BY row_index", (filing_id,)
+    ).fetchall()
+    txs = conn.execute(
+        "SELECT id FROM transactions WHERE filing_id = ? ORDER BY id", (filing_id,)
+    ).fetchall()
+    if not rows or len(rows) != len(txs):
+        return 0
+    for r, t in zip(rows, txs):
+        conn.execute("UPDATE scan_rows SET transaction_id = ? WHERE id = ?", (t["id"], r["id"]))
+    return len(rows)
+
+
+def scan_page_png(conn: sqlite3.Connection, filing_id: int, page_no: int) -> bytes | None:
+    row = conn.execute(
+        "SELECT png FROM scan_pages WHERE filing_id = ? AND page_no = ?", (filing_id, page_no)
+    ).fetchone()
+    return bytes(row["png"]) if row else None
 
 
 # --- alerts -----------------------------------------------------------------

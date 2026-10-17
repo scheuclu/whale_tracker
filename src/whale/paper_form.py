@@ -162,6 +162,10 @@ class GridRow:
     amount_density: list[float] = field(default_factory=list)
     type_density: list[float] = field(default_factory=list)
     flag_density: list[float] = field(default_factory=list)
+    # How clearly the strongest cell stood above the row's median — the
+    # quantity the mark test compares (BOXED_MARK_MARGIN for boxed rows).
+    amount_margin: float = 0.0
+    type_margin: float = 0.0
 
     @property
     def amount(self) -> str | None:
@@ -216,6 +220,14 @@ class GridPage:
     layout: Layout | None = None
     # No table on the page: blank, a separator sheet, a cover letter.
     no_table: bool = False
+    # Geometry of the oriented page, in pixels at RENDER_DPI: its size and
+    # the column edges of the amount, type and flag blocks — what an overlay
+    # needs to draw the reader's decisions on the page.
+    width: int = 0
+    height: int = 0
+    amount_cols: list[int] = field(default_factory=list)
+    type_cols: list[int] = field(default_factory=list)
+    flag_cols: list[int] = field(default_factory=list)
 
 
 @dataclass
@@ -246,17 +258,20 @@ def read_page(image, index: int = 0) -> GridPage:
 
     ink0 = np.asarray(image.convert("L")) < INK_THRESHOLD
     if ink0.mean() < BLANK_PAGE_INK or not _tabular(ink0):
-        return GridPage(index, 0, [], no_table=True)
+        return GridPage(index, 0, [], no_table=True, width=ink0.shape[1], height=ink0.shape[0])
 
     failures = []
     for rotation in (0, 90, 270, 180):
         ink = ink0 if rotation == 0 else np.ascontiguousarray(np.rot90(ink0, k=rotation // 90))
         try:
-            layout, rows = _read_oriented(ink, index)
+            layout, rows, table = _read_oriented(ink, index)
         except GridNotFound as exc:
             failures.append(f"{rotation}°: {exc}")
             continue
-        return GridPage(index, rotation, rows, layout)
+        return GridPage(index, rotation, rows, layout,
+                        width=ink.shape[1], height=ink.shape[0],
+                        amount_cols=list(table.amount), type_cols=list(table.types),
+                        flag_cols=list(table.flags))
     raise GridNotFound(f"page {index + 1}: " + "; ".join(failures))
 
 
@@ -285,7 +300,7 @@ class _Table:
     row_rules: list[int]   # horizontal rules spanning the table, top to bottom
 
 
-def _read_oriented(ink, page_index: int) -> tuple[Layout, list[GridRow]]:
+def _read_oriented(ink, page_index: int) -> tuple[Layout, list[GridRow], "_Table"]:
     H, W = ink.shape
     table = _decompose(_rules(ink, axis=0, min_run=VERTICAL_MIN_RUN * H),
                        _rules(ink, axis=1, min_run=HORIZONTAL_MIN_RUN * W), H, W)
@@ -323,8 +338,19 @@ def _read_oriented(ink, page_index: int) -> tuple[Layout, list[GridRow]]:
             amount_density=[round(d, 3) for d in a],
             type_density=[round(d, 3) for d in t],
             flag_density=[round(d, 3) for d in f],
+            amount_margin=_margin(a),
+            type_margin=_margin(t),
         ))
-    return table.layout, rows
+    return table.layout, rows, table
+
+
+def _margin(densities: list[float]) -> float:
+    """The strongest cell's lead over the row's median."""
+    import numpy as np
+
+    if not densities:
+        return 0.0
+    return round(float(max(densities) - np.median(densities)), 3)
 
 
 def _decompose(verticals: list[tuple[int, int, int]],

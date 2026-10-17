@@ -19,6 +19,11 @@ on:
         description: "Last day of the insider backfill, inclusive. Blank = yesterday."
         default: ""
         required: false
+      capture_scans:
+        description: "Also capture every scanned filing's pages and grid-reader rows into the DB for the /scans inspection view (no API key needed; resumable)."
+        type: boolean
+        default: false
+        required: false
 
 # One pipeline run at a time; queued rather than cancelled so a run is never
 # killed mid-commit of the database.
@@ -49,6 +54,13 @@ jobs:
           BACKFILL_YEAR: ${{ github.event.inputs.backfill_year }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python -m whale backfill --year "$BACKFILL_YEAR"
+
+      - name: Capture scans for inspection (optional)
+        if: ${{ github.event.inputs.capture_scans == 'true' }}
+        # The whole 2026 corpus (53 filings, 405 pages) takes a few minutes;
+        # the budget keeps a larger backlog inside the job's timeout, and a
+        # run that stops early continues next time.
+        run: python -m whale capture-scans --budget-seconds 480
 
       - name: Run pipeline
         env:

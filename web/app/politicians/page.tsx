@@ -5,6 +5,7 @@ import {
   getPoliticians,
   getTransactions,
 } from "@/lib/queries";
+import { getScanFilings } from "@/lib/scan-queries";
 import { memberHref, shortDate, usd } from "@/lib/format";
 import {
   Card,
@@ -175,12 +176,13 @@ const FILTERS = [
 ];
 
 async function MemberDetail({ member, action }: { member: string; action?: string }) {
-  let detail, tickers, trades;
+  let detail, tickers, trades, scans;
   try {
-    [detail, tickers, trades] = await Promise.all([
+    [detail, tickers, trades, scans] = await Promise.all([
       getPoliticianDetail(member),
       getPoliticianTickers(member, 40),
       getTransactions({ member, action, limit: TRADE_PAGE }),
+      getScanFilings({ member }),
     ]);
   } catch (err) {
     return <Empty>{(err as Error).message}</Empty>;
@@ -237,6 +239,15 @@ async function MemberDetail({ member, action }: { member: string; action?: strin
               className="underline-offset-2 hover:text-primary hover:underline"
             >
               · bioguide
+            </a>
+          ) : null}
+          {scans.length ? (
+            <a
+              href={`/scans?m=${encodeURIComponent(member)}`}
+              className="underline-offset-2 hover:text-primary hover:underline"
+              title="Paper filings scanned without a text layer; inspect what the grid reader saw"
+            >
+              · {scans.length} scanned filing{scans.length === 1 ? "" : "s"}
             </a>
           ) : null}
         </p>
@@ -368,7 +379,7 @@ async function MemberDetail({ member, action }: { member: string; action?: strin
                       exact={r.amount_exact_cents}
                     />
                     <OwnerTag owner={r.owner} />
-                    <ScanTag transcribed={r.transcribed} />
+                    <ScanTag transcribed={r.transcribed} docId={r.doc_id} />
                     <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">
                       {r.asset_name}
                     </span>

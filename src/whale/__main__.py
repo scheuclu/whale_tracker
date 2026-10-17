@@ -44,6 +44,16 @@ def main(argv: list[str] | None = None) -> int:
     p_backfill.add_argument("--chamber", choices=("house", "senate", "all"), default="all",
                             help="which chamber's indexed filings to parse (default: all)")
 
+    p_capture = sub.add_parser(
+        "capture-scans",
+        help="store every scanned filing's pages and the grid reader's rows for the "
+             "/scans inspection view (no API key needed; resumable)")
+    p_capture.add_argument("--limit", type=int, help="max filings to capture")
+    p_capture.add_argument("--budget-seconds", type=float, default=600,
+                           help="stop after this long; the next run continues (default 600)")
+    p_capture.add_argument("--pdf-dir", type=Path,
+                           help="read PDFs from here when present and save downloads here")
+
     p_tickers = sub.add_parser("tickers", help="ticker leaderboard")
     p_tickers.add_argument("--since", type=_parse_since, default=None, metavar="30d",
                            help="rolling window, e.g. 30d (default: all time)")
@@ -139,6 +149,19 @@ def main(argv: list[str] | None = None) -> int:
 
         count = pipeline.backfill(config, args.year, args.limit, args.chamber)
         print(f"parsed {count} filing(s) into the knowledge base (no notifications sent)")
+        return 0
+
+    if args.command == "capture-scans":
+        from . import scan_capture
+
+        conn = db.connect(config.db_path)
+        try:
+            result = scan_capture.capture_scans(
+                conn, limit=args.limit, budget_seconds=args.budget_seconds,
+                pdf_dir=args.pdf_dir)
+        finally:
+            conn.close()
+        print(f"scan capture: {result.summary()}")
         return 0
 
     if args.command == "sync-insiders":

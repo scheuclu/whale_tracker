@@ -326,7 +326,11 @@ separate `insider_*` tables — never mixed into the congressional data.
   out of every volume total, cluster and floor — and a box the reader cannot
   call is stored as unknown rather than guessed. Paper forms carry no ticker,
   so they never feed a cluster alert either way. Measured accuracy and what
-  turning it on does are in the `vision:` block of `config.yaml`.
+  turning it on does are in the `vision:` block of `config.yaml`. Every scan
+  can be inspected regardless: `python -m whale capture-scans` stores each
+  page as a small image with the grid reader's rows (resumable, no API key),
+  and the dashboard's `/scans` page draws the reader's decisions over the
+  page. The pipeline captures new scans as they arrive.
 - **Assets without tickers.** Treasury bills, municipal bonds, structured notes
   and private funds are stored but carry no symbol, so they appear in a member's
   totals and not in ticker rollups. Some members trade almost nothing else.

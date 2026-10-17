@@ -125,7 +125,7 @@ export default async function FeedPage({
                       {memberLabel(r.member_name, null, r.state, r.district, r.chamber)}
                     </a>
                     <OwnerTag owner={r.owner} />
-                    <ScanTag transcribed={r.transcribed} />
+                    <ScanTag transcribed={r.transcribed} docId={r.doc_id} />
                     <span className="truncate text-muted-foreground">· {r.asset_name}</span>
                     <a
                       href={r.pdf_url}

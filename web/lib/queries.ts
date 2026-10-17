@@ -56,6 +56,8 @@ export type TransactionRow = {
   /** 1 when the row was transcribed from a scanned paper filing: shown with
    *  its bracket as read, counted as a trade, excluded from every total. */
   transcribed: number;
+  /** The Clerk's document id — the key of the /scans inspection page. */
+  doc_id: string;
 };
 
 export type PoliticianRow = {
@@ -231,7 +233,8 @@ export async function getTransactions(opts: {
               ${LAG} AS lag_days,
               CASE WHEN julianday(t.notification_date) < julianday(t.tx_date)
                    THEN 1 ELSE 0 END AS dates_inconsistent,
-              ${TRANSCRIBED} AS transcribed
+              ${TRANSCRIBED} AS transcribed,
+              f.doc_id
        FROM transactions t
        JOIN filings f ON f.id = t.filing_id
        LEFT JOIN politicians p ON p.id = t.politician_id

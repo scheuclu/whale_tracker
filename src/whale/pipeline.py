@@ -475,6 +475,7 @@ def parse_pending(conn: sqlite3.Connection, config: Config,
                 db.mark_notified(conn, filing["id"])
             conn.commit()
             log.info("filing %s is a scan and vision is unavailable", filing["doc_id"])
+            _capture_scan(conn, filing, pdf_bytes)
             continue
         except ScanUnreadable as exc:
             # Vision ran and refused: the grid could not be found, or the
@@ -487,6 +488,7 @@ def parse_pending(conn: sqlite3.Connection, config: Config,
                 db.mark_notified(conn, filing["id"])
             conn.commit()
             log.warning("filing %s: %s", filing["doc_id"], exc)
+            _capture_scan(conn, filing, pdf_bytes)
             continue
         except Exception as exc:
             db.set_status(conn, filing["id"], "failed", f"parse error: {exc}", "error")
@@ -508,7 +510,25 @@ def parse_pending(conn: sqlite3.Connection, config: Config,
         conn.commit()
         done += 1
         log.info("parsed %s (%s): %d transaction(s)", filing["doc_id"], method, len(rows))
+        if method == "vision":
+            # After the transactions exist, so the captured rows link to them.
+            _capture_scan(conn, filing, pdf_bytes)
     return done
+
+
+def _capture_scan(conn: sqlite3.Connection, filing, pdf_bytes: bytes) -> None:
+    """Store a scan's pages and grid rows for the /scans view. Best-effort:
+    inspection must never cost a parse, so nothing here raises."""
+    from . import scan_capture
+
+    try:
+        pages, rows, unknown = scan_capture.capture_filing(conn, filing["id"], pdf_bytes)
+    except Exception:
+        log.exception("scan capture failed for %s", filing["doc_id"])
+        conn.rollback()
+        return
+    log.info("captured %s for inspection: %d page(s), %d row(s), %d unknown",
+             filing["doc_id"], pages, rows, unknown)
 
 
 def retry_scanned(conn: sqlite3.Connection, config: Config) -> int:

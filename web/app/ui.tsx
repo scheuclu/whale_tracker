@@ -155,13 +155,28 @@ export function TickerChip({
  * amount and type boxes by the grid reader. Shown with the bracket as read,
  * counted as a trade, and kept out of every volume figure on the site.
  */
-export function ScanTag({ transcribed }: { transcribed: number | null | undefined }) {
+export function ScanTag({
+  transcribed,
+  docId,
+}: {
+  transcribed: number | null | undefined;
+  /** The filing's Clerk id: given, the tag links to its /scans inspection page. */
+  docId?: string;
+}) {
   if (!transcribed) return null;
+  const cls =
+    "rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-px text-[10px] text-amber-700 dark:text-amber-300";
+  const title =
+    "Read from a scanned paper filing (text by a vision model, ticked boxes by the grid reader). Counted as a trade; excluded from every volume total.";
+  if (docId) {
+    return (
+      <Link href={`/scans/${encodeURIComponent(docId)}`} className={cn(cls, "hover:bg-amber-500/20")} title={`${title} Click to inspect the scan.`}>
+        transcribed from scan
+      </Link>
+    );
+  }
   return (
-    <span
-      className="rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-px text-[10px] text-amber-700 dark:text-amber-300"
-      title="Read from a scanned paper filing (text by a vision model, ticked boxes by the grid reader). Counted as a trade; excluded from every volume total."
-    >
+    <span className={cls} title={title}>
       transcribed from scan
     </span>
   );

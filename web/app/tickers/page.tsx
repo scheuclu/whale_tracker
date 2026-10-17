@@ -206,7 +206,7 @@ async function TickerDetail({ ticker }: { ticker: string }) {
                   {memberLabel(r.member_name, null, r.state, r.district, r.chamber)}
                 </a>
                 <OwnerTag owner={r.owner} />
-                <ScanTag transcribed={r.transcribed} />
+                <ScanTag transcribed={r.transcribed} docId={r.doc_id} />
                 <div className="flex-1" />
                 <span className="tabular text-xs text-muted-foreground">{shortDate(r.tx_date)}</span>
                 <DelayTag days={r.delay_days} inconsistent={r.dates_inconsistent} />

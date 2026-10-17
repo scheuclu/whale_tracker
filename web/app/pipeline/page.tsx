@@ -166,6 +166,13 @@ export default async function PipelinePage() {
               to Telegram with a link but contribute no transactions to the totals.
             </p>
             <p className="text-[11px] text-muted-foreground">
+              Every scanned filing, captured or not, with what the grid reader saw on each page:{" "}
+              <a href="/scans" className="underline underline-offset-2 hover:text-primary">
+                inspect scans
+              </a>
+              .
+            </p>
+            <p className="text-[11px] text-muted-foreground">
               {p.transcribed.filings
                 ? `${p.transcribed.filings.toLocaleString()} scanned filing${p.transcribed.filings === 1 ? "" : "s"} ` +
                   `(${p.transcribed.rows.toLocaleString()} rows) were transcribed: text by a vision model, ` +

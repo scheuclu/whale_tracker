@@ -107,6 +107,16 @@ parser stays faithful to the PDF and the UI flags the row rather than
 - Scanned-PDF transcription is off by default and must stay that way until
   vision rows are quarantined from the statistics (https://github.com/scheuclu/whale_tracker/issues/1). Do not flip
   `vision.enabled` to close a coverage gap.
+- Scanned paper filings are **captured for inspection** in the same database
+  (`scan_pages`: one 1-bit PNG per page at 110 dpi, oriented the way
+  `paper_form.py` turned it; `scan_rows`: every row the grid reader found,
+  with column edges, ticked cells, margins and a link to the transaction when
+  the hybrid path has made one). Same file, not a second one, because the
+  dashboard fetches exactly one file and `poll.yml` commits exactly one — and
+  that file is committed on every run, so the capture is budgeted at **15 MB**
+  for the corpus (the 2026 scans are ~6 MB). `whale capture-scans` is the
+  resumable catch-up; the pipeline captures each scan it meets. Nothing in
+  these tables feeds a statistic; `/scans` is the audit trail.
 - `src/whale/audit.py` powers the weekly self-review. Two standing rules: a
   check that fires every week on benign data is itself a defect (fix the check),
   and a check that raises must report `check_failed` rather than be swallowed —
