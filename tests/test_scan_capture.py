@@ -284,7 +284,7 @@ def test_pipeline_links_rows_after_a_transcription(conn, monkeypatch):
     parsed = ParsedFiling(filer_name="Tony Wied", state_district="WI08", transactions=[
         Transaction(asset_name=f"ASSET {i}", action="purchase", amount_raw="$1,001 - $15,000",
                     tx_date="2026-07-14") for i in range(7)])
-    monkeypatch.setattr(pipeline, "_parse_bytes", lambda b, c: (parsed, "vision"))
+    monkeypatch.setattr(pipeline, "_parse_bytes", lambda b, c, *a, **k: (parsed, "vision"))
     assert pipeline.parse_pending(conn, Config(vision_enabled=True, gemini_api_key="k")) == 1
     linked = conn.execute(
         "SELECT COUNT(*) FROM scan_rows WHERE filing_id = ? AND transaction_id IS NOT NULL", (fid,)

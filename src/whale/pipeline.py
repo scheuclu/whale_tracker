@@ -10,6 +10,7 @@ import io
 import json
 import logging
 import sqlite3
+import time
 from datetime import date
 
 from . import (db, house, insider_alerts, insiders, roster, senate, senate_ptr, stats,
@@ -449,10 +450,14 @@ def _insider_context(conn: sqlite3.Connection, settings, ticker: str, direction:
 # --- parse ------------------------------------------------------------------
 
 
+class VisionDeferred(Exception):
+    """A scan the run has no model time left for; it stays queued."""
+
+
 def parse_pending(conn: sqlite3.Connection, config: Config,
                   statuses: tuple[str, ...] = ("new",),
                   target_status: str = "parsed", limit: int | None = None,
-                  silent: bool = False) -> int:
+                  silent: bool = False, clock=time.monotonic) -> int:
     """Download and parse queued filings into transactions.
 
     `silent` marks everything it touches as already notified, which is what
@@ -470,6 +475,14 @@ def parse_pending(conn: sqlite3.Connection, config: Config,
                                  target_status, silent)
     filings = [f for f in queued if f["chamber"] == "house"]
 
+    # Model time is metered per run: a scan takes seconds to minutes of
+    # Gemini, the job has a 20-minute timeout, and the commit step is last.
+    # The first run with vision on had 53 scans queued, spent the whole
+    # timeout on them and was killed with nothing committed; the next run
+    # would have repeated that. Scans past the budget stay `new`.
+    budget = config.vision_budget_seconds
+    vision_spent = 0.0
+    deferred = 0
     for filing in filings:
         try:
             pdf_bytes = house.fetch_pdf(filing["pdf_url"])
@@ -478,8 +491,13 @@ def parse_pending(conn: sqlite3.Connection, config: Config,
             log.warning("PDF download failed for %s: %s", filing["doc_id"], exc)
             continue
 
+        allow_vision = not budget or vision_spent < budget
+        started = clock()
         try:
-            parsed, method = _parse_bytes(pdf_bytes, config)
+            parsed, method = _parse_bytes(pdf_bytes, config, allow_vision)
+        except VisionDeferred:
+            deferred += 1
+            continue
         except VisionUnavailable as exc:
             db.set_status(conn, filing["id"], "failed",
                           f"scanned paper filing ({exc})", "scanned")
@@ -490,6 +508,7 @@ def parse_pending(conn: sqlite3.Connection, config: Config,
             _capture_scan(conn, filing, pdf_bytes)
             continue
         except ScanUnreadable as exc:
+            vision_spent += clock() - started
             # Vision ran and refused: the grid could not be found, or the
             # two readings did not line up. Its own parse_method, so the
             # retry on the next run does not spend an API call on it again
@@ -503,6 +522,7 @@ def parse_pending(conn: sqlite3.Connection, config: Config,
             _capture_scan(conn, filing, pdf_bytes)
             continue
         except Exception as exc:
+            vision_spent += clock() - started
             db.set_status(conn, filing["id"], "failed", f"parse error: {exc}", "error")
             if silent:
                 db.mark_notified(conn, filing["id"])
@@ -510,6 +530,8 @@ def parse_pending(conn: sqlite3.Connection, config: Config,
             log.exception("parse failed for %s", filing["doc_id"])
             continue
 
+        if method == "vision":
+            vision_spent += clock() - started
         rows = [_transaction_row(t) for t in parsed.transactions]
         db.replace_transactions(conn, filing["id"], filing["politician_id"], rows)
         # A filing Telegram has already heard of — a scan reported as
@@ -525,6 +547,9 @@ def parse_pending(conn: sqlite3.Connection, config: Config,
         if method == "vision":
             # After the transactions exist, so the captured rows link to them.
             _capture_scan(conn, filing, pdf_bytes)
+    if deferred:
+        log.warning("vision budget of %.0fs spent after %.0fs; %d scan(s) stay queued for the next run",
+                    budget, vision_spent, deferred)
     return done
 
 
@@ -642,7 +667,8 @@ def _parse_senate_filings(conn: sqlite3.Connection, config: Config, filings: lis
     return done
 
 
-def _parse_bytes(pdf_bytes: bytes, config: Config) -> tuple[ParsedFiling, str]:
+def _parse_bytes(pdf_bytes: bytes, config: Config,
+                 allow_vision: bool = True) -> tuple[ParsedFiling, str]:
     """Text layer first; scanned filings fall back to the vision model.
 
     Returns the filing and which method read it, so the dashboard can show how
@@ -653,6 +679,8 @@ def _parse_bytes(pdf_bytes: bytes, config: Config) -> tuple[ParsedFiling, str]:
     except ScannedFilingError:
         if not config.vision_enabled:
             raise VisionUnavailable("vision disabled in config.yaml") from None
+        if not allow_vision:
+            raise VisionDeferred("vision budget for this run is spent") from None
         # VisionUnavailable and ScanUnreadable propagate: the caller
         # distinguishes "a scan we cannot attempt", "a scan we attempted and
         # refuse to guess at" and "the parser broke".

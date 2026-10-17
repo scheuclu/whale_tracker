@@ -136,6 +136,13 @@ vision:
   # transcription stays inspectable on the dashboard's Scans page next to
   # the page image it came from.
   enabled: true
+  # Seconds of model time one poll run may spend on scans; 0 = no limit.
+  # The first run with transcription on had 53 scans queued, spent the job's
+  # whole 20-minute timeout on them and was killed before the commit step,
+  # so nothing it read was kept, and the next run would have done the same.
+  # Scans the budget leaves behind stay queued for the next run; a backlog
+  # drains over a few runs instead of blocking one.
+  budget_seconds: 480
 
 insiders:
   # SEC Form 4: corporate officers, directors and 10% owners. Only open-market
