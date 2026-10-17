@@ -45,7 +45,18 @@ ingest:
   years: [2026]
   # On first sight of a filing, anything older than this is recorded but never
   # notified — it stops the first run blasting a year of history to Telegram.
-  max_filing_age_days: 7
+  #
+  # 14, not 7, because the Clerk's index lags the filing date and a filing
+  # that is already older than this when it first appears is filed as history
+  # and never announced. Measured on filings dated 2026-09-08 or later, the
+  # days between filing_date and the run that first saw it were: Friday mean
+  # 4.3 (max 6), Thursday mean 2.6 (max 7), Monday/Tuesday 1.0 (max 1). At 7
+  # the cutoff equalled the worst case already observed, so an ordinary
+  # slow week would have silently swallowed a routine filing. The first-run
+  # replay this protects against is still bounded by `years`. A filing that
+  # hits the cutoff on any run after the first is logged and counted in
+  # sync_state (`house_age_cutoff`), which the weekly audit reports.
+  max_filing_age_days: 14
 
 senate:
   # Senate eFD sits behind Akamai bot protection and is expected to fail from
