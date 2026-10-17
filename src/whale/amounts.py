@@ -11,7 +11,11 @@ from __future__ import annotations
 import re
 
 # The bracket ladder used on House PTRs. `None` upper bound = open-ended top
-# bracket ("Over $50,000,000"), which has no defensible maximum.
+# bracket ("Over $50,000,000"), which has no defensible maximum. Its floor is
+# the figure the form prints, because that is what `parse_amount` stores for
+# every "Over $X" cell (the e-filed "Spouse/DC Over $1,000,000" included) and
+# a floor is displayed as "≥", never as a midpoint. The first real top-bracket
+# row (a Senate filing, #40) was off this ladder by one dollar.
 BRACKETS: list[tuple[int, int | None]] = [
     (1_001, 15_000),
     (15_001, 50_000),
@@ -22,7 +26,7 @@ BRACKETS: list[tuple[int, int | None]] = [
     (1_000_001, 5_000_000),
     (5_000_001, 25_000_000),
     (25_000_001, 50_000_000),
-    (50_000_001, None),
+    (50_000_000, None),
 ]
 
 _MONEY = r"\$?\s*([\d,]+(?:\.\d{1,2})?)"
