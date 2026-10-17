@@ -11,6 +11,11 @@ import { COUNTED, DELAY, MID, sinceClause } from "./queries";
  *   so a founder filing jointly with their holding company counts once.
  *   `filings` is shown beside `insiders` because related parties filing
  *   separately still count twice.
+ * - A row flagged `implausible` (derived once at ingest by
+ *   `stats.form4_is_implausible` — a price cell holding the aggregate
+ *   consideration) is shown as filed but worth nothing to any total, exactly
+ *   as `stats.insider_issuer_stats` treats it: counted as a trade, excluded
+ *   from every value. Keep the two in agreement.
  */
 
 const FROM = `FROM insider_transactions t
@@ -18,8 +23,10 @@ const FROM = `FROM insider_transactions t
   LEFT JOIN insider_filing_owners o ON o.filing_id = f.id AND o.owner_index = 0
   LEFT JOIN insiders i ON i.cik = o.insider_cik`;
 
-const BUY_VALUE = `COALESCE(SUM(CASE WHEN t.action = 'purchase' THEN ${MID} END), 0)`;
-const SELL_VALUE = `COALESCE(SUM(CASE WHEN t.action = 'sale' THEN ${MID} END), 0)`;
+/** Value of one row, or NULL when it has no price or its as-filed value is implausible. */
+const VALUE = `CASE WHEN t.implausible IS NOT 1 THEN ${MID} END`;
+const BUY_VALUE = `COALESCE(SUM(CASE WHEN t.action = 'purchase' THEN ${VALUE} END), 0)`;
+const SELL_VALUE = `COALESCE(SUM(CASE WHEN t.action = 'sale' THEN ${VALUE} END), 0)`;
 
 export type InsiderTotals = {
   filings: number;
@@ -32,6 +39,8 @@ export type InsiderTotals = {
   sell_value: number;
   late_trades: number;
   unpriced: number;
+  /** Rows kept as filed but excluded from every value above. */
+  implausible: number;
 };
 
 /** Whole-dataset headline figures — never a page slice. */
@@ -48,7 +57,8 @@ export async function getInsiderTotals(): Promise<InsiderTotals> {
               ${BUY_VALUE} AS buy_value,
               ${SELL_VALUE} AS sell_value,
               COALESCE(SUM(t.late), 0) AS late_trades,
-              COALESCE(SUM(t.amount_exact_cents IS NULL), 0) AS unpriced
+              COALESCE(SUM(t.amount_exact_cents IS NULL), 0) AS unpriced,
+              COALESCE(SUM(t.implausible = 1), 0) AS implausible
        ${FROM}
        WHERE f.status IN ${COUNTED}`
     )
@@ -136,6 +146,8 @@ export async function getInsiderClusters(days = 30, minInsiders = 3, limit = 12)
 export type InsiderTradeRow = {
   id: number;
   tx_date: string | null;
+  /** The verbatim transactionDate when tx_date was parsed out of an offset-suffixed value. */
+  tx_date_as_filed: string | null;
   action: string;
   transaction_code: string;
   shares: number | null;
@@ -150,6 +162,8 @@ export type InsiderTradeRow = {
   timeliness: string | null;
   /** Derived once at ingest (two business days); NULL when the dates contradict. */
   late: number | null;
+  /** 1 when the as-filed value is beyond belief; shown as filed, counted nowhere. */
+  implausible: number | null;
   footnotes: string | null;
   accession: string;
   ticker: string | null;
@@ -192,10 +206,10 @@ export async function getInsiderTrades(opts: {
 
   return db
     .prepare(
-      `SELECT t.id, t.tx_date, t.action, t.transaction_code, t.shares, t.price_per_share,
+      `SELECT t.id, t.tx_date, t.tx_date_as_filed, t.action, t.transaction_code, t.shares, t.price_per_share,
               t.amount_min_cents, t.amount_max_cents, t.amount_exact_cents,
               t.security_title, t.direct_or_indirect, t.nature_of_ownership,
-              t.timeliness, t.late, t.footnotes,
+              t.timeliness, t.late, t.implausible, t.footnotes,
               f.accession, f.ticker, f.issuer_name, f.issuer_cik, f.filing_date,
               f.aff_10b5_one, f.source_url,
               i.name AS insider_name, o.insider_cik, o.is_director, o.is_officer,

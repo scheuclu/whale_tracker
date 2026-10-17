@@ -161,7 +161,8 @@ def pipeline_status(config: Config) -> None:
 # --- insiders (SEC Form 4) ---------------------------------------------------
 
 _VALUE_NOTE = ("Values are shares × the price as filed. A filing may report a weighted-average\n"
-               "price, so treat them as approximate; rows with no price carry no value.")
+               "price, so treat them as approximate; rows with no price, or flagged IMPLAUSIBLE\n"
+               "as filed, carry no value.")
 
 
 def insider_issuers(config: Config, window_days: int | None, by: str,
@@ -217,6 +218,7 @@ def insider_detail(config: Config, ticker: str, window_days: int | None) -> None
                 "10b5-1" if r["aff_10b5_one"] else "",
                 "LATE" if r["late"] else "",
                 "filer-marked-late" if r["timeliness"] == "L" else "",
+                "IMPLAUSIBLE" if r["implausible"] == 1 else "",
             ) if f)
             role = _role(r)
             print(f"  {r['tx_date']}  {r['action']:<8} {shares:>10} {price:<12} {value:>10}  "
