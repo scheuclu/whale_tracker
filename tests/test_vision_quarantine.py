@@ -304,7 +304,7 @@ def test_a_refused_scan_is_failed_with_its_own_method_and_reported_once(conn, mo
     fid = _scan_filing(conn, "9000003", notified=False)
     monkeypatch.setattr(pipeline.house, "fetch_pdf", lambda url: b"pdf")
 
-    def refuse(b, c):
+    def refuse(b, c, *a, **k):
         raise ScanUnreadable("the grid has 7 transaction rows but the model transcribed 6")
 
     monkeypatch.setattr(pipeline, "_parse_bytes", refuse)
