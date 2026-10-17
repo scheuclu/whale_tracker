@@ -70,6 +70,8 @@ def main(argv: list[str] | None = None) -> int:
     p_bfi.add_argument("--limit", type=int, help="max filings to examine")
     p_bfi.add_argument("--recompute-late", action="store_true",
                        help="only rebuild the derived late flag, then exit")
+    p_bfi.add_argument("--recompute-implausible", action="store_true",
+                       help="only re-judge the derived implausible-value flag, then exit")
 
     p_ins = sub.add_parser("insiders", help="issuer leaderboard for insider trades")
     p_ins.add_argument("--since", type=_parse_since, default=None, metavar="30d")
@@ -155,6 +157,10 @@ def main(argv: list[str] | None = None) -> int:
         try:
             if args.recompute_late:
                 print(f"recomputed the late flag on {insiders.recompute_late(conn)} row(s)")
+                return 0
+            if args.recompute_implausible:
+                flagged = insiders.recompute_implausible(conn)
+                print(f"re-judged the implausible flag: {flagged} row(s) flagged")
                 return 0
             if args.start is None:
                 parser.error("backfill-insiders requires --from YYYY-MM-DD")

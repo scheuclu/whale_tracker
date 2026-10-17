@@ -27,6 +27,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+import statistics
 import time
 from collections import Counter
 from dataclasses import dataclass, field
@@ -276,9 +277,12 @@ def store_filing(conn: sqlite3.Connection, header: SecHeader, doc: Form4, ref: F
         for owner in doc.owners:
             db.upsert_insider(conn, owner.cik, owner.name)
         db.replace_insider_owners(conn, filing_id, [_owner_row(o) for o in doc.owners])
+        # The issuer's price history is the yardstick for an implausible
+        # value; this filing's own rows are not part of it.
+        reference = stats.issuer_reference_price(conn, doc.issuer_cik, exclude_filing_id=filing_id)
         db.replace_insider_transactions(
             conn, filing_id,
-            [_tx_row(t, filing_date) for t in form4.open_market(doc.transactions)],
+            [_tx_row(t, filing_date, reference) for t in form4.open_market(doc.transactions)],
         )
     except Exception:
         conn.rollback()
@@ -312,10 +316,12 @@ def _owner_row(o: form4.Owner) -> dict:
     }
 
 
-def _tx_row(t: Transaction, filing_date: str) -> dict:
+def _tx_row(t: Transaction, filing_date: str, reference_price: float | None = None) -> dict:
     value = t.value_cents
     # A deemed execution date, when given, is when the clock starts.
     late = stats.form4_is_late(t.deemed_execution_date or t.tx_date, filing_date)
+    implausible = stats.form4_is_implausible(
+        _float(t.shares), _float(t.price_per_share), value, reference_price)
     return {
         "tx_date": t.tx_date,
         "deemed_execution_date": t.deemed_execution_date,
@@ -335,6 +341,7 @@ def _tx_row(t: Transaction, filing_date: str) -> dict:
         "nature_of_ownership": t.nature_of_ownership,
         "footnotes": "\n".join(t.footnotes) or None,
         "late": None if late is None else int(late),
+        "implausible": None if implausible is None else int(implausible),
     }
 
 
@@ -473,3 +480,38 @@ def recompute_late(conn: sqlite3.Connection) -> int:
                      (None if late is None else int(late), r["id"]))
     conn.commit()
     return len(rows)
+
+
+def recompute_implausible(conn: sqlite3.Connection) -> int:
+    """Rebuild the derived `implausible` flag for every stored row.
+
+    The issuer-relative branch of the rule depends on what else is stored, so
+    a flag set at ingest can go stale as an issuer's history fills in; this
+    re-judges every row against the current table. Returns how many rows are
+    now flagged.
+    """
+    rows = conn.execute(
+        """SELECT t.id, t.filing_id, f.issuer_cik, f.status, t.shares, t.price_per_share,
+                  t.amount_exact_cents
+           FROM insider_transactions t JOIN insider_filings f ON f.id = t.filing_id"""
+    ).fetchall()
+    # Reference prices per (issuer, filing) in memory: one query per row would
+    # be thousands of median scans over the same few rows.
+    by_issuer: dict[str, list[sqlite3.Row]] = {}
+    for r in rows:
+        by_issuer.setdefault(r["issuer_cik"], []).append(r)
+    flagged = 0
+    for r in rows:
+        others = [
+            x["price_per_share"] for x in by_issuer[r["issuer_cik"]]
+            if x["filing_id"] != r["filing_id"] and x["status"] in db.COUNTED_STATUSES
+            and x["price_per_share"] is not None and x["price_per_share"] > 0
+        ]
+        verdict = stats.form4_is_implausible(
+            r["shares"], r["price_per_share"], r["amount_exact_cents"],
+            statistics.median(others) if others else None)
+        flagged += verdict is True
+        conn.execute("UPDATE insider_transactions SET implausible = ? WHERE id = ?",
+                     (None if verdict is None else int(verdict), r["id"]))
+    conn.commit()
+    return flagged

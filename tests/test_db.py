@@ -22,7 +22,7 @@ def _tables(conn):
 
 def test_fresh_database_is_current(tmp_path):
     conn = db.connect(tmp_path / "fresh.sqlite3")
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION == 3
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
     assert {"insiders", "insider_filings", "insider_filing_owners", "insider_transactions"} <= _tables(conn)
     conn.close()
 
@@ -31,13 +31,13 @@ def test_version_2_database_gains_insider_tables_in_place(tmp_path):
     path = tmp_path / "v2.sqlite3"
     _v2_database(path)
     conn = db.connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
     assert {"insiders", "insider_filings", "insider_filing_owners", "insider_transactions"} <= _tables(conn)
     assert conn.execute("SELECT full_name FROM politicians").fetchone()[0] == "Some Member"
     conn.close()
     # Reconnecting is a no-op.
     again = db.connect(path)
-    assert again.execute("PRAGMA user_version").fetchone()[0] == 3
+    assert again.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
     again.close()
 
 

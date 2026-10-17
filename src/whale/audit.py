@@ -526,6 +526,36 @@ def check_insider_values(conn, today: date | None = None) -> list[Finding]:
     return out
 
 
+def check_insider_implausible_values(conn, today: date | None = None) -> list[Finding]:
+    """Rows whose as-filed value the ingest rule refused to believe.
+
+    `check_insider_values` proves the arithmetic; this lists the rows where
+    the arithmetic is right and the inputs are not (a price cell holding the
+    aggregate consideration). They are stored as filed and excluded from
+    every total, so the list is for a human to confirm — or to spot a real
+    block trade the rule should not have caught.
+    """
+    rows = _rows(conn, f"""
+        SELECT f.accession, f.ticker, t.action, t.shares, t.price_per_share px,
+               t.amount_exact_cents ex
+        FROM insider_transactions t JOIN insider_filings f ON f.id = t.filing_id
+        WHERE f.status IN {_counted()} AND t.implausible = 1
+        ORDER BY t.amount_exact_cents DESC
+    """)
+    if not rows:
+        return []
+    return [Finding(
+        WARN, "insider_implausible_values",
+        f"{len(rows)} insider row(s) carry an implausible as-filed value",
+        "Kept as filed but excluded from every volume figure, cluster total "
+        "and alert value floor (stats.form4_is_implausible). Usually a price "
+        "cell that holds the aggregate consideration. A real trade on this "
+        "list means the thresholds need revisiting.",
+        [f"{r['accession']}  {r['ticker'] or '—'}  {r['action']}  "
+         f"{r['shares']:,.0f} × ${r['px']:,.2f} = ${r['ex'] / 100:,.0f}" for r in rows],
+    )]
+
+
 def check_insider_dates(conn, today: date | None = None) -> list[Finding]:
     """Trade dates that cannot be compared to the filing date."""
     rows = _rows(conn, f"""
@@ -662,6 +692,7 @@ CHECKS = (
     check_insider_empty_filings,
     check_insider_primary_owner,
     check_insider_values,
+    check_insider_implausible_values,
     check_insider_dates,
     check_insider_feed_health,
     check_insider_coverage,
