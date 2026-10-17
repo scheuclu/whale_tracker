@@ -121,22 +121,35 @@ def _sync_senate(conn: sqlite3.Connection, config: Config) -> None:
     conn.commit()
 
 
-def _sync_insiders(conn: sqlite3.Connection, config: Config) -> None:
+def _sync_insiders(conn: sqlite3.Connection, config: Config,
+                   client: insiders.EdgarClient | None = None,
+                   today: date | None = None) -> None:
     """Best-effort, and last: an EDGAR slowdown must never delay House alerts.
 
     `insiders.sync` absorbs the failures it knows about (throttling, network,
-    a malformed filing); this guard is for everything else.
+    a malformed filing); this guard is for everything else. A recorded feed
+    gap is repaired afterwards, so a walk of the daily index can never starve
+    the live feed, and only when the feed was read to the end: a throttled
+    or out-of-time sync is no moment to ask EDGAR for more.
     """
     if not config.insiders.enabled:
         return
     try:
-        result = insiders.sync(conn, config)
+        result = insiders.sync(conn, config, client=client, today=today)
     except Exception as exc:
         log.exception("insider sync failed unexpectedly")
         db.set_state(conn, insiders.STATE_STATUS, f"error: {exc}")
         conn.commit()
         return
     log.info("insiders: %s", result.summary())
+    if result.aborted:
+        return
+    try:
+        insiders.repair_gap(conn, config, result, client=client, today=today)
+    except Exception as exc:
+        log.exception("insider gap repair failed unexpectedly")
+        db.set_state(conn, insiders.STATE_STATUS, f"error: gap repair failed: {exc}")
+        conn.commit()
 
 
 def notify_insiders(conn: sqlite3.Connection, config: Config, dry_run: bool = False,

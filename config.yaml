@@ -92,6 +92,16 @@ insiders:
   # A filing older than this on first sight is history, never a notification.
   # It is what stops a first run, or a backfill, replaying days into Telegram.
   max_filing_age_days: 7
+  # The live feed holds 2000 entries, about two business days or one busy
+  # Monday. When a poll run is lost or late enough for the feed to roll past
+  # the cursor, the sync records the missed range as a gap and the following
+  # runs repair it from EDGAR's daily index — after reading the live feed, for
+  # at most this many seconds per run. A gap that does not fit narrows to the
+  # days still missing and continues next run; it never clears early. The
+  # feed sync stops after 7 minutes and the repair after 8, which keeps the
+  # insider step inside the job's 20-minute timeout. 0 switches the automatic
+  # repair off and leaves the gap to `backfill-insiders`.
+  gap_repair_budget_seconds: 480
 
   # Alert rules. Each new filing is tested against them in order and the FIRST
   # match names the alert, so specific rules must sit above general ones —
