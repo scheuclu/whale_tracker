@@ -45,20 +45,24 @@ export default async function PipelinePage() {
           </div>
           <div className="flex items-start gap-3">
             <span
-              className={`mt-0.5 size-2 shrink-0 rounded-full ${senateOk ? "bg-emerald-500" : "bg-amber-500"}`}
+              className={`mt-0.5 size-2 shrink-0 rounded-full ${
+                senateOk ? "bg-emerald-500" : p.senateStatus ? "bg-amber-500" : "bg-zinc-400"
+              }`}
             />
             <div>
               <div className="text-[13px] font-medium">
-                US Senate — {senateOk ? "available" : "unavailable"}
+                US Senate — {senateOk ? "live" : p.senateStatus ? "attention" : "not yet attempted"}
               </div>
               <p className="text-xs text-muted-foreground">
-                {senateOk
-                  ? p.senateStatus
-                  : "The Senate eFD search sits behind bot protection that refuses " +
-                    "automated access from datacenter addresses. No Senate trades are " +
-                    "included; the congressional figures on this site are House-only."}
+                Periodic transaction reports from the eFD search, parsed from each
+                electronic report page into the same table as House trades. Paper
+                filings are scanned images and are listed as unreadable.
+                {!senateOk && p.senateStatus
+                  ? " The last attempt did not reach the report list, so no new Senate " +
+                    "filings are being added until it does."
+                  : null}
               </p>
-              {!senateOk && p.senateStatus ? (
+              {p.senateStatus ? (
                 <p className="mt-1 font-mono text-[11px] text-muted-foreground">{p.senateStatus}</p>
               ) : null}
             </div>
@@ -150,23 +154,16 @@ export default async function PipelinePage() {
           <Card className="space-y-2">
             {p.byMethod.map((m) => (
               <div key={m.parse_method} className="flex items-center gap-3 text-[13px]">
-                <span className="font-medium">
-                  {m.parse_method === "text"
-                    ? "PDF text layer"
-                    : m.parse_method === "vision"
-                      ? "Vision model (scanned)"
-                      : m.parse_method === "scanned"
-                        ? "Scanned — unread"
-                        : m.parse_method}
-                </span>
+                <span className="font-medium">{METHOD_LABEL[m.parse_method] ?? m.parse_method}</span>
                 <div className="flex-1" />
                 <span className="tabular text-muted-foreground">{m.n.toLocaleString()}</span>
               </div>
             ))}
             <p className="pt-1 text-[11px] text-muted-foreground">
-              Members may file on paper. Those filings arrive as image-only scans with
-              no text layer; without a vision model configured they are reported to
-              Telegram with a link but contribute no transactions to the totals.
+              Members of either chamber may file on paper. Those filings arrive as
+              image-only scans — a PDF with no text layer from the House, page images on
+              eFD from the Senate; without a vision model configured they are reported
+              to Telegram with a link but contribute no transactions to the totals.
             </p>
           </Card>
         </div>
@@ -218,6 +215,15 @@ export default async function PipelinePage() {
     </div>
   );
 }
+
+const METHOD_LABEL: Record<string, string> = {
+  text: "PDF text layer (House)",
+  vision: "Vision model (House scan)",
+  scanned: "Scanned — unread (House)",
+  efd_html: "eFD report page (Senate)",
+  efd_paper: "Paper filing — unread (Senate)",
+  error: "Parse error",
+};
 
 const SKIP_LABEL: Record<string, string> = {
   no_open_market: "with no open-market rows",

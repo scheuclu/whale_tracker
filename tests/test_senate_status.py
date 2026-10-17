@@ -202,15 +202,18 @@ def test_production_status_is_an_error_not_the_known_block(conn):
     [found] = audit.check_senate(conn)
     assert (found.severity, found.code) == (audit.WARN, "senate_error")
     assert PRODUCTION_STATUS in found.title
-    assert "not the known" in found.detail
+    assert "not eFD refusing us" in found.detail
     assert "SENATE_PROXY_URL" in found.detail
 
 
-def test_site_side_block_is_expected(conn):
+def test_site_side_block_is_a_warning_that_names_the_fix(conn):
+    # No longer "expected": eFD answers the runner (#40), so a block means
+    # the Senate side went dark and the proxy fallback is the remedy.
     _with_status(conn, "blocked: 403 on https://efdsearch.senate.gov/search/home/ (bot protection)")
     [found] = audit.check_senate(conn)
-    assert (found.severity, found.code) == (audit.INFO, "senate_blocked")
-    assert found.detail.startswith("Expected")
+    assert (found.severity, found.code) == (audit.WARN, "senate_blocked")
+    assert found.detail.startswith("eFD refused")
+    assert "SENATE_PROXY_URL" in found.detail
 
 
 def test_reachable_efd_is_reported(conn):
