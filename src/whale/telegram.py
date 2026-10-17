@@ -195,7 +195,13 @@ def _context_lines(transactions: list[dict], contexts: dict[str, TickerStat]) ->
 
 
 def format_cluster(cluster: Cluster, window_days: int) -> str:
-    """Consensus alert: several members converging on one ticker."""
+    """Consensus alert: several members converging on one ticker.
+
+    The headline count is of members who cleared the bracket floor — the
+    number the alert actually fired on. Members below the floor are named on
+    their own line so the message is true to what was counted and still
+    shows the whole picture; the volume and trade count cover everyone.
+    """
     verb = "bought" if cluster.direction == "buy" else "sold"
     vol = cluster.volume
     if vol.open_ended or vol.max_cents is None:
@@ -206,20 +212,33 @@ def format_cluster(cluster: Cluster, window_days: int) -> str:
             f"(mid {usd(vol.mid_cents)})"
         )
 
-    members = ", ".join(cluster.members)
-    parts = [
-        f"🔥 <b>CLUSTER ALERT — {esc(cluster.ticker)}</b>",
-        f"{cluster.politician_count} politicians {verb} in the last {window_days} days",
-        f"Volume {esc(vol_text)} · {cluster.trade_count} "
-        + ("buys" if cluster.direction == "buy" else "sells"),
-        esc(members),
-    ]
-    msg = "\n".join(parts)
+    headline = f"{cluster.politician_count} politicians {verb} in the last {window_days} days"
+    if cluster.member_floor_cents:
+        headline += f", each ≥{esc(usd(cluster.member_floor_cents))} by bracket floor"
+
+    def build(cap: int | None) -> str:
+        parts = [
+            f"🔥 <b>CLUSTER ALERT — {esc(cluster.ticker)}</b>",
+            headline,
+            f"Volume {esc(vol_text)} · {cluster.trade_count} "
+            + ("buys" if cluster.direction == "buy" else "sells"),
+            esc(_names(cluster.members, cap)),
+        ]
+        if cluster.below_floor:
+            parts.append(f"<i>+{len(cluster.below_floor)} more {verb} below that floor: "
+                         f"{esc(_names(cluster.below_floor, cap))}</i>")
+        return "\n".join(parts)
+
+    msg = build(None)
     if len(msg) > TELEGRAM_LIMIT:
-        keep = cluster.members[:10]
-        parts[-1] = esc(", ".join(keep)) + f" …+{len(cluster.members) - len(keep)} more"
-        msg = "\n".join(parts)
+        msg = build(10)
     return msg[:TELEGRAM_LIMIT]
+
+
+def _names(names: list[str], cap: int | None) -> str:
+    if cap is None or len(names) <= cap:
+        return ", ".join(names)
+    return ", ".join(names[:cap]) + f" …+{len(names) - cap} more"
 
 
 def format_unparsed(member: str, party: str | None, state: str | None,

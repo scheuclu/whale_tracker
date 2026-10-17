@@ -18,6 +18,7 @@ import sqlite3
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
+from .amounts import usd
 from .config import AlertSettings, InsiderSettings
 from .db import COUNTED_STATUSES
 
@@ -78,6 +79,11 @@ class TickerStat:
     volume: Volume = field(default_factory=Volume)
     buy_volume: Volume = field(default_factory=Volume)
     sell_volume: Volume = field(default_factory=Volume)
+    # Per member, the sum of what their rows prove: the bracket floor, or the
+    # exact figure when one was filed. Never the midpoint — that is an
+    # estimate, and it must not decide who counts as a cluster participant.
+    buy_floors: dict[str, int] = field(default_factory=dict)
+    sell_floors: dict[str, int] = field(default_factory=dict)
     last_tx_date: str | None = None
 
     @property
@@ -87,6 +93,13 @@ class TickerStat:
         if self.sell_volume.mid_cents > self.buy_volume.mid_cents:
             return "sell"
         return "flat"
+
+
+def _floor_cents(lo: int | None, hi: int | None, exact: int | None) -> int:
+    """What a row proves was traded: the exact figure if filed, else the floor."""
+    if exact is not None:
+        return exact
+    return lo or 0
 
 
 def _window_start(days: int, today: date | None = None) -> str:
@@ -138,10 +151,12 @@ def ticker_stats(conn: sqlite3.Connection, window_days: int | None = None,
             s.buy_count += 1
             s.buy_politicians.add(member)
             s.buy_volume.add(*amounts)
+            s.buy_floors[member] = s.buy_floors.get(member, 0) + _floor_cents(*amounts)
         elif r["action"] in SELL_ACTIONS:
             s.sell_count += 1
             s.sell_politicians.add(member)
             s.sell_volume.add(*amounts)
+            s.sell_floors[member] = s.sell_floors.get(member, 0) + _floor_cents(*amounts)
 
         if r["tx_date"] and (s.last_tx_date is None or r["tx_date"] > s.last_tx_date):
             s.last_tx_date = r["tx_date"]
@@ -171,16 +186,35 @@ def ticker_context(conn: sqlite3.Connection, ticker: str, window_days: int = 30,
 class Cluster:
     ticker: str
     direction: str
+    # Members who cleared the per-member floor. `members` names them; the
+    # ones who traded the same way but below the floor are in `below_floor`,
+    # mentioned by the alert but never counted.
     politician_count: int
     trade_count: int
     members: list[str]
     volume: Volume
     reason: str
+    member_floor_cents: int = 0
+    below_floor: list[str] = field(default_factory=list)
 
 
 def find_clusters(conn: sqlite3.Connection, settings: AlertSettings,
                   today: date | None = None) -> list[Cluster]:
-    """Tickers crossing the participation or volume threshold in the window.
+    """Tickers where enough members converged with enough volume in the window.
+
+    Both thresholds must hold; they used to be alternatives, and 32 of the
+    first 33 alerts sent were noise. Participation alone is base rate: 83% of
+    equity-like rows are in the $1,001–$15,000 bracket and the most widely
+    held names collect ten or more distinct buyers a year regardless of any
+    event, so "3 members bought MSFT" is the normal state of MSFT. Volume
+    alone is one member's trade, which that filing's own message already
+    reports — a single member is never a cluster.
+
+    A member counts only if the floors of their brackets in the window sum to
+    `min_member_floor_usd`. Floors, not midpoints: the floor is what the
+    filing proves. The window's volume and trade count stay those of every
+    trade in that direction, so the alert describes the whole picture while
+    its headline number is the one it fired on.
 
     Only asset types configured as cluster-eligible are considered: members
     roll Treasury bills over constantly, and including them would bury real
@@ -188,27 +222,29 @@ def find_clusters(conn: sqlite3.Connection, settings: AlertSettings,
     """
     stats = ticker_stats(conn, settings.window_days,
                          asset_types=settings.cluster_asset_types, today=today)
+    floor = settings.min_member_floor_cents
     clusters = []
     for s in stats.values():
-        for direction, members, count, volume in (
-            ("buy", s.buy_politicians, s.buy_count, s.buy_volume),
-            ("sell", s.sell_politicians, s.sell_count, s.sell_volume),
+        for direction, members, floors, count, volume in (
+            ("buy", s.buy_politicians, s.buy_floors, s.buy_count, s.buy_volume),
+            ("sell", s.sell_politicians, s.sell_floors, s.sell_count, s.sell_volume),
         ):
-            reasons = []
-            if len(members) >= settings.min_politicians:
-                reasons.append(f"{len(members)} members")
-            if volume.mid_cents >= settings.min_volume_cents:
-                reasons.append("volume")
-            if not reasons:
+            counted = sorted(m for m in members if floors.get(m, 0) >= floor)
+            if len(counted) < settings.min_politicians:
+                continue
+            if volume.mid_cents < settings.min_volume_cents:
                 continue
             clusters.append(Cluster(
                 ticker=s.ticker,
                 direction=direction,
-                politician_count=len(members),
+                politician_count=len(counted),
                 trade_count=count,
-                members=sorted(members),
+                members=counted,
                 volume=volume,
-                reason=" + ".join(reasons),
+                reason=(f"{len(counted)} members at ≥{usd(floor)} floor"
+                        f" + est. volume {usd(volume.mid_cents)}"),
+                member_floor_cents=floor,
+                below_floor=sorted(members.difference(counted)),
             ))
     clusters.sort(key=lambda c: (c.politician_count, c.volume.mid_cents), reverse=True)
     return clusters
@@ -218,16 +254,27 @@ CLUSTER_KIND = "cluster"
 INSIDER_CLUSTER_KIND = "insider_cluster"
 
 
-def is_new_cluster(conn: sqlite3.Connection, cluster: Cluster) -> bool:
+def is_new_cluster(conn: sqlite3.Connection, cluster: Cluster,
+                   today: date | None = None) -> bool:
     """Whether this cluster is worth sending.
 
     Re-firing on every run for an unchanged cluster would be spam, so a
     (ticker, direction) only alerts again once more members have joined it.
+
+    Only while the last alert's own window still overlaps today's: an alert
+    fired at T with window W described trades in [T-W, T], and once today is
+    past T+W those trades cannot be the convergence being looked at now. Left
+    unbounded, the count recorded then would suppress a smaller, genuine
+    cluster a year later — and the counts recorded before the per-member
+    floor existed are inflated by exactly the members it no longer counts.
     """
     from . import db as _db
 
     previous = _db.last_alert(conn, cluster.ticker, cluster.direction, CLUSTER_KIND)
     if previous is None:
+        return True
+    fired = date.fromisoformat(previous["fired_at"][:10])
+    if (today or date.today()) > fired + timedelta(days=previous["window_days"]):
         return True
     return cluster.politician_count > previous["politician_count"]
 

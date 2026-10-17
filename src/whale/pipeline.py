@@ -479,8 +479,9 @@ def notify_clusters(conn: sqlite3.Connection, config: Config, dry_run: bool = Fa
         return 0
 
     sent = 0
-    for cluster in stats.find_clusters(conn, config.alerts):
-        if not stats.is_new_cluster(conn, cluster):
+    today = date.today()
+    for cluster in stats.find_clusters(conn, config.alerts, today=today):
+        if not stats.is_new_cluster(conn, cluster, today=today):
             continue
         text = telegram.format_cluster(cluster, config.alerts.window_days)
         if _deliver(config, text, dry_run) and not dry_run:
