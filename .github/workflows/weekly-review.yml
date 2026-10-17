@@ -6,15 +6,22 @@ name: weekly-review
 # database, plus a digest of the poll workflow's runs and failure logs — and
 # only then handed to Claude. That keeps the run cheap and reproducible, and
 # means the checks are unit-tested rather than re-derived by a model each week.
+#
+# Without ANTHROPIC_API_KEY there is no analysis, and the evidence is filed as
+# a GitHub issue ("Weekly review <date>") instead, so the week's record lands
+# where a person reads it. Five green runs whose only output was an artifact
+# nobody opened are why (#17).
 
 on:
   schedule:
-    # Mondays 07:00 UTC — after the weekend's filings have been ingested.
+    # Mondays, 07:00 UTC at the earliest. GitHub queues scheduled runs and
+    # delivers them late under load — the first five started between 13:45
+    # and 16:35 UTC — so the hour is a lower bound, not a promise.
     - cron: "0 7 * * 1"
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Produce the evidence and the analysis, but open no PR"
+        description: "Produce the evidence and the analysis, but open no PR or issue"
         type: boolean
         default: false
 
@@ -46,8 +53,8 @@ jobs:
 
       - run: pip install -e ".[dev]"
 
-      # Fail loudly and early rather than opaquely at the Claude step, and
-      # skip the rest instead of red-flagging the repo every Monday.
+      # Decide where the evidence goes: to Claude when the key exists, to a
+      # GitHub issue (last step) when it does not. Never to an artifact alone.
       - name: Check credentials
         id: creds
         env:
@@ -55,53 +62,84 @@ jobs:
         run: |
           if [ -z "$KEY" ]; then
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::ANTHROPIC_API_KEY is not set — the audit will run and be" \
-                 "uploaded as an artifact, but no analysis or PR will be produced."
+            echo "::warning::ANTHROPIC_API_KEY is not set — no analysis or PR this week;" \
+                 "the evidence is filed as a GitHub issue instead."
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Audit the data
+        id: audit
         run: python -m whale audit --out /tmp/audit.md
 
-      # Best-effort: a log-fetch hiccup must not cost us the data audit, which
-      # is the more valuable half of the evidence.
+      # If `gh run list` itself fails, this step fails and the job goes red: an
+      # unknown run history must never read as healthy. Five green runs hid
+      # exactly that behind continue-on-error (#17). Only the per-run log
+      # fetches further down are best-effort, because logs legitimately expire.
       - name: Digest the poll workflow's CI history
-        continue-on-error: true
+        id: digest
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -uo pipefail
+          set -euo pipefail
           OUT=/tmp/ci.md
           echo "# poll workflow — last 7 days" > "$OUT"
           echo >> "$OUT"
 
-          gh run list --workflow=poll.yml --limit 60 \
-            --json databaseId,conclusion,createdAt,durationMs,event \
+          # No `durationMs`: gh exposes no such field. Duration is
+          # updatedAt − startedAt, which is what the UI shows for a finished run.
+          gh run list --workflow=poll.yml --limit 100 \
+            --json databaseId,conclusion,createdAt,startedAt,updatedAt,event \
             > /tmp/runs.json
 
           python - <<'PY' >> "$OUT"
-          import json, datetime
+          import datetime, json, statistics
+
+          def ts(s):
+              return datetime.datetime.fromisoformat(s.replace("Z", "+00:00"))
+
           runs = json.load(open("/tmp/runs.json"))
-          cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=7)
-          recent = [r for r in runs
-                    if datetime.datetime.fromisoformat(r["createdAt"].replace("Z", "+00:00")) > cutoff]
+          now = datetime.datetime.now(datetime.timezone.utc)
+          cutoff = now - datetime.timedelta(days=7)
+          recent = [r for r in runs if ts(r["createdAt"]) > cutoff]
           by = {}
           for r in recent:
-              by[r["conclusion"] or "in_progress"] = by.get(r["conclusion"] or "in_progress", 0) + 1
-          print(f"- runs in window: **{len(recent)}** (expected ~56 at every 3h)")
+              k = r["conclusion"] or "in_progress"
+              by[k] = by.get(k, 0) + 1
+          capped = " (list capped — the window may hold more)" if len(recent) == len(runs) else ""
+          print(f"- runs in window: **{len(recent)}**{capped}")
           print(f"- outcomes: {by or 'none'}")
-          durations = [r["durationMs"] / 1000 for r in recent if r.get("durationMs")]
+
+          # The cron asks for every 3 h, but GitHub delivers scheduled runs late
+          # and unevenly — a 5.3 h median gap over Sep–Oct 2026 — so report the
+          # measured cadence rather than a count against the cron's promise.
+          # The longest gap is the one that matters: past ~2 days the EDGAR
+          # feed's memory is exceeded and filings are missed.
+          sched = sorted(ts(r["createdAt"]) for r in recent if r["event"] == "schedule")
+          gaps = [(b - a).total_seconds() / 3600 for a, b in zip(sched, sched[1:])]
+          if gaps:
+              print(f"- scheduled runs: {len(sched)}; gap between them: "
+                    f"median {statistics.median(gaps):.1f} h, max {max(gaps):.1f} h "
+                    f"(cron is every 3 h; GitHub delivers it late)")
+              print(f"- hours since the last scheduled run: "
+                    f"{(now - sched[-1]).total_seconds() / 3600:.1f}")
+          else:
+              print(f"- scheduled runs: {len(sched)} — too few to measure the cadence")
+
+          durations = sorted((ts(r["updatedAt"]) - ts(r["startedAt"])).total_seconds()
+                             for r in recent
+                             if r["conclusion"] and r.get("startedAt") and r.get("updatedAt"))
           if durations:
-              durations.sort()
-              print(f"- duration: median {durations[len(durations)//2]:.0f}s, "
-                    f"max {durations[-1]:.0f}s")
+              print(f"- duration (startedAt → updatedAt): "
+                    f"median {statistics.median(durations):.0f}s, max {max(durations):.0f}s")
           failed = [r["databaseId"] for r in recent if r["conclusion"] == "failure"]
           print(f"- failed run ids: {failed or 'none'}")
-          open("/tmp/failed_ids.txt", "w").write("\n".join(str(i) for i in failed))
+          # Trailing newline on every line, or `read` below drops the last id.
+          open("/tmp/failed_ids.txt", "w").write("".join(f"{i}\n" for i in failed))
           PY
 
           # Failure logs, trimmed — full logs are far too long to reason over.
+          # Best-effort per run: logs expire, and a fetch can hiccup.
           if [ -s /tmp/failed_ids.txt ]; then
             echo >> "$OUT"; echo "## Failure logs" >> "$OUT"
             while read -r id; do
@@ -115,25 +153,44 @@ jobs:
           fi
 
           # A run can succeed and still do nothing useful. Warnings in a green
-          # run are the most under-watched signal in the pipeline.
-          echo >> "$OUT"; echo "## Warnings in successful runs" >> "$OUT"
+          # run are the most under-watched signal in the pipeline. A log that
+          # could not be fetched is reported as such, never as "(none)".
+          echo >> "$OUT"; echo "## Warnings in the latest successful run" >> "$OUT"
           echo '```' >> "$OUT"
           LATEST=$(jq -r '[.[] | select(.conclusion=="success")][0].databaseId' /tmp/runs.json)
-          if [ "$LATEST" != "null" ]; then
-            gh run view "$LATEST" --log 2>/dev/null \
-              | grep -iE "warning|error|exception|traceback|failed|skipping" \
+          if [ "$LATEST" = "null" ]; then
+            echo "(no successful run in the list)" >> "$OUT"
+          elif gh run view "$LATEST" --log > /tmp/latest.log 2>/dev/null; then
+            echo "run $LATEST:" >> "$OUT"
+            grep -iE "warning|error|exception|traceback|failed|skipping" /tmp/latest.log \
               | grep -viE "no DB changes" | tail -40 >> "$OUT" || echo "(none)" >> "$OUT"
+          else
+            echo "(log for run $LATEST unavailable — may have expired)" >> "$OUT"
           fi
           echo '```' >> "$OUT"
 
           cat "$OUT"
 
+      # Runs even when a step above failed — the audit is the more valuable
+      # half and must not be lost to a digest failure — but a half that did not
+      # complete is written up as unknown, never left blank or partial.
+      # `!cancelled()` rather than `always()` so a cancelled run posts nothing.
       - name: Combine the evidence
+        if: ${{ !cancelled() }}
+        env:
+          AUDIT_OUTCOME: ${{ steps.audit.outcome }}
+          DIGEST_OUTCOME: ${{ steps.digest.outcome }}
         run: |
-          [ -f /tmp/ci.md ] || echo "# poll workflow
-
-          CI digest unavailable this run — treat the pipeline's run history as
-          unknown rather than healthy." > /tmp/ci.md
+          if [ "$AUDIT_OUTCOME" != "success" ]; then
+            printf '%s\n' "# data audit" "" \
+              "Audit unavailable this run (step outcome: $AUDIT_OUTCOME) — treat the" \
+              "data as unchecked rather than clean. See the run log." > /tmp/audit.md
+          fi
+          if [ "$DIGEST_OUTCOME" != "success" ]; then
+            printf '%s\n' "# poll workflow" "" \
+              "CI digest unavailable this run (step outcome: $DIGEST_OUTCOME) — treat" \
+              "the pipeline's run history as unknown rather than healthy. See the run log." > /tmp/ci.md
+          fi
           {
             cat /tmp/audit.md
             echo; echo "---"; echo
@@ -141,15 +198,16 @@ jobs:
           } > /tmp/evidence.md
           wc -c /tmp/evidence.md
 
-      # Keep the evidence even when no analysis runs — it is the week's record.
+      # Keep the evidence whatever else happens — it is the week's record.
       - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
         with:
           name: weekly-evidence
           path: /tmp/evidence.md
           retention-days: 90
 
       - uses: anthropics/claude-code-action@v1
-        if: steps.creds.outputs.configured == 'true'
+        if: ${{ !cancelled() && steps.creds.outputs.configured == 'true' }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude_args: |
@@ -235,3 +293,72 @@ jobs:
             checked and why it was fine — the run log is the record.
 
             ${{ inputs.dry_run && 'DRY RUN: analyse and report, but do not create a branch or PR.' || '' }}
+
+      # No key, no analysis — but never silence. File the evidence where a
+      # person will see it: a new issue each week, or a comment on an earlier
+      # week's issue while that is still open, so an unreviewed week is not
+      # buried under the next one. Uses GITHUB_TOKEN (`issues: write` above).
+      - name: File the evidence as a GitHub issue
+        if: ${{ !cancelled() && steps.creds.outputs.configured != 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          JOB_STATUS: ${{ job.status }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          TODAY=$(date -u +%F)
+          TITLE="Weekly review $TODAY"
+          {
+            echo "## Weekly review $TODAY"
+            echo
+            echo "Evidence gathered by the \`weekly-review\` workflow ([run]($RUN_URL); job status at filing time: \`$JOB_STATUS\`)."
+            echo
+            echo "\`ANTHROPIC_API_KEY\` is not configured, so nothing has analysed this. A person needs to read it, decide whether anything is actually wrong, and close the issue. While it stays open, later weeks are appended as comments."
+            echo
+            cat /tmp/evidence.md
+          } > /tmp/issue.md
+
+          # GitHub rejects bodies over 65,536 characters. Cut, and say so — the
+          # complete evidence is the artifact uploaded above. The fence before
+          # the note closes a code block the cut may have landed inside.
+          LIMIT=60000
+          if [ "$(wc -c < /tmp/issue.md)" -gt "$LIMIT" ]; then
+            head -c "$LIMIT" /tmp/issue.md > /tmp/issue.cut
+            printf '\n```\n\n**Truncated at %s bytes** — the complete evidence is the `weekly-evidence` artifact on the run.\n' \
+              "$LIMIT" >> /tmp/issue.cut
+            mv /tmp/issue.cut /tmp/issue.md
+          fi
+
+          # An open "Weekly review YYYY-MM-DD" from an earlier week takes this
+          # week's evidence as a comment. The pattern is strict on purpose: a
+          # search on the prefix alone also matches issues *about* the review
+          # (#17 is one), and the oldest open one wins so comments stay in order.
+          EXISTING=$(gh issue list --state open --limit 100 --search 'in:title "Weekly review"' \
+            --json number,title \
+            --jq '[.[] | select(.title | test("^Weekly review [0-9]{4}-[0-9]{2}-[0-9]{2}$"))]
+                  | sort_by(.number) | first | .number // empty')
+
+          # Label only if the label exists; never create one.
+          LABEL=""
+          if gh label list --limit 100 --json name --jq '.[].name' | grep -qx question; then
+            LABEL=question
+          fi
+
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "DRY RUN — filing nothing. Would run:"
+            if [ -n "$EXISTING" ]; then
+              echo "  gh issue comment $EXISTING --body-file /tmp/issue.md"
+            else
+              echo "  gh issue create --title \"$TITLE\" --body-file /tmp/issue.md ${LABEL:+--label $LABEL}"
+            fi
+            echo "with this body:"
+            cat /tmp/issue.md
+          elif [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body-file /tmp/issue.md
+            echo "::notice::Appended this week's evidence to the still-open issue #$EXISTING"
+          else
+            URL=$(gh issue create --title "$TITLE" --body-file /tmp/issue.md ${LABEL:+--label "$LABEL"})
+            echo "::notice::Filed $URL"
+          fi
