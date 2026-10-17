@@ -30,6 +30,13 @@ ACTION_BY_CODE = {"P": "purchase", "S": "sale"}
 # What filers type into issuerTradingSymbol when there is no ticker.
 TICKER_PLACEHOLDERS = frozenset({"", "NONE", "N/A", "NA", "-", "--", "NULL"})
 
+# Some filers list every share class in issuerTradingSymbol ("HEI, HEI.A",
+# "LEN, LEN.B", "GEF, GEF-B"). The first symbol is the ticker; the verbatim
+# value lives in ticker_as_filed. Split on these, never on a colon: an
+# exchange-prefixed "ASX:LNW" is one symbol. Only split, never validate — the
+# field has deliberately no shape check (CLAUDE.md).
+_TICKER_SEPARATORS = re.compile(r"[,/\s]+")
+
 _ACCEPTED_RE = re.compile(r"<ACCEPTANCE-DATETIME>\s*(\d{14})|ACCEPTANCE-DATETIME:\s*(\d{14})")
 _DOCUMENT_RE = re.compile(r"<DOCUMENT>(.*?)</DOCUMENT>", re.S)
 _XML_RE = re.compile(r"<XML>(.*?)</XML>", re.S)
@@ -291,9 +298,16 @@ def _decimal(text: str | None) -> Decimal | None:
 
 
 def normalize_ticker(raw: str | None) -> str | None:
-    """Case and whitespace only; class-share punctuation is left as filed."""
+    """Case, whitespace, and the first symbol of a multi-symbol value.
+
+    Class-share punctuation within a symbol (BRK.B, GEF-B) is left as filed.
+    """
     sym = (raw or "").strip().upper()
-    return None if sym in TICKER_PLACEHOLDERS else sym
+    if sym in TICKER_PLACEHOLDERS:  # whole-string first: "N/A" must not split into "N"
+        return None
+    parts = [p for p in _TICKER_SEPARATORS.split(sym) if p]
+    first = parts[0] if parts else ""
+    return None if first in TICKER_PLACEHOLDERS else first
 
 
 def open_market(txs: list[Transaction]) -> list[Transaction]:

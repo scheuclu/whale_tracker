@@ -35,7 +35,7 @@ from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS politicians (
@@ -139,8 +139,8 @@ CREATE TABLE IF NOT EXISTS insider_filings (
   form_type TEXT NOT NULL,             -- '4' only for now; kept for 4/A, 3, 5
   issuer_cik TEXT,                     -- NULL only on a 'failed' row with an unreadable header
   issuer_name TEXT,
-  ticker TEXT,                         -- normalised issuerTradingSymbol; NULL for NONE / N/A / blank
-  ticker_as_filed TEXT,                -- verbatim
+  ticker TEXT,                         -- first symbol of issuerTradingSymbol, upper-cased; NULL for NONE / N/A / blank
+  ticker_as_filed TEXT,                -- verbatim ("HEI, HEI.A" stays whole here)
   period_of_report TEXT,
   -- FILED AS OF DATE. Named filing_date so the disclosure-delay helpers apply.
   filing_date TEXT NOT NULL,
@@ -247,6 +247,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
             from . import insiders
 
             insiders.recompute_implausible(conn)
+    if version < 5:
+        # Multi-symbol tickers (#21): re-derive `ticker` from the verbatim
+        # value so "HEI, HEI.A" keys as HEI. The cluster-dedupe rows keyed on
+        # the old string follow it, or the next run would re-send a
+        # convergence it has already reported.
+        _rederive_insider_tickers(conn)
     if version < SCHEMA_VERSION:
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         conn.commit()
@@ -265,6 +271,29 @@ def _add_column(conn: sqlite3.Connection, table: str, definition: str) -> bool:
         return False
     conn.execute(f"ALTER TABLE {table} ADD COLUMN {definition}")
     return True
+
+
+def _rederive_insider_tickers(conn: sqlite3.Connection) -> int:
+    """Recompute `insider_filings.ticker` from `ticker_as_filed`; returns how
+    many filings changed. Insider-cluster alert rows keyed on a changed
+    ticker are re-keyed too."""
+    from .form4 import normalize_ticker
+    from .stats import INSIDER_CLUSTER_KIND
+
+    rows = conn.execute(
+        "SELECT id, ticker, ticker_as_filed FROM insider_filings WHERE ticker_as_filed IS NOT NULL"
+    ).fetchall()
+    changed = 0
+    for filing_id, old, as_filed in rows:
+        new = normalize_ticker(as_filed)
+        if new == old:
+            continue
+        conn.execute("UPDATE insider_filings SET ticker = ? WHERE id = ?", (new, filing_id))
+        if old and new:
+            conn.execute("UPDATE alerts SET ticker = ? WHERE kind = ? AND ticker = ?",
+                         (new, INSIDER_CLUSTER_KIND, old))
+        changed += 1
+    return changed
 
 
 # --- politicians ------------------------------------------------------------
