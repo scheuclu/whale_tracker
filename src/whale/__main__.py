@@ -41,6 +41,8 @@ def main(argv: list[str] | None = None) -> int:
         "backfill", help="parse already-seen filings into the DB without notifying")
     p_backfill.add_argument("--year", type=int, help="limit to one filing year")
     p_backfill.add_argument("--limit", type=int, help="max filings to parse")
+    p_backfill.add_argument("--chamber", choices=("house", "senate", "all"), default="all",
+                            help="which chamber's indexed filings to parse (default: all)")
 
     p_tickers = sub.add_parser("tickers", help="ticker leaderboard")
     p_tickers.add_argument("--since", type=_parse_since, default=None, metavar="30d",
@@ -135,7 +137,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "backfill":
         from . import pipeline
 
-        count = pipeline.backfill(config, args.year, args.limit)
+        count = pipeline.backfill(config, args.year, args.limit, args.chamber)
         print(f"parsed {count} filing(s) into the knowledge base (no notifications sent)")
         return 0
 

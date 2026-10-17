@@ -12,7 +12,8 @@ import logging
 import sqlite3
 from datetime import date
 
-from . import db, house, insider_alerts, insiders, roster, senate, stats, telegram
+from . import (db, house, insider_alerts, insiders, roster, senate, senate_ptr, stats,
+               telegram)
 from .amounts import parse_amount
 from .config import Config
 from .ptr import ParsedFiling, ScannedFilingError, parse_pdf
@@ -120,7 +121,7 @@ def sync(conn: sqlite3.Connection, config: Config) -> int:
         conn.commit()
 
     if config.senate_enabled:
-        _sync_senate(conn, config)
+        new_count += _sync_senate(conn, config)
 
     log.info("sync: %d new filing(s) queued", new_count)
     return new_count
@@ -147,39 +148,110 @@ def _record_age_cutoff(conn: sqlite3.Connection, hits: list[house.IndexEntry]) -
     db.set_state(conn, AGE_CUTOFF_STATE, json.dumps(state, sort_keys=True))
 
 
-def _sync_senate(conn: sqlite3.Connection, config: Config) -> None:
-    """Best-effort. Senate eFD blocks datacenter IPs; a block is not an error.
+def _sync_senate(conn: sqlite3.Connection, config: Config,
+                 today: date | None = None) -> int:
+    """Best-effort: eFD refusing or failing is recorded, never raised.
 
     `senate.sync` never raises: it classifies the outcome into the vocabulary
     `sync_state.senate_status` stores and `audit.check_senate` reads, so a
-    failure on our side cannot be filed under the known block.
+    failure on our side cannot be filed under a block.
+
+    Filings queue exactly as House ones do: `new` inside
+    `ingest.max_filing_age_days` — the watchlist bypasses the cutoff for the
+    same reason it does for the House — and `seen_skipped` otherwise, for
+    `backfill` to parse as history. eFD prints its dates MM/DD/YYYY; they are
+    stored ISO like the House's, and rows indexed before this parser existed
+    are brought into line first (#40). Returns the number queued as `new`.
     """
+    _normalise_senate_rows(conn)
     result = senate.sync(config.senate_proxy_url)
     db.set_state(conn, "senate_status", result.status)
     if result.kind == senate.STATUS_BLOCKED:
-        log.info("senate eFD unavailable (%s); House-only this run", result.status)
+        log.warning("senate eFD refused the session (%s); no Senate filings this run",
+                    result.status)
         conn.commit()
-        return
+        return 0
     if result.kind != senate.STATUS_OK:
         log.warning("senate eFD not reached: %s", result.status)
         conn.commit()
-        return
+        return 0
 
-    # Senate PTRs are HTML reports, not the House's PDF template, so they need
-    # their own parser. Recording them keeps the queue ready for that work.
+    # As for the House: on the first sight of the Senate the cutoff is holding
+    # back history, which is its job; afterwards a filing already older than
+    # the cutoff is one eFD listed late, and it is stored as history without
+    # ever being announced, so say so in the log.
+    first_sight = conn.execute(
+        "SELECT 1 FROM filings WHERE chamber = 'senate' LIMIT 1").fetchone() is None
     matcher = roster.Matcher(conn)
+    new_count = 0
     for f in result.filings:
         if db.filing_exists(conn, "senate", f.doc_id):
             continue
-        member = matcher.match(f"{f.first} {f.last}", None, "senate")
+        # eFD prints no state on the search row or the report page; the roster
+        # resolves a senator by surname and chamber, which is unique in practice.
+        name = f"{f.first} {f.last}".strip()
+        member = matcher.match(name, None, "senate")
+        filing_date = senate.iso_date(f.filed_date)
+        recent = house.is_recent(filing_date, config.ingest.max_filing_age_days, today=today)
+        if not recent and config.watchlist.match(
+                member["bioguide_id"] if member else None, name):
+            recent = True
+        elif not recent and not first_sight:
+            log.warning(
+                "senate filing %s (%s, filed %s) is older than %d days on first sight; "
+                "recorded as history, not notified",
+                f.doc_id, name, filing_date, config.ingest.max_filing_age_days)
         db.insert_filing(
             conn, chamber="senate", doc_id=f.doc_id,
             politician_id=member["id"] if member else None,
-            filer_name=f"{f.first} {f.last}".strip(), state_district=None,
-            filing_type="P", filing_date=f.filed_date, year=0, pdf_url=f.url,
-            status="seen_skipped",
+            # The state comes from the roster, so the alert can say "(R-AL)"
+            # the way a House filing's Clerk-supplied "AL01" lets it.
+            filer_name=name, state_district=member["state"] if member else None,
+            filing_type="P", filing_date=filing_date,
+            year=int(filing_date[:4]) if filing_date else 0, pdf_url=f.url,
+            status="new" if recent else "seen_skipped",
         )
+        new_count += recent
     conn.commit()
+    log.info("senate: %d new filing(s) queued", new_count)
+    return new_count
+
+
+def _normalise_senate_rows(conn: sqlite3.Connection) -> int:
+    """Bring Senate rows indexed before the parser existed into line.
+
+    The first hundred were stored with eFD's MM/DD/YYYY `filing_date`,
+    `year = 0` and no state. Every date comparison downstream — the age
+    cutoff, the disclosure delay, the dashboard's ordering — assumes ISO, and
+    the alert header reads the state off the filing, so both are filled here
+    (the state from the roster row the filing already matched). Idempotent:
+    nothing matches once converted, which is why this runs on every sync and
+    backfill rather than as a schema bump (#40).
+    """
+    rows = conn.execute(
+        "SELECT id, filing_date FROM filings WHERE chamber = 'senate' "
+        "AND (filing_date LIKE '%/%' OR year = 0)"
+    ).fetchall()
+    fixed = 0
+    for row in rows:
+        iso = senate.iso_date(row["filing_date"])
+        if not iso:
+            continue
+        conn.execute(
+            "UPDATE filings SET filing_date = ?, year = ?, updated_at = ? WHERE id = ?",
+            (iso, int(iso[:4]), db.now_iso(), row["id"]))
+        fixed += 1
+    fixed += conn.execute(
+        """UPDATE filings
+           SET state_district = (SELECT p.state FROM politicians p WHERE p.id = filings.politician_id)
+           WHERE chamber = 'senate' AND politician_id IS NOT NULL
+             AND (state_district IS NULL OR state_district = '')
+             AND (SELECT p.state FROM politicians p WHERE p.id = filings.politician_id) IS NOT NULL"""
+    ).rowcount
+    if fixed:
+        conn.commit()
+        log.info("senate: normalised %d filing row(s) (ISO dates, state from the roster)", fixed)
+    return fixed
 
 
 def _sync_insiders(conn: sqlite3.Connection, config: Config,
@@ -374,12 +446,18 @@ def parse_pending(conn: sqlite3.Connection, config: Config,
     `silent` marks everything it touches as already notified, which is what
     backfill needs: history should populate the statistics without replaying
     months of filings into Telegram.
-    """
-    filings = [f for f in db.filings_by_status(conn, *statuses) if f["chamber"] == "house"]
-    if limit:
-        filings = filings[:limit]
 
-    done = 0
+    House filings are PDFs from the Clerk; Senate filings are eFD report pages
+    and take `_parse_senate_filings`. Both land in the same `transactions`
+    table in the same vocabulary, so everything after this step is shared.
+    """
+    queued = db.filings_by_status(conn, *statuses)
+    if limit:
+        queued = queued[:limit]
+    done = _parse_senate_filings(conn, config, [f for f in queued if f["chamber"] == "senate"],
+                                 target_status, silent)
+    filings = [f for f in queued if f["chamber"] == "house"]
+
     for filing in filings:
         try:
             pdf_bytes = house.fetch_pdf(filing["pdf_url"])
@@ -457,6 +535,79 @@ def retry_scanned(conn: sqlite3.Connection, config: Config) -> int:
     if rows:
         log.info("vision available: re-queued %d scanned filing(s)", len(rows))
     return len(rows)
+
+
+def _parse_senate_filings(conn: sqlite3.Connection, config: Config, filings: list,
+                          target_status: str, silent: bool) -> int:
+    """The Senate half of `parse_pending`: eFD report pages instead of PDFs.
+
+    Paper filings are told apart by URL and never fetched: eFD serves them as
+    page images, the same problem as a House paper PTR, so they take the same
+    path — `failed`, reported once with a link, never guessed (#1). They are
+    settled first, so eFD's availability cannot delay a classification that
+    needs no network. One session then serves every electronic filing of the
+    run at eFD's pace of one request a second; if eFD refuses the session,
+    the rest stay queued for the next run, exactly like a House download
+    failure. Nothing here raises.
+    """
+    done = 0
+    for filing in filings:
+        if not senate.is_paper_url(filing["pdf_url"]):
+            continue
+        db.set_status(conn, filing["id"], "failed",
+                      "paper filing (scanned images on eFD; not transcribed)", "efd_paper")
+        if silent:
+            db.mark_notified(conn, filing["id"])
+        conn.commit()
+        log.info("senate filing %s is a paper filing", filing["doc_id"])
+
+    electronic = [f for f in filings if not senate.is_paper_url(f["pdf_url"])]
+    session: senate.Session | None = None
+    try:
+        for index, filing in enumerate(electronic):
+            if session is None:
+                session = senate.Session(config.senate_proxy_url)
+                try:
+                    session.open()
+                except Exception as exc:
+                    session = None
+                    log.warning("senate eFD session not opened (%s: %s); %d filing(s) left queued",
+                                type(exc).__name__, exc, len(electronic) - index)
+                    return done
+
+            try:
+                page = session.get_report(filing["pdf_url"])
+            except senate.SenateBlocked as exc:
+                log.warning("senate eFD refused %s (%s); %d filing(s) left queued",
+                            filing["doc_id"], exc, len(electronic) - index)
+                return done
+            except Exception as exc:
+                # Transient: leave the status alone so the next run retries.
+                log.warning("senate report download failed for %s: %s", filing["doc_id"], exc)
+                continue
+
+            try:
+                parsed = senate_ptr.parse_report(page)
+            except Exception as exc:
+                db.set_status(conn, filing["id"], "failed", f"parse error: {exc}", "error")
+                if silent:
+                    db.mark_notified(conn, filing["id"])
+                conn.commit()
+                log.exception("senate parse failed for %s", filing["doc_id"])
+                continue
+
+            rows = [_transaction_row(t) for t in parsed.transactions]
+            db.replace_transactions(conn, filing["id"], filing["politician_id"], rows)
+            db.set_status(conn, filing["id"], target_status, None, "efd_html")
+            if silent:
+                db.mark_notified(conn, filing["id"])
+            conn.commit()
+            done += 1
+            log.info("parsed %s (efd_html): %d transaction(s)", filing["doc_id"], len(rows))
+    finally:
+        if session is not None:
+            session.close()
+    return done
 
 
 def _parse_bytes(pdf_bytes: bytes, config: Config) -> tuple[ParsedFiling, str]:
@@ -571,9 +722,10 @@ def notify_pending(conn: sqlite3.Connection, config: Config, dry_run: bool = Fal
             sent += 1
         conn.commit()
 
-    # Filings we could not read are reported rather than silently dropped.
+    # Filings we could not read are reported rather than silently dropped. A
+    # Senate paper filing is the same case as a House scan: a link, once.
     for filing in db.filings_by_status(conn, "failed", unnotified_only=True):
-        if filing["parse_method"] not in ("scanned", "vision_failed", "error"):
+        if filing["parse_method"] not in ("scanned", "vision_failed", "error", "efd_paper"):
             continue
         text = telegram.format_unparsed(
             member=filing["member_name"] or filing["filer_name"],
@@ -684,16 +836,28 @@ def _district_of(filing) -> str | None:
 # --- backfill ---------------------------------------------------------------
 
 
-def backfill(config: Config, year: int | None, limit: int | None) -> int:
+BACKFILL_CHAMBERS = ("house", "senate", "all")
+
+
+def backfill(config: Config, year: int | None, limit: int | None,
+             chamber: str = "all") -> int:
     """Parse already-seen filings into the DB *without* notifying.
 
     Cluster alerts are meaningless against an empty database — "3 politicians
     bought NVDA" needs history to be true. This loads that history quietly.
+    Both chambers by default: the Senate filings indexed before their parser
+    existed are history too, and `year` applies to them once their dates are
+    normalised (#40).
     """
+    if chamber not in BACKFILL_CHAMBERS:
+        raise ValueError(f"chamber must be one of {BACKFILL_CHAMBERS}, not {chamber!r}")
     conn = db.connect(config.db_path)
     try:
-        sql = "SELECT id FROM filings WHERE status = 'seen_skipped' AND chamber = 'house'"
-        params: list = []
+        _normalise_senate_rows(conn)
+        chambers = ("house", "senate") if chamber == "all" else (chamber,)
+        marks = ", ".join("?" for _ in chambers)
+        sql = f"SELECT id FROM filings WHERE status = 'seen_skipped' AND chamber IN ({marks})"
+        params: list = list(chambers)
         if year:
             sql += " AND year = ?"
             params.append(year)

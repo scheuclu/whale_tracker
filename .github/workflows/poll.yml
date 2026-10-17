@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       backfill_year:
-        description: "Also parse this year's already-seen filings into the DB (no notifications). Blank = none."
+        description: "Also parse this year's already-seen filings (both chambers) into the DB (no notifications). Blank = none."
         default: ""
         required: false
       insider_backfill_from:
@@ -56,8 +56,9 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           # Optional: reads scanned paper filings (~11% of PTRs).
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          # Optional: sticky residential proxy for Senate eFD, which blocks
-          # GitHub runner IPs. Without it the run is House-only by design.
+          # Optional fallback. Senate eFD answers the runner directly (it
+          # geo-fences non-US addresses, not datacenters); set this to a
+          # sticky US proxy only if eFD ever starts refusing the runner.
           SENATE_PROXY_URL: ${{ secrets.SENATE_PROXY_URL }}
           # SEC requires "<project> <contact e-mail>" on every EDGAR request and
           # serves an HTML refusal page without it. Unset = insider step skips.

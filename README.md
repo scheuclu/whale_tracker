@@ -14,9 +14,13 @@ dashboard on Vercel that reads it.
 A GitHub Actions workflow runs every 3 hours:
 
 1. Downloads the House Clerk's bulk disclosure index for the year
-   (`{YEAR}FD.zip`) and diffs its document IDs against the database.
-2. Fetches each new **Periodic Transaction Report** (PTR) PDF and parses the
-   transaction table by word coordinates.
+   (`{YEAR}FD.zip`) and diffs its document IDs against the database; then
+   searches the Senate's eFD site for recent periodic transaction reports
+   and does the same.
+2. Fetches each new **Periodic Transaction Report** (PTR): a House PTR is a
+   PDF, parsed by word coordinates; an electronic Senate PTR is an HTML page
+   on eFD, parsed from its transactions table into the same vocabulary.
+   Paper filings in either chamber are scans and are reported unreadable.
 3. Resolves the filer to a member — party, state, district — via
    `unitedstates/congress-legislators`.
 4. Stores everything in `data/trades.sqlite3` (committed back; it is both the
@@ -223,7 +227,7 @@ Settings → Secrets and variables → Actions:
 | `TELEGRAM_BOT_TOKEN` | yes | notifications |
 | `TELEGRAM_CHAT_ID` | yes | notifications |
 | `GEMINI_API_KEY` | no | reads scanned paper filings (~11% of PTRs) |
-| `SENATE_PROXY_URL` | no | sticky residential proxy for Senate eFD |
+| `SENATE_PROXY_URL` | no | fallback only: a sticky US proxy for Senate eFD, should it ever refuse the runner |
 | `EDGAR_USER_AGENT` | no | SEC Form 4 ingestion; SEC requires `whale-tracker you@example.com` — without it the insider step skips |
 
 ### 3. First run
@@ -244,20 +248,30 @@ true — so the history is loaded quietly before live alerting starts.
 
 ## Coverage and its limits
 
-**The House is fully covered. The Senate is not.**
+**Both chambers are covered; paper filings in either are not.**
 
 The House Clerk publishes an unauthenticated bulk index and the filed PDFs, so
-that half works reliably from anywhere, including CI. The Senate publishes no
-bulk file; its eFD search is the only route and sits behind Akamai bot
-protection that returns 403 to datacenter addresses regardless of headers. It
-also binds its mandatory "prohibition agreement" to the requesting IP, so a
-rotating proxy pool breaks the session even when individual requests get
-through.
+that half works from anywhere, including CI. The Senate publishes no bulk
+file; its eFD search is the only route. `src/whale/senate.py` accepts eFD's
+mandatory "prohibition agreement" once per session, searches for recent PTRs,
+and fetches each electronic report page, which `src/whale/senate_ptr.py`
+parses into the same transaction vocabulary as the House PDFs — so cluster
+alerts, the statistics and the dashboard treat a senator's trade exactly like
+a representative's.
 
-`src/whale/senate.py` implements the scraper and honours `SENATE_PROXY_URL`,
-but a block is treated as expected: the run logs it, records it in
-`sync_state`, continues with House data, and the dashboard states plainly that
-the figures are House-only.
+eFD answers GitHub's US runners directly: the first run after the empty-proxy
+fix (#16) recorded `ok: 100 filings seen` with no proxy. Its Akamai front
+does refuse non-US addresses (a 403 on the agreement page itself), which is
+where the earlier belief that it blocked datacenters came from. Should eFD
+ever refuse the runner, `SENATE_PROXY_URL` is honoured as a fallback and must
+be a *sticky* US proxy — the agreement is bound to the accepting IP, so a
+rotating pool breaks the session even when individual requests get through.
+A refusal or failure is recorded in `sync_state`, the run carries on with
+House data, and the weekly audit warns.
+
+Paper-filed Senate PTRs (`/search/view/paper/…`) are scanned page images.
+They take the same path as a House paper filing: stored as unreadable with a
+link, reported once, never transcribed.
 
 Third-party aggregators were evaluated as an alternative and rejected: the
 house/senate-stock-watcher S3 datasets return `AccessDenied`, the Capitol Trades
@@ -385,6 +399,12 @@ For House PTRs, where the risk is a mis-split PDF column: filings that parsed
 to zero transactions, amounts off the statutory bracket ladder, tickers that
 are really CUSIPs, filings stuck in the queue, unmatched filers, and a drop in
 rows-per-filing that would signal the Clerk changing the PDF template.
+
+For Senate PTRs, where the risk is eFD changing its page template: whether
+eFD answered at all (a refusal now warns, since the runner is normally
+answered), and how many Senate filings parsed, were paper, or failed to
+parse — the parser refuses to store an empty filing, so a template change
+shows up as parse errors with the pages to open.
 
 For SEC Form 4s, where the XML rarely fails to parse but *coverage* does: a
 throttled or stalled EDGAR sync (which reports success while storing nothing),

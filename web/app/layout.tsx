@@ -72,12 +72,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           </header>
           <main className="mx-auto max-w-6xl px-6 py-8 pb-28">{children}</main>
           <footer className="mx-auto max-w-6xl px-6 pb-10 text-xs leading-relaxed text-muted-foreground">
-            Sources: US House Clerk periodic transaction reports (STOCK Act
-            disclosures) and SEC EDGAR Form 4 filings. Members disclose an{" "}
+            Sources: US House Clerk and US Senate eFD periodic transaction reports
+            (STOCK Act disclosures) and SEC EDGAR Form 4 filings. Members disclose an{" "}
             <strong>amount bracket</strong>, not an exact figure — every congressional
             total here is a range, and any midpoint is an estimate. Insider values
             are <strong>shares × the reported price</strong>, which the filer may state
-            as a weighted average. Senate coverage is not currently available; see
+            as a weighted average. Paper filings in either chamber are not read; see
             Pipeline.
           </footer>
         </ThemeProvider>
