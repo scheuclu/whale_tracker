@@ -35,7 +35,10 @@ class AlertSettings:
 @dataclass
 class IngestSettings:
     years: list[int] = field(default_factory=lambda: [2026])
-    max_filing_age_days: int = 7
+    # 14, not 7: the Clerk's index lags the filing date by up to a week in the
+    # observed corpus, and a filing older than this on first sight is history,
+    # never announced. See config.yaml for the measurements.
+    max_filing_age_days: int = 14
 
 
 # What a rule may say. Anything else is a typo, and a typo that silently
@@ -318,7 +321,7 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
     i = raw.get("ingest") or {}
     ingest = IngestSettings(
         years=[int(y) for y in (i.get("years") or [2026])],
-        max_filing_age_days=int(i.get("max_filing_age_days", 7)),
+        max_filing_age_days=int(i.get("max_filing_age_days", 14)),
     )
 
     n = raw.get("insiders") or {}

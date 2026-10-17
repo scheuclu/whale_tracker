@@ -7,6 +7,7 @@ resumes cleanly on the next cron tick via the filing status state machine.
 from __future__ import annotations
 
 import io
+import json
 import logging
 import sqlite3
 from datetime import date
@@ -35,6 +36,16 @@ def run(config: Config, dry_run: bool = False) -> None:
 
 # --- sync -------------------------------------------------------------------
 
+# sync_state key: House filings that were already older than
+# `ingest.max_filing_age_days` when a run *after the first* first saw them.
+# JSON {count, last_doc_id, last_filing_date, last_seen_at}. On the first
+# sight of a year the cutoff is doing its job — holding back history — and
+# nothing is counted; afterwards every hit is a filing the Clerk published
+# later than the cutoff allows for, stored as history and never announced.
+# The audit reports the counter, so a Clerk slowdown is visible rather than
+# indistinguishable from first-run history.
+AGE_CUTOFF_STATE = "house_age_cutoff"
+
 
 def sync(conn: sqlite3.Connection, config: Config) -> int:
     """Refresh the roster and record newly filed disclosures."""
@@ -52,6 +63,12 @@ def sync(conn: sqlite3.Connection, config: Config) -> int:
         # On a first-ever run the whole year is unseen. Notifying about all of
         # it would flood Telegram, so only genuinely recent filings enter the
         # notify path; the rest are recorded for `backfill` to parse silently.
+        #
+        # Whether this is that first sight is decided per year, before any
+        # insert: a year newly added to ingest.years is expected to arrive as
+        # history, and must not read as a week of late Clerk publication.
+        first_sight = not _year_seen(conn, year)
+        cutoff_hits = []
         for entry in entries:
             if db.filing_exists(conn, "house", entry.doc_id):
                 continue
@@ -65,6 +82,17 @@ def sync(conn: sqlite3.Connection, config: Config) -> int:
                 # explicitly in config.yaml is the case it is not protecting
                 # against. Bounded by ingest.years, so it is that year at most.
                 recent = True
+            elif not recent and not first_sight:
+                # Not history: the Clerk published this later than the cutoff
+                # allows for. It is stored as seen_skipped and will never be
+                # announced, so say so where the run log and the audit can
+                # see it rather than letting it pass as first-run replay.
+                cutoff_hits.append(entry)
+                log.warning(
+                    "filing %s (%s, filed %s) is older than %d days on first sight; "
+                    "recorded as history, not notified",
+                    entry.doc_id, entry.filer_name, entry.filing_date,
+                    config.ingest.max_filing_age_days)
             db.insert_filing(
                 conn,
                 chamber="house",
@@ -79,6 +107,15 @@ def sync(conn: sqlite3.Connection, config: Config) -> int:
                 status="new" if recent else "seen_skipped",
             )
             new_count += recent
+        if cutoff_hits:
+            # Same transaction as the inserts, so a crash cannot leave filings
+            # recorded without the count that explains their status. A counter
+            # that cannot be updated must not stall the ingest it describes:
+            # the audit reports an unreadable one as `check_failed`.
+            try:
+                _record_age_cutoff(conn, cutoff_hits)
+            except Exception:
+                log.exception("could not update sync_state %r", AGE_CUTOFF_STATE)
         conn.commit()
 
     if config.senate_enabled:
@@ -86,6 +123,27 @@ def sync(conn: sqlite3.Connection, config: Config) -> int:
 
     log.info("sync: %d new filing(s) queued", new_count)
     return new_count
+
+
+def _year_seen(conn: sqlite3.Connection, year: int) -> bool:
+    """Whether any House filing from this index year is already recorded."""
+    return conn.execute(
+        "SELECT 1 FROM filings WHERE chamber = 'house' AND year = ? LIMIT 1", (year,)
+    ).fetchone() is not None
+
+
+def _record_age_cutoff(conn: sqlite3.Connection, hits: list[house.IndexEntry]) -> None:
+    """Add this run's cutoff hits to the running counter in sync_state."""
+    raw = db.get_state(conn, AGE_CUTOFF_STATE)
+    state = json.loads(raw) if raw else {}
+    last = hits[-1]
+    state = {
+        "count": int(state.get("count", 0)) + len(hits),
+        "last_doc_id": last.doc_id,
+        "last_filing_date": last.filing_date,
+        "last_seen_at": db.now_iso(),
+    }
+    db.set_state(conn, AGE_CUTOFF_STATE, json.dumps(state, sort_keys=True))
 
 
 def _sync_senate(conn: sqlite3.Connection, config: Config) -> None:

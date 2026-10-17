@@ -200,6 +200,67 @@ def check_unnotified_backlog(conn, today: date | None = None) -> list[Finding]:
     )]
 
 
+def check_house_age_cutoff(conn, today: date | None = None) -> list[Finding]:
+    """House filings the age cutoff filed as history on a run after the first.
+
+    `ingest.max_filing_age_days` exists to keep a first run from replaying a
+    year into Telegram. After that first run, a filing already older than the
+    cutoff on first sight means the Clerk published it later than the cutoff
+    allows for — and it was stored as `seen_skipped`, never to be announced.
+    `pipeline.sync` counts those into `sync_state`; this reports the counter.
+    A database where the cutoff has never bitten has no counter and produces
+    nothing here, so the check is silent on a healthy pipeline.
+    """
+    import json
+
+    from .db import get_state
+
+    raw = get_state(conn, "house_age_cutoff")
+    if raw is None:
+        return []
+    # A counter that no longer parses must surface as `check_failed`, not as a
+    # pass: json.loads raising is the intended behaviour.
+    state = json.loads(raw)
+    count = int(state["count"])
+    if not count:
+        return []
+
+    last_seen = str(state.get("last_seen_at") or "")
+    last_doc = state.get("last_doc_id")
+    evidence = []
+    if last_doc:
+        row = conn.execute(
+            "SELECT filer_name, filing_date, pdf_url FROM filings "
+            "WHERE chamber = 'house' AND doc_id = ?", (last_doc,)
+        ).fetchone()
+        evidence.append(
+            f"last hit: {last_doc}  {row['filer_name'] if row else '?'}  "
+            f"filed {state.get('last_filing_date')}  first seen {last_seen}  "
+            f"{row['pdf_url'] if row else ''}".rstrip())
+
+    week_ago = (today or date.today()) - timedelta(days=7)
+    if last_seen and date.fromisoformat(last_seen[:10]) >= week_ago:
+        return [Finding(
+            WARN, "house_age_cutoff_hits",
+            f"{count} House filing(s) have hit the age cutoff after the first run, "
+            f"most recently {last_seen[:10]}",
+            "A filing already older than `ingest.max_filing_age_days` when a "
+            "run after the first saw it was stored as history and will never "
+            "be announced. One in the last 7 days means the Clerk is publishing "
+            "later than the cutoff allows for: read the filing below by hand, "
+            "and if the lag persists raise the cutoff in config.yaml.",
+            evidence,
+        )]
+    return [Finding(
+        INFO, "house_age_cutoff_hits",
+        f"{count} House filing(s) have hit the age cutoff after the first run; "
+        "none in the last 7 days",
+        "Each was stored as history without a notification. The counter is "
+        "cumulative; it becomes a warning again the week it next grows.",
+        evidence,
+    )]
+
+
 def check_unmatched_filers(conn, today: date | None = None) -> list[Finding]:
     """Filings whose filer could not be resolved to a member of Congress."""
     rows = _rows(conn, """
@@ -651,6 +712,7 @@ CHECKS = (
     check_nonstandard_amount_brackets,
     check_stuck_filings,
     check_unnotified_backlog,
+    check_house_age_cutoff,
     check_missing_transaction_fields,
     check_ticker_sanity,
     check_unmatched_filers,
