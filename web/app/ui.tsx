@@ -83,7 +83,7 @@ function Pill({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium",
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11px] font-medium",
         tone
       )}
     >
@@ -141,7 +141,7 @@ export function TickerChip({
   if (!ticker) {
     return (
       <span
-        className="text-xs text-muted-foreground whitespace-nowrap"
+        className="text-xs text-muted-foreground"
         title={type ? ASSET_TYPE_LABEL[type] ?? type : undefined}
       >
         {type ? ASSET_TYPE_LABEL[type] ?? type : "no ticker"}
