@@ -35,7 +35,7 @@ from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 6
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS politicians (
@@ -139,8 +139,8 @@ CREATE TABLE IF NOT EXISTS insider_filings (
   form_type TEXT NOT NULL,             -- '4' only for now; kept for 4/A, 3, 5
   issuer_cik TEXT,                     -- NULL only on a 'failed' row with an unreadable header
   issuer_name TEXT,
-  ticker TEXT,                         -- normalised issuerTradingSymbol; NULL for NONE / N/A / blank
-  ticker_as_filed TEXT,                -- verbatim
+  ticker TEXT,                         -- first symbol of issuerTradingSymbol, upper-cased; NULL for NONE / N/A / blank
+  ticker_as_filed TEXT,                -- verbatim ("HEI, HEI.A" stays whole here)
   period_of_report TEXT,
   -- FILED AS OF DATE. Named filing_date so the disclosure-delay helpers apply.
   filing_date TEXT NOT NULL,
@@ -181,7 +181,8 @@ CREATE INDEX IF NOT EXISTS idx_insider_owners_cik ON insider_filing_owners(insid
 CREATE TABLE IF NOT EXISTS insider_transactions (
   id INTEGER PRIMARY KEY,
   filing_id INTEGER NOT NULL REFERENCES insider_filings(id) ON DELETE CASCADE,
-  tx_date TEXT,                        -- as filed
+  tx_date TEXT,                        -- as filed, except an offset-suffixed value is parsed to its date
+  tx_date_as_filed TEXT,               -- the verbatim value when tx_date was parsed out of it; NULL when identical
   deemed_execution_date TEXT,          -- as filed; starts the 2-day clock when present
   security_title TEXT,
   transaction_code TEXT NOT NULL,      -- 'P' | 'S'
@@ -200,7 +201,12 @@ CREATE TABLE IF NOT EXISTS insider_transactions (
   -- Derived once at ingest by stats.form4_is_late (2 business days, federal
   -- holidays excluded). NULL when the dates contradict each other. Read, never
   -- re-derived, by SQL.
-  late INTEGER
+  late INTEGER,
+  -- Derived once at ingest by stats.form4_is_implausible: 1 when the as-filed
+  -- value is beyond belief (a price cell holding the aggregate consideration),
+  -- 0 when judged plausible, NULL when there is no value to judge. The row
+  -- stays as filed; a flagged value is excluded from every total.
+  implausible INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_insider_tx_filing ON insider_transactions(filing_id);
 CREATE INDEX IF NOT EXISTS idx_insider_tx_date   ON insider_transactions(tx_date);
@@ -234,9 +240,69 @@ def _migrate(conn: sqlite3.Connection) -> None:
         # A fresh DB is version 0 and takes this step too, so the insider DDL
         # is not repeated in _DDL.
         conn.executescript(_INSIDER_DDL)
+    if version < 4:
+        # Implausible-value quarantine (#15). A fresh DB already has the
+        # column from the DDL; a version-3 DB gains it here and has it
+        # populated, so production needs no manual recompute.
+        if _add_column(conn, "insider_transactions", "implausible INTEGER"):
+            from . import insiders
+
+            insiders.recompute_implausible(conn)
+    if version < 5:
+        # Multi-symbol tickers (#21): re-derive `ticker` from the verbatim
+        # value so "HEI, HEI.A" keys as HEI. The cluster-dedupe rows keyed on
+        # the old string follow it, or the next run would re-send a
+        # convergence it has already reported.
+        _rederive_insider_tickers(conn)
+    if version < 6:
+        # Offset-suffixed trade dates (#20): "2026-09-08-05:00" is the 8th.
+        # Parse the stored rows the same way ingest now does and derive
+        # `late` for them, so the audit stops listing them every week.
+        if _add_column(conn, "insider_transactions", "tx_date_as_filed TEXT"):
+            from . import insiders
+
+            insiders.reparse_trade_dates(conn)
     if version < SCHEMA_VERSION:
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         conn.commit()
+
+
+def _add_column(conn: sqlite3.Connection, table: str, definition: str) -> bool:
+    """ALTER TABLE ... ADD COLUMN unless the DDL already created it.
+
+    Returns whether the column was added — i.e. whether existing rows need a
+    backfill. A fresh database gets every column from the DDL and has no
+    rows to populate.
+    """
+    name = definition.split()[0]
+    present = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+    if name in present:
+        return False
+    conn.execute(f"ALTER TABLE {table} ADD COLUMN {definition}")
+    return True
+
+
+def _rederive_insider_tickers(conn: sqlite3.Connection) -> int:
+    """Recompute `insider_filings.ticker` from `ticker_as_filed`; returns how
+    many filings changed. Insider-cluster alert rows keyed on a changed
+    ticker are re-keyed too."""
+    from .form4 import normalize_ticker
+    from .stats import INSIDER_CLUSTER_KIND
+
+    rows = conn.execute(
+        "SELECT id, ticker, ticker_as_filed FROM insider_filings WHERE ticker_as_filed IS NOT NULL"
+    ).fetchall()
+    changed = 0
+    for filing_id, old, as_filed in rows:
+        new = normalize_ticker(as_filed)
+        if new == old:
+            continue
+        conn.execute("UPDATE insider_filings SET ticker = ? WHERE id = ?", (new, filing_id))
+        if old and new:
+            conn.execute("UPDATE alerts SET ticker = ? WHERE kind = ? AND ticker = ?",
+                         (new, INSIDER_CLUSTER_KIND, old))
+        changed += 1
+    return changed
 
 
 # --- politicians ------------------------------------------------------------
@@ -497,20 +563,21 @@ def replace_insider_transactions(conn: sqlite3.Connection, filing_id: int,
     for r in rows:
         conn.execute(
             """INSERT INTO insider_transactions
-               (filing_id, tx_date, deemed_execution_date, security_title,
+               (filing_id, tx_date, tx_date_as_filed, deemed_execution_date, security_title,
                 transaction_code, action, acquired_disposed, timeliness, shares,
                 price_per_share, amount_min_cents, amount_max_cents,
                 amount_exact_cents, shares_after, direct_or_indirect,
-                nature_of_ownership, footnotes, late)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                nature_of_ownership, footnotes, late, implausible)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
-                filing_id, r.get("tx_date"), r.get("deemed_execution_date"),
+                filing_id, r.get("tx_date"), r.get("tx_date_as_filed"), r.get("deemed_execution_date"),
                 r.get("security_title"), r["transaction_code"], r["action"],
                 r.get("acquired_disposed"), r.get("timeliness"), r.get("shares"),
                 r.get("price_per_share"), r.get("amount_min_cents"),
                 r.get("amount_max_cents"), r.get("amount_exact_cents"),
                 r.get("shares_after"), r.get("direct_or_indirect"),
                 r.get("nature_of_ownership"), r.get("footnotes"), r.get("late"),
+                r.get("implausible"),
             ),
         )
     return len(rows)
