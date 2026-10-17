@@ -137,10 +137,14 @@ def test_reparsing_a_filing_does_not_double_count(conn):
 # --- clusters ---------------------------------------------------------------
 
 SETTINGS = AlertSettings(window_days=30, min_politicians=3, min_volume_usd=500_000)
+# $100,001–$250,000: clears the per-member floor, and three of them clear the
+# volume threshold on the estimated midpoint ($175k × 3). The lowest bracket
+# does neither — see tests/test_cluster_thresholds.py for why that is the point.
+BIG = (10_000_100, 25_000_000)
 
 
 def test_cluster_fires_on_participation(conn):
-    _seed(conn, [(f"M{i}", [_tx("NVDA", "purchase", 100_100, 1_500_000)]) for i in range(3)])
+    _seed(conn, [(f"M{i}", [_tx("NVDA", "purchase", *BIG)]) for i in range(3)])
     clusters = stats.find_clusters(conn, SETTINGS, today=TODAY)
     assert len(clusters) == 1
     assert clusters[0].ticker == "NVDA"
@@ -149,22 +153,22 @@ def test_cluster_fires_on_participation(conn):
 
 
 def test_no_cluster_below_threshold(conn):
-    _seed(conn, [(f"M{i}", [_tx("NVDA", "purchase", 100_100, 1_500_000)]) for i in range(2)])
+    _seed(conn, [(f"M{i}", [_tx("NVDA", "purchase", *BIG)]) for i in range(2)])
     assert stats.find_clusters(conn, SETTINGS, today=TODAY) == []
 
 
-def test_cluster_fires_on_volume_alone(conn):
-    # One member, but well past the volume threshold.
+def test_one_member_is_never_a_cluster_however_large(conn):
+    # This used to fire as a "cluster" on volume alone and the message read
+    # "1 politicians bought". One member's trade is that filing's own alert.
     _seed(conn, [("Whale W", [_tx("NVDA", "purchase", 100_000_000, 200_000_000)])])
-    clusters = stats.find_clusters(conn, SETTINGS, today=TODAY)
-    assert len(clusters) == 1 and "volume" in clusters[0].reason
+    assert stats.find_clusters(conn, SETTINGS, today=TODAY) == []
 
 
 def test_buys_and_sells_do_not_pool_into_one_cluster(conn):
     _seed(conn, [
-        ("A", [_tx("NVDA", "purchase", 100_100, 1_500_000)]),
-        ("B", [_tx("NVDA", "purchase", 100_100, 1_500_000)]),
-        ("C", [_tx("NVDA", "sale", 100_100, 1_500_000)]),
+        ("A", [_tx("NVDA", "purchase", *BIG)]),
+        ("B", [_tx("NVDA", "purchase", *BIG)]),
+        ("C", [_tx("NVDA", "sale", *BIG)]),
     ])
     # 3 members touched NVDA, but only 2 bought and 1 sold: no consensus.
     assert stats.find_clusters(conn, SETTINGS, today=TODAY) == []
@@ -173,14 +177,14 @@ def test_buys_and_sells_do_not_pool_into_one_cluster(conn):
 def test_treasury_rollovers_do_not_cluster(conn):
     # [GS] is excluded: members roll T-bills constantly and it is not a signal.
     _seed(conn, [
-        (f"M{i}", [_tx("TBILL", "purchase", 1_500_100, 5_000_000, asset_type="GS")])
+        (f"M{i}", [_tx("TBILL", "purchase", *BIG, asset_type="GS")])
         for i in range(5)
     ])
     assert stats.find_clusters(conn, SETTINGS, today=TODAY) == []
 
 
 def test_cluster_dedupe_suppresses_repeat_and_allows_growth(conn):
-    _seed(conn, [(f"M{i}", [_tx("NVDA", "purchase", 100_100, 1_500_000)]) for i in range(3)])
+    _seed(conn, [(f"M{i}", [_tx("NVDA", "purchase", *BIG)]) for i in range(3)])
     cluster = stats.find_clusters(conn, SETTINGS, today=TODAY)[0]
     assert stats.is_new_cluster(conn, cluster) is True
 
@@ -190,7 +194,7 @@ def test_cluster_dedupe_suppresses_repeat_and_allows_growth(conn):
     assert stats.is_new_cluster(conn, cluster) is False
 
     # A fourth member joins: worth re-alerting.
-    _seed(conn, [("M9", [_tx("NVDA", "purchase", 100_100, 1_500_000)])])
+    _seed(conn, [("M9", [_tx("NVDA", "purchase", *BIG)])])
     grown = stats.find_clusters(conn, SETTINGS, today=TODAY)[0]
     assert grown.politician_count == 4
     assert stats.is_new_cluster(conn, grown) is True
@@ -201,7 +205,7 @@ def test_dedupe_reads_the_newest_alert_when_timestamps_tie(conn):
     # same second tie, and if the lookup breaks the tie arbitrarily the dedupe
     # can compare against the smaller, older count and re-send a cluster that
     # has already been reported at its current size.
-    _seed(conn, [(f"M{i}", [_tx("NVDA", "purchase", 100_100, 1_500_000)]) for i in range(4)])
+    _seed(conn, [(f"M{i}", [_tx("NVDA", "purchase", *BIG)]) for i in range(4)])
     cluster = stats.find_clusters(conn, SETTINGS, today=TODAY)[0]
     assert cluster.politician_count == 4
 
@@ -214,7 +218,7 @@ def test_dedupe_reads_the_newest_alert_when_timestamps_tie(conn):
     conn.commit()
 
     assert db.last_alert(conn, "NVDA", "buy", "cluster")["politician_count"] == 4
-    assert stats.is_new_cluster(conn, cluster) is False
+    assert stats.is_new_cluster(conn, cluster, today=TODAY) is False
 
 
 # --- politician rollups -----------------------------------------------------

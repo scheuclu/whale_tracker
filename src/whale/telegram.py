@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import time
+from urllib.parse import quote
 
 import httpx
 
@@ -122,6 +123,135 @@ def format_filing(member: str, party: str | None, state: str | None,
     return build(False, False, 5)[:TELEGRAM_LIMIT]
 
 
+# Above this many transactions the per-filing message cannot keep each row's
+# detail inside Telegram's limit. Measured on real filings: a 29-row one kept
+# its asset names and trade dates at 3,294 characters, and every one of 42+
+# rows lost them. Past the budget a summary is sent instead — the largest
+# trades in full, the rest by bracket, and a link to the member's page.
+FILING_ROW_BUDGET = 40
+
+# How many of the largest trades the summary lists in full.
+SUMMARY_TOP_TRADES = 8
+
+
+def member_page_url(name: str, base_url: str | None = None) -> str:
+    """The member's dashboard page.
+
+    Mirrors `memberHref` in web/lib/format.ts: keyed on the display name,
+    because that is how the leaderboard groups and an unmatched filing has
+    only the name printed on the PDF. Relative when `dashboard.url` is not
+    configured — Telegram will not make it clickable, but it is the path.
+    """
+    path = f"/politicians?m={quote(name, safe='')}"
+    return f"{base_url.rstrip('/')}{path}" if base_url else path
+
+
+def format_filing_summary(member: str, party: str | None, state: str | None,
+                          district: str | None, chamber: str | None,
+                          filing_date: str | None, pdf_url: str, transactions: list[dict],
+                          member_url: str,
+                          contexts: dict[str, TickerStat] | None = None) -> str:
+    """One message for a filing with more rows than fit with their detail.
+
+    `format_filing` degrades a long filing by dropping context, then every
+    row's asset name and trade date, then rows. Six real filings of 42–99
+    rows went out that way: every row present, none saying when it was
+    traded. This keeps the largest trades in full — as the disclosed ranges,
+    never a midpoint — says how the rest spread across the brackets, and
+    links the dashboard page that has the whole table.
+    """
+    contexts = contexts or {}
+    header = member_label(member, party, state, district, chamber)
+    n = len(transactions)
+
+    buys = sum(1 for t in transactions if t["action"] == "purchase")
+    sells = sum(1 for t in transactions if t["action"] in ("sale", "sale_partial"))
+    exchanges = sum(1 for t in transactions if t["action"] == "exchange")
+    other = n - buys - sells - exchanges
+    shape = [f"{buys} buy" + ("s" if buys != 1 else ""),
+             f"{sells} sell" + ("s" if sells != 1 else "")]
+    if exchanges:
+        shape.append(f"{exchanges} exchange" + ("s" if exchanges != 1 else ""))
+    if other:
+        shape.append(f"{other} other")
+    dates = sorted(t["tx_date"] for t in transactions if t.get("tx_date"))
+    if dates:
+        shape.append("traded " + (_mmdd(dates[0]) if dates[0] == dates[-1]
+                                  else f"{_mmdd(dates[0])}–{_mmdd(dates[-1])}"))
+    delays = sorted(t["delay_days"] for t in transactions if t.get("delay_days") is not None)
+    if delays:
+        shape.append("filed " + (f"{delays[0]}d" if delays[0] == delays[-1]
+                                 else f"{delays[0]}–{delays[-1]}d") + " later")
+
+    ranked = sorted(transactions, key=_floor_key)
+
+    def build(top: int, include_context: bool) -> str:
+        parts = [
+            f"🏛 <b>New filing — {esc(header)}</b>",
+            f"Filed {esc(filing_date or 'unknown')} · {n} transactions — too many to list, "
+            "so a summary",
+            " · ".join(shape),
+            f"By bracket: {esc(_bracket_breakdown(transactions))}",
+            "",
+            f"<b>Largest {top} by bracket floor</b>",
+        ]
+        parts += [_tx_line(t) for t in ranked[:top]]
+        if include_context:
+            ctx_lines = _context_lines(ranked[:top], contexts)
+            if ctx_lines:
+                parts += [""] + ctx_lines
+        parts += ["", f"Full table: {esc(member_url)}", esc(pdf_url)]
+        return "\n".join(parts)
+
+    for top, include_context in ((SUMMARY_TOP_TRADES, True), (5, True), (3, False), (1, False)):
+        msg = build(min(top, n) or 1, include_context)
+        if len(msg) <= TELEGRAM_LIMIT:
+            return msg
+    return build(1, False)[:TELEGRAM_LIMIT]
+
+
+def _mmdd(iso: str) -> str:
+    return iso[5:].replace("-", "/")
+
+
+def _floor_key(tx: dict) -> tuple:
+    """Largest first by what the row proves: the exact figure or the bracket
+    floor. An open-ended bracket outranks a bounded one with the same floor."""
+    exact = tx.get("amount_exact_cents")
+    lo = exact if exact is not None else (tx.get("amount_min_cents") or 0)
+    hi = tx.get("amount_max_cents")
+    open_ended = exact is None and hi is None
+    return (-lo, 0 if open_ended else 1, -(hi or 0))
+
+
+def _bracket_breakdown(transactions: list[dict]) -> str:
+    """How many rows sit in each disclosed bracket, largest bracket first.
+
+    Exact figures are one group of their own rather than folded into the
+    bracket that would contain them: the breakdown is of what was filed.
+    """
+    counts: dict[tuple, int] = {}
+    for tx in transactions:
+        if tx.get("amount_exact_cents") is not None:
+            key: tuple = ("exact",)
+        else:
+            key = (tx.get("amount_min_cents"), tx.get("amount_max_cents"))
+        counts[key] = counts.get(key, 0) + 1
+
+    def order(item):
+        key = item[0]
+        if key[0] == "exact":
+            return (1, 0, 0)
+        lo, hi = key
+        return (0, -(lo or 0), 0 if hi is None else 1)
+
+    parts = []
+    for key, count in sorted(counts.items(), key=order):
+        label = "exact figures" if key[0] == "exact" else format_amount(key[0], key[1])
+        parts.append(f"{label} ×{count}")
+    return " · ".join(parts)
+
+
 def format_watchlist_transaction(member: str, party: str | None, state: str | None,
                                  district: str | None, chamber: str | None,
                                  filing_date: str | None, pdf_url: str, tx: dict,
@@ -195,7 +325,13 @@ def _context_lines(transactions: list[dict], contexts: dict[str, TickerStat]) ->
 
 
 def format_cluster(cluster: Cluster, window_days: int) -> str:
-    """Consensus alert: several members converging on one ticker."""
+    """Consensus alert: several members converging on one ticker.
+
+    The headline count is of members who cleared the bracket floor — the
+    number the alert actually fired on. Members below the floor are named on
+    their own line so the message is true to what was counted and still
+    shows the whole picture; the volume and trade count cover everyone.
+    """
     verb = "bought" if cluster.direction == "buy" else "sold"
     vol = cluster.volume
     if vol.open_ended or vol.max_cents is None:
@@ -206,20 +342,33 @@ def format_cluster(cluster: Cluster, window_days: int) -> str:
             f"(mid {usd(vol.mid_cents)})"
         )
 
-    members = ", ".join(cluster.members)
-    parts = [
-        f"🔥 <b>CLUSTER ALERT — {esc(cluster.ticker)}</b>",
-        f"{cluster.politician_count} politicians {verb} in the last {window_days} days",
-        f"Volume {esc(vol_text)} · {cluster.trade_count} "
-        + ("buys" if cluster.direction == "buy" else "sells"),
-        esc(members),
-    ]
-    msg = "\n".join(parts)
+    headline = f"{cluster.politician_count} politicians {verb} in the last {window_days} days"
+    if cluster.member_floor_cents:
+        headline += f", each ≥{esc(usd(cluster.member_floor_cents))} by bracket floor"
+
+    def build(cap: int | None) -> str:
+        parts = [
+            f"🔥 <b>CLUSTER ALERT — {esc(cluster.ticker)}</b>",
+            headline,
+            f"Volume {esc(vol_text)} · {cluster.trade_count} "
+            + ("buys" if cluster.direction == "buy" else "sells"),
+            esc(_names(cluster.members, cap)),
+        ]
+        if cluster.below_floor:
+            parts.append(f"<i>+{len(cluster.below_floor)} more {verb} below that floor: "
+                         f"{esc(_names(cluster.below_floor, cap))}</i>")
+        return "\n".join(parts)
+
+    msg = build(None)
     if len(msg) > TELEGRAM_LIMIT:
-        keep = cluster.members[:10]
-        parts[-1] = esc(", ".join(keep)) + f" …+{len(cluster.members) - len(keep)} more"
-        msg = "\n".join(parts)
+        msg = build(10)
     return msg[:TELEGRAM_LIMIT]
+
+
+def _names(names: list[str], cap: int | None) -> str:
+    if cap is None or len(names) <= cap:
+        return ", ".join(names)
+    return ", ".join(names[:cap]) + f" …+{len(names) - cap} more"
 
 
 def format_unparsed(member: str, party: str | None, state: str | None,
