@@ -51,7 +51,10 @@ class AlertSettings:
 @dataclass
 class IngestSettings:
     years: list[int] = field(default_factory=lambda: [2026])
-    max_filing_age_days: int = 7
+    # 14, not 7: the Clerk's index lags the filing date by up to a week in the
+    # observed corpus, and a filing older than this on first sight is history,
+    # never announced. See config.yaml for the measurements.
+    max_filing_age_days: int = 14
 
 
 # What a rule may say. Anything else is a typo, and a typo that silently
@@ -188,6 +191,23 @@ def _member_floor(raw) -> int:
         raise ConfigError(
             f"alerts.min_member_floor_usd is {value}; it must be 0 (off) or more")
     return value
+def _budget_seconds(raw) -> float:
+    """`insiders.gap_repair_budget_seconds`: seconds per poll run, or 0 for off.
+
+    A negative budget means nothing, yet would sit in config.yaml looking
+    like a setting. That is the silent no-op this project refuses, so it
+    raises.
+    """
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        raise ConfigError(
+            f"insiders.gap_repair_budget_seconds must be a number, not {raw!r}") from None
+    if value < 0:
+        raise ConfigError(
+            f"insiders.gap_repair_budget_seconds is {value}; it must be 0 (automatic "
+            "gap repair off) or a number of seconds")
+    return value
 
 
 @dataclass
@@ -211,6 +231,10 @@ class InsiderSettings:
     # A filing older than this on first sight is history, never a
     # notification: it stops a backlog being replayed into Telegram.
     max_filing_age_days: int = 7
+    # How long one poll run may spend walking the daily index to repair a
+    # recorded feed gap, after the live feed has been read. 0 switches the
+    # automatic repair off and leaves the gap to `backfill-insiders`.
+    gap_repair_budget_seconds: float = 480
     # No rules means no insider alerts, which is the safe default: an absent
     # config block must never start sending.
     alerts: list[InsiderRule] = field(default_factory=list)
@@ -336,6 +360,19 @@ class Config:
         return bool(self.edgar_user_agent and self.edgar_user_agent.strip())
 
 
+def _env(name: str) -> str | None:
+    """An optional secret from the environment; blank means unset.
+
+    GitHub Actions passes an undefined secret as an empty string, and "" is
+    not "no proxy": `httpx.Client(proxy="")` raises before any request is
+    made, which was recorded as a Senate failure on every run (#16).
+    """
+    value = os.environ.get(name)
+    if value is None or not value.strip():
+        return None
+    return value
+
+
 def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
                 db_path: Path = DEFAULT_DB_PATH) -> Config:
     raw = {}
@@ -358,7 +395,7 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
     i = raw.get("ingest") or {}
     ingest = IngestSettings(
         years=[int(y) for y in (i.get("years") or [2026])],
-        max_filing_age_days=int(i.get("max_filing_age_days", 7)),
+        max_filing_age_days=int(i.get("max_filing_age_days", 14)),
     )
 
     n = raw.get("insiders") or {}
@@ -369,6 +406,7 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
         min_insiders=int(n.get("min_insiders", 3)),
         cluster_refire_growth=_refire_growth(n.get("cluster_refire_growth", 1.5)),
         max_filing_age_days=int(n.get("max_filing_age_days", 7)),
+        gap_repair_budget_seconds=_budget_seconds(n.get("gap_repair_budget_seconds", 480)),
         alerts=[_parse_rule(r, i) for i, r in enumerate(n.get("alerts") or [])],
     )
 
@@ -386,9 +424,9 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
         vision_enabled=bool((raw.get("vision") or {}).get("enabled", False)),
         db_path=db_path,
         dashboard_url=dashboard_url,
-        telegram_bot_token=os.environ.get("TELEGRAM_BOT_TOKEN"),
-        telegram_chat_id=os.environ.get("TELEGRAM_CHAT_ID"),
-        gemini_api_key=os.environ.get("GEMINI_API_KEY"),
-        senate_proxy_url=os.environ.get("SENATE_PROXY_URL"),
-        edgar_user_agent=os.environ.get("EDGAR_USER_AGENT"),
+        telegram_bot_token=_env("TELEGRAM_BOT_TOKEN"),
+        telegram_chat_id=_env("TELEGRAM_CHAT_ID"),
+        gemini_api_key=_env("GEMINI_API_KEY"),
+        senate_proxy_url=_env("SENATE_PROXY_URL"),
+        edgar_user_agent=_env("EDGAR_USER_AGENT"),
     )

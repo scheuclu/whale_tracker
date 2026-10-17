@@ -29,7 +29,9 @@ const WINDOWS = [
   { days: undefined, label: "All" },
 ];
 
-const VALUE_NOTE = "Values are shares × the price as filed; a filer may report a weighted average.";
+const VALUE_NOTE =
+  "Values are shares × the price as filed; a filer may report a weighted average. " +
+  "A row whose as-filed value is implausible is shown as filed and counted in no total.";
 
 function issuerHref(ticker: string) {
   return `/insiders?t=${encodeURIComponent(ticker)}`;
@@ -288,13 +290,34 @@ function TradeList({ trades, showIssuer }: { trades: InsiderTradeRow[]; showIssu
             {showIssuer ? (
               <TickerChip ticker={r.ticker} href={r.ticker ? issuerHref(r.ticker) : undefined} />
             ) : null}
-            <Amount min={r.amount_min_cents} max={r.amount_max_cents} exact={r.amount_exact_cents} />
+            {r.implausible === 1 ? (
+              // Reproduced, not believed: the figure is what was filed, and
+              // the label says it counts toward nothing on this page.
+              <span className="inline-flex items-center gap-1.5">
+                <span className="tabular text-[13px] text-muted-foreground line-through decoration-amber-500/60">
+                  {usd(r.amount_exact_cents)}
+                </span>
+                <span
+                  className="text-[11px] text-amber-600 dark:text-amber-400"
+                  title="The price cell appears to hold the aggregate consideration (or is otherwise beyond belief). Shown as filed; excluded from every total, cluster value and alert."
+                >
+                  as filed, implausible
+                </span>
+              </span>
+            ) : (
+              <Amount min={r.amount_min_cents} max={r.amount_max_cents} exact={r.amount_exact_cents} />
+            )}
             <span className="tabular text-xs text-muted-foreground">
               {shares(r.shares)} sh @ {price(r.price_per_share)}
             </span>
             <PlanTag value={r.aff_10b5_one} />
             <div className="flex-1" />
-            <span className="tabular text-xs text-muted-foreground">{shortDate(r.tx_date)}</span>
+            <span
+              className="tabular text-xs text-muted-foreground"
+              title={r.tx_date_as_filed ? `filed as "${r.tx_date_as_filed}"` : undefined}
+            >
+              {shortDate(r.tx_date)}
+            </span>
             <InsiderDelayTag days={r.delay_days} late={r.late} timeliness={r.timeliness} />
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
