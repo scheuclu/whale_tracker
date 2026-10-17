@@ -95,9 +95,11 @@ def test_spouse_dependent_over_one_million_is_a_valid_amount(conn):
 
 
 def test_open_ended_top_bracket_is_valid(conn):
+    # "Over $50,000,000" is stored with the printed figure as its floor, the
+    # same as the spouse bracket above; the ladder's top entry matches that.
     fid = _filing(conn, "top")
     db.replace_transactions(conn, fid, None,
-                            [_tx(amount_min_cents=5_000_000_100, amount_max_cents=None)])
+                            [_tx(amount_min_cents=5_000_000_000, amount_max_cents=None)])
     conn.commit()
     assert audit.check_nonstandard_amount_brackets(conn) == []
 
