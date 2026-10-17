@@ -98,7 +98,13 @@ export default async function ScansPage({
                     <td className="tabular px-4 py-2 text-muted-foreground">{shortDate(f.filing_date)}</td>
                     <td className="px-4 py-2">
                       <div className="flex items-center gap-2">
-                        <StatusBadge value={f.status} />
+                        <StatusBadge
+                          value={
+                            f.status === "failed" && f.parse_method === "scanned" && f.rows > 0
+                              ? "not_transcribed"
+                              : f.status
+                          }
+                        />
                         <span className="text-[11px] text-muted-foreground">
                           {METHOD_LABEL[f.parse_method ?? ""] ?? f.parse_method}
                         </span>

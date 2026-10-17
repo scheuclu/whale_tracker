@@ -316,9 +316,10 @@ separate `insider_*` tables — never mixed into the congressional data.
 ### Other limits
 
 - **Scanned paper filings.** About 11% of PTRs are filed on paper and arrive as
-  image-only PDFs with no text layer. By default they are reported to Telegram
-  with a link and contribute no transactions; `python -m whale status` counts
-  them. Transcription (`vision.enabled` in `config.yaml`) is a hybrid: Gemini
+  image-only PDFs with no text layer. Without a Gemini key they are reported
+  to Telegram with a link and contribute no transactions; `python -m whale
+  status` counts them. Transcription (`vision.enabled` in `config.yaml`, on
+  since 2026-10-17) is a hybrid: Gemini
   reads the written text, and `src/whale/paper_form.py` reads the ticked
   amount and type boxes off the printed grid, because the model misreads
   those on about a quarter of rows (issue #1). Transcribed rows are
