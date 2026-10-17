@@ -200,6 +200,67 @@ def check_unnotified_backlog(conn, today: date | None = None) -> list[Finding]:
     )]
 
 
+def check_house_age_cutoff(conn, today: date | None = None) -> list[Finding]:
+    """House filings the age cutoff filed as history on a run after the first.
+
+    `ingest.max_filing_age_days` exists to keep a first run from replaying a
+    year into Telegram. After that first run, a filing already older than the
+    cutoff on first sight means the Clerk published it later than the cutoff
+    allows for — and it was stored as `seen_skipped`, never to be announced.
+    `pipeline.sync` counts those into `sync_state`; this reports the counter.
+    A database where the cutoff has never bitten has no counter and produces
+    nothing here, so the check is silent on a healthy pipeline.
+    """
+    import json
+
+    from .db import get_state
+
+    raw = get_state(conn, "house_age_cutoff")
+    if raw is None:
+        return []
+    # A counter that no longer parses must surface as `check_failed`, not as a
+    # pass: json.loads raising is the intended behaviour.
+    state = json.loads(raw)
+    count = int(state["count"])
+    if not count:
+        return []
+
+    last_seen = str(state.get("last_seen_at") or "")
+    last_doc = state.get("last_doc_id")
+    evidence = []
+    if last_doc:
+        row = conn.execute(
+            "SELECT filer_name, filing_date, pdf_url FROM filings "
+            "WHERE chamber = 'house' AND doc_id = ?", (last_doc,)
+        ).fetchone()
+        evidence.append(
+            f"last hit: {last_doc}  {row['filer_name'] if row else '?'}  "
+            f"filed {state.get('last_filing_date')}  first seen {last_seen}  "
+            f"{row['pdf_url'] if row else ''}".rstrip())
+
+    week_ago = (today or date.today()) - timedelta(days=7)
+    if last_seen and date.fromisoformat(last_seen[:10]) >= week_ago:
+        return [Finding(
+            WARN, "house_age_cutoff_hits",
+            f"{count} House filing(s) have hit the age cutoff after the first run, "
+            f"most recently {last_seen[:10]}",
+            "A filing already older than `ingest.max_filing_age_days` when a "
+            "run after the first saw it was stored as history and will never "
+            "be announced. One in the last 7 days means the Clerk is publishing "
+            "later than the cutoff allows for: read the filing below by hand, "
+            "and if the lag persists raise the cutoff in config.yaml.",
+            evidence,
+        )]
+    return [Finding(
+        INFO, "house_age_cutoff_hits",
+        f"{count} House filing(s) have hit the age cutoff after the first run; "
+        "none in the last 7 days",
+        "Each was stored as history without a notification. The counter is "
+        "cumulative; it becomes a warning again the week it next grows.",
+        evidence,
+    )]
+
+
 def check_unmatched_filers(conn, today: date | None = None) -> list[Finding]:
     """Filings whose filer could not be resolved to a member of Congress."""
     rows = _rows(conn, """
@@ -375,14 +436,40 @@ def check_alert_health(conn, today: date | None = None) -> list[Finding]:
 
 
 def check_senate(conn, today: date | None = None) -> list[Finding]:
+    """Senate is expected to fail — but only in one specific way.
+
+    eFD's bot protection refusing a datacenter IP is the documented outcome and
+    reads as INFO. Anything else is not that: an empty proxy URL, DNS, a
+    timeout, an unexpected status mean the Senate side was never actually
+    tested, and filing those under "expected" is exactly how an unset secret
+    went unnoticed for every run (#16).
+    """
     from .db import get_state
+    from .senate import STATUS_BLOCKED, STATUS_OK, status_kind
 
     status = get_state(conn, "senate_status")
-    if status and status.startswith("ok"):
+    if status is None:
+        # `senate.enabled: false`, or no run yet. Neither a pass nor a failure,
+        # so it gets its own code rather than being folded into the block.
+        return [Finding(INFO, "senate_not_attempted", "Senate eFD not attempted",
+                        "No Senate run is recorded (`senate.enabled` is off, or the "
+                        "pipeline has not run yet). All figures are House-only.")]
+    kind = status_kind(status)
+    if kind == STATUS_OK:
         return [Finding(INFO, "senate_available", f"Senate eFD reachable: {status}",
                         "Senate filings are being indexed and need a parser.")]
-    return [Finding(INFO, "senate_blocked", f"Senate eFD unavailable ({status or 'not attempted'})",
-                    "Expected. All figures are House-only.")]
+    if kind == STATUS_BLOCKED:
+        return [Finding(INFO, "senate_blocked", f"Senate eFD unavailable ({status})",
+                        "Expected: eFD's bot protection refused the session, as it "
+                        "does from datacenter IPs. All figures are House-only.")]
+    # `error`, or a prefix this check does not know. Either way it is not the
+    # known block, so House-only is an untested outcome, not the expected one.
+    return [Finding(WARN, "senate_error", f"Senate eFD attempt failed ({status})",
+                    "A configuration or client failure, not the known bot-protection "
+                    "block: the request failed on our side or never left (bad proxy "
+                    "URL, DNS, timeout, unexpected HTTP status). Check "
+                    "`SENATE_PROXY_URL` and the pipeline log. Until this reads "
+                    "`blocked` or `ok`, the Senate side has not actually been tested.")]
 
 
 
@@ -526,6 +613,36 @@ def check_insider_values(conn, today: date | None = None) -> list[Finding]:
     return out
 
 
+def check_insider_implausible_values(conn, today: date | None = None) -> list[Finding]:
+    """Rows whose as-filed value the ingest rule refused to believe.
+
+    `check_insider_values` proves the arithmetic; this lists the rows where
+    the arithmetic is right and the inputs are not (a price cell holding the
+    aggregate consideration). They are stored as filed and excluded from
+    every total, so the list is for a human to confirm — or to spot a real
+    block trade the rule should not have caught.
+    """
+    rows = _rows(conn, f"""
+        SELECT f.accession, f.ticker, t.action, t.shares, t.price_per_share px,
+               t.amount_exact_cents ex
+        FROM insider_transactions t JOIN insider_filings f ON f.id = t.filing_id
+        WHERE f.status IN {_counted()} AND t.implausible = 1
+        ORDER BY t.amount_exact_cents DESC
+    """)
+    if not rows:
+        return []
+    return [Finding(
+        WARN, "insider_implausible_values",
+        f"{len(rows)} insider row(s) carry an implausible as-filed value",
+        "Kept as filed but excluded from every volume figure, cluster total "
+        "and alert value floor (stats.form4_is_implausible). Usually a price "
+        "cell that holds the aggregate consideration. A real trade on this "
+        "list means the thresholds need revisiting.",
+        [f"{r['accession']}  {r['ticker'] or '—'}  {r['action']}  "
+         f"{r['shares']:,.0f} × ${r['px']:,.2f} = ${r['ex'] / 100:,.0f}" for r in rows],
+    )]
+
+
 def check_insider_dates(conn, today: date | None = None) -> list[Finding]:
     """Trade dates that cannot be compared to the filing date."""
     rows = _rows(conn, f"""
@@ -651,6 +768,7 @@ CHECKS = (
     check_nonstandard_amount_brackets,
     check_stuck_filings,
     check_unnotified_backlog,
+    check_house_age_cutoff,
     check_missing_transaction_fields,
     check_ticker_sanity,
     check_unmatched_filers,
@@ -662,6 +780,7 @@ CHECKS = (
     check_insider_empty_filings,
     check_insider_primary_owner,
     check_insider_values,
+    check_insider_implausible_values,
     check_insider_dates,
     check_insider_feed_health,
     check_insider_coverage,
