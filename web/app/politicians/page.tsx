@@ -15,7 +15,7 @@ import {
   StatTile,
   VolumeRange,
 } from "../charts";
-import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, TickerChip } from "../ui";
+import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, ScanTag, TickerChip } from "../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -253,7 +253,15 @@ async function MemberDetail({ member, action }: { member: string; action?: strin
           value={String(detail.tickers)}
           hint={`across ${detail.filings} filing${detail.filings === 1 ? "" : "s"}`}
         />
-        <StatTile label="Volume (est.)" value={usd(detail.volume_mid)} hint="bracket midpoints" />
+        <StatTile
+          label="Volume (est.)"
+          value={usd(detail.volume_mid)}
+          hint={
+            detail.transcribed
+              ? `bracket midpoints · ${detail.transcribed} transcribed row${detail.transcribed === 1 ? "" : "s"} not counted`
+              : "bracket midpoints"
+          }
+        />
         <StatTile
           label="Late disclosures"
           value={String(detail.late_count)}
@@ -360,6 +368,7 @@ async function MemberDetail({ member, action }: { member: string; action?: strin
                       exact={r.amount_exact_cents}
                     />
                     <OwnerTag owner={r.owner} />
+                    <ScanTag transcribed={r.transcribed} />
                     <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">
                       {r.asset_name}
                     </span>

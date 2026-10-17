@@ -16,7 +16,7 @@ from . import db, house, insider_alerts, insiders, roster, senate, stats, telegr
 from .amounts import parse_amount
 from .config import Config
 from .ptr import ParsedFiling, ScannedFilingError, parse_pdf
-from .vision import VisionUnavailable, parse_scanned
+from .vision import ScanUnreadable, VisionUnavailable, parse_scanned
 
 log = logging.getLogger(__name__)
 
@@ -25,6 +25,7 @@ def run(config: Config, dry_run: bool = False) -> None:
     conn = db.connect(config.db_path)
     try:
         sync(conn, config)
+        retry_scanned(conn, config)
         parse_pending(conn, config)
         notify_pending(conn, config, dry_run=dry_run)
         notify_clusters(conn, config, dry_run=dry_run)
@@ -397,6 +398,18 @@ def parse_pending(conn: sqlite3.Connection, config: Config,
             conn.commit()
             log.info("filing %s is a scan and vision is unavailable", filing["doc_id"])
             continue
+        except ScanUnreadable as exc:
+            # Vision ran and refused: the grid could not be found, or the
+            # two readings did not line up. Its own parse_method, so the
+            # retry on the next run does not spend an API call on it again
+            # and the dashboard says why it is unread.
+            db.set_status(conn, filing["id"], "failed",
+                          f"scan not readable ({exc})", "vision_failed")
+            if silent:
+                db.mark_notified(conn, filing["id"])
+            conn.commit()
+            log.warning("filing %s: %s", filing["doc_id"], exc)
+            continue
         except Exception as exc:
             db.set_status(conn, filing["id"], "failed", f"parse error: {exc}", "error")
             if silent:
@@ -407,13 +420,43 @@ def parse_pending(conn: sqlite3.Connection, config: Config,
 
         rows = [_transaction_row(t) for t in parsed.transactions]
         db.replace_transactions(conn, filing["id"], filing["politician_id"], rows)
-        db.set_status(conn, filing["id"], target_status, None, method)
+        # A filing Telegram has already heard of — a scan reported as
+        # unreadable, now transcribed — is history: 'parsed' would wait for
+        # a message that must never be sent twice.
+        status = "backfilled" if target_status == "parsed" and filing["notified_at"] else target_status
+        db.set_status(conn, filing["id"], status, None, method)
         if silent:
             db.mark_notified(conn, filing["id"])
         conn.commit()
         done += 1
         log.info("parsed %s (%s): %d transaction(s)", filing["doc_id"], method, len(rows))
     return done
+
+
+def retry_scanned(conn: sqlite3.Connection, config: Config) -> int:
+    """Queue the scans that failed for want of vision, once vision can run.
+
+    A scanned filing that failed with no key or with vision disabled stays
+    `failed` / `scanned` — re-parseable by design (db.py). Nothing re-queued
+    them before, so flipping `vision.enabled` read nothing until a new scan
+    arrived. Re-queued as `new`, they go through `parse_pending` like any
+    filing; the ones already reported to Telegram as unreadable keep their
+    `notified_at` and so land as history rather than as a second message.
+    Only the never-attempted ones: a scan vision has refused
+    (`vision_failed`) is not retried every three hours.
+    """
+    if not (config.vision_enabled and config.gemini_api_key):
+        return 0
+    rows = conn.execute(
+        "SELECT id, doc_id FROM filings WHERE chamber = 'house' "
+        "AND status = 'failed' AND parse_method = 'scanned'"
+    ).fetchall()
+    for r in rows:
+        db.set_status(conn, r["id"], "new", None)
+    conn.commit()
+    if rows:
+        log.info("vision available: re-queued %d scanned filing(s)", len(rows))
+    return len(rows)
 
 
 def _parse_bytes(pdf_bytes: bytes, config: Config) -> tuple[ParsedFiling, str]:
@@ -427,11 +470,12 @@ def _parse_bytes(pdf_bytes: bytes, config: Config) -> tuple[ParsedFiling, str]:
     except ScannedFilingError:
         if not config.vision_enabled:
             raise VisionUnavailable("vision disabled in config.yaml") from None
-        # VisionUnavailable propagates: the caller distinguishes "this is a
-        # scan we cannot read" from "the parser broke".
+        # VisionUnavailable and ScanUnreadable propagate: the caller
+        # distinguishes "a scan we cannot attempt", "a scan we attempted and
+        # refuse to guess at" and "the parser broke".
         try:
             return parse_scanned(pdf_bytes, config.gemini_api_key), "vision"
-        except VisionUnavailable:
+        except (VisionUnavailable, ScanUnreadable):
             raise
         except Exception as exc:
             raise ValueError(f"vision parse failed: {exc}") from exc
@@ -529,7 +573,7 @@ def notify_pending(conn: sqlite3.Connection, config: Config, dry_run: bool = Fal
 
     # Filings we could not read are reported rather than silently dropped.
     for filing in db.filings_by_status(conn, "failed", unnotified_only=True):
-        if filing["parse_method"] not in ("scanned", "error"):
+        if filing["parse_method"] not in ("scanned", "vision_failed", "error"):
             continue
         text = telegram.format_unparsed(
             member=filing["member_name"] or filing["filer_name"],

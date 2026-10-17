@@ -438,8 +438,13 @@ def replace_transactions(conn: sqlite3.Connection, filing_id: int,
 
 
 def transactions_for_filing(conn: sqlite3.Connection, filing_id: int) -> list[sqlite3.Row]:
+    """A filing's rows, each carrying `transcribed`: 1 when the filing was
+    read by transcribing a scan, so every message and page can label the
+    row and nothing has to re-derive it from the filing."""
     return conn.execute(
-        "SELECT * FROM transactions WHERE filing_id = ? ORDER BY id", (filing_id,)
+        """SELECT t.*, f.parse_method = 'vision' AS transcribed
+           FROM transactions t JOIN filings f ON f.id = t.filing_id
+           WHERE t.filing_id = ? ORDER BY t.id""", (filing_id,)
     ).fetchall()
 
 

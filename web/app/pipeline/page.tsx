@@ -151,13 +151,7 @@ export default async function PipelinePage() {
             {p.byMethod.map((m) => (
               <div key={m.parse_method} className="flex items-center gap-3 text-[13px]">
                 <span className="font-medium">
-                  {m.parse_method === "text"
-                    ? "PDF text layer"
-                    : m.parse_method === "vision"
-                      ? "Vision model (scanned)"
-                      : m.parse_method === "scanned"
-                        ? "Scanned — unread"
-                        : m.parse_method}
+                  {METHOD_LABEL[m.parse_method] ?? m.parse_method}
                 </span>
                 <div className="flex-1" />
                 <span className="tabular text-muted-foreground">{m.n.toLocaleString()}</span>
@@ -167,6 +161,14 @@ export default async function PipelinePage() {
               Members may file on paper. Those filings arrive as image-only scans with
               no text layer; without a vision model configured they are reported to
               Telegram with a link but contribute no transactions to the totals.
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              {p.transcribed.filings
+                ? `${p.transcribed.filings.toLocaleString()} scanned filing${p.transcribed.filings === 1 ? "" : "s"} ` +
+                  `(${p.transcribed.rows.toLocaleString()} rows) were transcribed: text by a vision model, ` +
+                  "ticked boxes by the grid reader. Those rows are labelled on every page and count as " +
+                  "trades, but enter no volume total, cluster or floor."
+                : "No filing has been transcribed from a scan: transcription is off (vision.enabled)."}
             </p>
           </Card>
         </div>
@@ -218,6 +220,14 @@ export default async function PipelinePage() {
     </div>
   );
 }
+
+const METHOD_LABEL: Record<string, string> = {
+  text: "PDF text layer",
+  vision: "Transcribed from scan (quarantined from totals)",
+  scanned: "Scanned — unread",
+  vision_failed: "Scanned — transcription refused (grid not found or readings disagree)",
+  error: "Parse error",
+};
 
 const SKIP_LABEL: Record<string, string> = {
   no_open_market: "with no open-market rows",

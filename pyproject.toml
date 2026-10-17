@@ -14,7 +14,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-vision = ["google-genai>=1.0.0"]
+# numpy is the grid reader's (paper_form.py) only extra dependency and is
+# imported lazily, so the package imports without it.
+vision = ["google-genai>=1.0.0", "numpy>=1.26"]
 dev = ["pytest>=8.0"]
 
 [tool.setuptools.packages.find]

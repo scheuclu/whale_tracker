@@ -36,6 +36,19 @@ DEFAULT_CLUSTER_REFIRE_GROWTH = 1.5
 BUY_ACTIONS = ("purchase",)
 SELL_ACTIONS = ("sale", "sale_partial")
 
+# Filings read by transcribing a scanned paper form (`filings.parse_method`).
+# Their rows count as trades and toward member and ticker lists, but add
+# nothing to any volume sum, cluster volume or per-member floor: the amount
+# is a checkbox read off a scan, not a bracket parsed from a filed text
+# layer, and a wrong one would corrupt the totals in the one place nobody
+# checks. Mirrors `TRANSCRIBED` in web/lib/queries.ts — keep them in step.
+TRANSCRIBED_METHOD = "vision"
+
+
+def counts_toward_volume(parse_method: str | None) -> bool:
+    """Whether a row's disclosed amount may enter a total."""
+    return parse_method != TRANSCRIBED_METHOD
+
 
 @dataclass
 class Volume:
@@ -86,6 +99,9 @@ class TickerStat:
     buy_floors: dict[str, int] = field(default_factory=dict)
     sell_floors: dict[str, int] = field(default_factory=dict)
     last_tx_date: str | None = None
+    # Rows transcribed from a scanned paper filing: counted as trades, worth
+    # nothing to any volume or floor. See `counts_toward_volume`.
+    transcribed_count: int = 0
 
     @property
     def net_direction(self) -> str:
@@ -112,7 +128,8 @@ def _rows(conn: sqlite3.Connection, since: str | None, tickers_only: bool,
     marks = ", ".join("?" for _ in COUNTED_STATUSES)
     sql = f"""
         SELECT t.*, COALESCE(p.full_name, f.filer_name) AS member_name,
-               p.party, p.state, p.district, p.chamber, f.filing_date
+               p.party, p.state, p.district, p.chamber, f.filing_date,
+               f.parse_method
         FROM transactions t
         JOIN filings f ON f.id = t.filing_id
         LEFT JOIN politicians p ON p.id = t.politician_id
@@ -146,18 +163,26 @@ def ticker_stats(conn: sqlite3.Connection, window_days: int | None = None,
         s.trade_count += 1
         member = r["member_name"] or "unknown"
         amounts = (r["amount_min_cents"], r["amount_max_cents"], r["amount_exact_cents"])
-        s.volume.add(*amounts)
+        # A transcribed row is a trade with an unvouched amount: it counts
+        # as a trade and a participant, and adds nothing to any sum or floor.
+        priced = counts_toward_volume(r["parse_method"])
+        if not priced:
+            s.transcribed_count += 1
+        if priced:
+            s.volume.add(*amounts)
 
         if r["action"] in BUY_ACTIONS:
             s.buy_count += 1
             s.buy_politicians.add(member)
-            s.buy_volume.add(*amounts)
-            s.buy_floors[member] = s.buy_floors.get(member, 0) + _floor_cents(*amounts)
+            if priced:
+                s.buy_volume.add(*amounts)
+                s.buy_floors[member] = s.buy_floors.get(member, 0) + _floor_cents(*amounts)
         elif r["action"] in SELL_ACTIONS:
             s.sell_count += 1
             s.sell_politicians.add(member)
-            s.sell_volume.add(*amounts)
-            s.sell_floors[member] = s.sell_floors.get(member, 0) + _floor_cents(*amounts)
+            if priced:
+                s.sell_volume.add(*amounts)
+                s.sell_floors[member] = s.sell_floors.get(member, 0) + _floor_cents(*amounts)
 
         if r["tx_date"] and (s.last_tx_date is None or r["tx_date"] > s.last_tx_date):
             s.last_tx_date = r["tx_date"]
@@ -326,6 +351,7 @@ def politician_stats(conn: sqlite3.Connection, window_days: int | None = None,
             "district": r["district"], "chamber": r["chamber"],
             "trade_count": 0, "buy_count": 0, "sell_count": 0,
             "tickers": set(), "volume": Volume(), "delays": [], "lags": [],
+            "transcribed_count": 0,
         })
         a["trade_count"] += 1
         if r["action"] in BUY_ACTIONS:
@@ -334,7 +360,11 @@ def politician_stats(conn: sqlite3.Connection, window_days: int | None = None,
             a["sell_count"] += 1
         if r["ticker"]:
             a["tickers"].add(r["ticker"])
-        a["volume"].add(r["amount_min_cents"], r["amount_max_cents"], r["amount_exact_cents"])
+        if counts_toward_volume(r["parse_method"]):
+            a["volume"].add(r["amount_min_cents"], r["amount_max_cents"],
+                            r["amount_exact_cents"])
+        else:
+            a["transcribed_count"] += 1
         delay = disclosure_delay_days(r["tx_date"], r["filing_date"])
         if delay is not None:
             a["delays"].append(delay)

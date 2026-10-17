@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getConsensusTickers, getPipeline, getTransactions } from "@/lib/queries";
 import { memberHref, memberLabel, shortDate, usd } from "@/lib/format";
 import { Card, DivergingSplit, Empty, SectionTitle, StatTile } from "./charts";
-import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, TickerChip } from "./ui";
+import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, ScanTag, TickerChip } from "./ui";
 
 export const dynamic = "force-dynamic";
 
@@ -26,10 +26,16 @@ export default async function FeedPage({
     return <Empty>{(err as Error).message}</Empty>;
   }
 
+  // Transcribed rows are listed but never summed: the amount is a box read
+  // off a scan. Mirrors `MID` in lib/queries.ts.
   const totalMid = rows.reduce(
-    (a, r) => a + (r.amount_exact_cents ?? ((r.amount_min_cents ?? 0) + (r.amount_max_cents ?? r.amount_min_cents ?? 0)) / 2),
+    (a, r) =>
+      r.transcribed
+        ? a
+        : a + (r.amount_exact_cents ?? ((r.amount_min_cents ?? 0) + (r.amount_max_cents ?? r.amount_min_cents ?? 0)) / 2),
     0
   );
+  const transcribedShown = rows.filter((r) => r.transcribed).length;
 
   return (
     <div className="space-y-8">
@@ -92,6 +98,9 @@ export default async function FeedPage({
           <>
             <p className="mb-3 text-xs text-muted-foreground">
               {rows.length} trades shown · {usd(totalMid)} estimated total (bracket midpoints)
+              {transcribedShown
+                ? ` · ${transcribedShown} transcribed from scans, not in the total`
+                : ""}
             </p>
             <div className="space-y-1.5">
               {rows.map((r) => (
@@ -116,6 +125,7 @@ export default async function FeedPage({
                       {memberLabel(r.member_name, null, r.state, r.district, r.chamber)}
                     </a>
                     <OwnerTag owner={r.owner} />
+                    <ScanTag transcribed={r.transcribed} />
                     <span className="truncate text-muted-foreground">· {r.asset_name}</span>
                     <a
                       href={r.pdf_url}

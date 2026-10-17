@@ -150,6 +150,23 @@ export function TickerChip({
   );
 }
 
+/**
+ * A row read off a scanned paper filing: the text by a vision model, the
+ * amount and type boxes by the grid reader. Shown with the bracket as read,
+ * counted as a trade, and kept out of every volume figure on the site.
+ */
+export function ScanTag({ transcribed }: { transcribed: number | null | undefined }) {
+  if (!transcribed) return null;
+  return (
+    <span
+      className="rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-px text-[10px] text-amber-700 dark:text-amber-300"
+      title="Read from a scanned paper filing (text by a vision model, ticked boxes by the grid reader). Counted as a trade; excluded from every volume total."
+    >
+      transcribed from scan
+    </span>
+  );
+}
+
 export function OwnerTag({ owner }: { owner: string | null }) {
   if (!owner || !OWNER_LABEL[owner]) return null;
   return (

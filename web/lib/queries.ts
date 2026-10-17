@@ -24,6 +24,8 @@ export type TickerRow = {
   volume_min: number;
   volume_max: number | null;
   volume_mid: number;
+  /** Rows transcribed from scans: in `trades`, not in any volume. */
+  transcribed: number;
   last_tx_date: string | null;
 };
 
@@ -51,6 +53,9 @@ export type TransactionRow = {
   lag_days: number | null;
   /** 1 when the filing's own trade/notification dates contradict each other. */
   dates_inconsistent: number;
+  /** 1 when the row was transcribed from a scanned paper filing: shown with
+   *  its bracket as read, counted as a trade, excluded from every total. */
+  transcribed: number;
 };
 
 export type PoliticianRow = {
@@ -64,6 +69,8 @@ export type PoliticianRow = {
   buys: number;
   sells: number;
   volume_mid: number;
+  /** Rows transcribed from scans: in `trades`, not in `volume_mid`. */
+  transcribed: number;
   avg_delay: number | null;
   avg_lag: number | null;
   late_count: number;
@@ -98,16 +105,40 @@ const LAG = `CASE WHEN julianday(t.notification_date) >= julianday(t.tx_date)
      THEN CAST(julianday(t.notification_date) - julianday(t.tx_date) AS INTEGER) END`;
 
 /**
+ * Rows read by transcribing a scanned paper filing (`filings.parse_method`
+ * is 'vision'). They count as trades and toward member and ticker lists, but
+ * contribute nothing to any volume sum: the amount is a checkbox read off a
+ * scan, not a bracket parsed from a filed text layer. Mirrors
+ * `counts_toward_volume` in src/whale/stats.py — keep the two in agreement.
+ * Every query here joins `filings f`, which is what makes this a row test.
+ */
+export const TRANSCRIBED = `COALESCE(f.parse_method, '') = 'vision'`;
+
+/** The row's disclosed floor, ceiling and exact figure — NULL when the row
+ *  is transcribed and may not enter a total. */
+const VOL_MIN = `CASE WHEN ${TRANSCRIBED} THEN NULL ELSE t.amount_min_cents END`;
+const VOL_MAX = `CASE WHEN ${TRANSCRIBED} THEN NULL ELSE t.amount_max_cents END`;
+const VOL_EXACT = `CASE WHEN ${TRANSCRIBED} THEN NULL ELSE t.amount_exact_cents END`;
+
+/** A counted row in the open-ended top bracket: it makes the total's upper
+ *  bound unknowable. A transcribed row never does — it is not in the total. */
+const OPEN_ENDED = `(NOT ${TRANSCRIBED} AND t.amount_max_cents IS NULL AND t.amount_exact_cents IS NULL)`;
+
+/** SUM of the disclosed ceilings, or NULL once any row is open-ended. */
+const VOLUME_MAX = `CASE WHEN SUM(${OPEN_ENDED}) > 0 THEN NULL
+       ELSE SUM(COALESCE(${VOL_MAX}, ${VOL_EXACT}, 0)) END`;
+
+/**
  * Amount contribution of a row, in cents.
  *
  * Disclosures give brackets, so `mid` is the bracket midpoint — an estimate,
  * never a reported figure. Rows in the open-ended top bracket
  * (max IS NULL) contribute their floor to `mid` and force the range's upper
- * bound to be reported as unbounded.
+ * bound to be reported as unbounded. A transcribed row contributes nothing.
  */
-export const MID = `COALESCE(t.amount_exact_cents,
+export const MID = `CASE WHEN ${TRANSCRIBED} THEN NULL ELSE COALESCE(t.amount_exact_cents,
   CASE WHEN t.amount_max_cents IS NULL THEN t.amount_min_cents
-       ELSE (t.amount_min_cents + t.amount_max_cents) / 2 END)`;
+       ELSE (t.amount_min_cents + t.amount_max_cents) / 2 END) END`;
 
 export async function getTickers(days?: number, limit = 40): Promise<TickerRow[]> {
   const db = await getDb();
@@ -121,10 +152,10 @@ export async function getTickers(days?: number, limit = 40): Promise<TickerRow[]
               COUNT(*) AS trades,
               SUM(t.action='purchase') AS buys,
               SUM(t.action IN ('sale','sale_partial')) AS sells,
-              SUM(COALESCE(t.amount_min_cents,0)) AS volume_min,
-              CASE WHEN SUM(t.amount_max_cents IS NULL AND t.amount_exact_cents IS NULL) > 0
-                   THEN NULL ELSE SUM(COALESCE(t.amount_max_cents, t.amount_exact_cents, 0)) END AS volume_max,
+              SUM(COALESCE(${VOL_MIN},0)) AS volume_min,
+              ${VOLUME_MAX} AS volume_max,
               SUM(COALESCE(${MID},0)) AS volume_mid,
+              SUM(${TRANSCRIBED}) AS transcribed,
               MAX(t.tx_date) AS last_tx_date
        FROM transactions t
        JOIN filings f ON f.id = t.filing_id
@@ -150,9 +181,10 @@ export async function getConsensusTickers(days = 90, limit = 12): Promise<Ticker
               COUNT(*) AS trades,
               SUM(t.action='purchase') AS buys,
               SUM(t.action IN ('sale','sale_partial')) AS sells,
-              SUM(COALESCE(t.amount_min_cents,0)) AS volume_min,
+              SUM(COALESCE(${VOL_MIN},0)) AS volume_min,
               NULL AS volume_max,
               SUM(COALESCE(${MID},0)) AS volume_mid,
+              SUM(${TRANSCRIBED}) AS transcribed,
               MAX(t.tx_date) AS last_tx_date
        FROM transactions t
        JOIN filings f ON f.id = t.filing_id
@@ -198,7 +230,8 @@ export async function getTransactions(opts: {
               ${DELAY} AS delay_days,
               ${LAG} AS lag_days,
               CASE WHEN julianday(t.notification_date) < julianday(t.tx_date)
-                   THEN 1 ELSE 0 END AS dates_inconsistent
+                   THEN 1 ELSE 0 END AS dates_inconsistent,
+              ${TRANSCRIBED} AS transcribed
        FROM transactions t
        JOIN filings f ON f.id = t.filing_id
        LEFT JOIN politicians p ON p.id = t.politician_id
@@ -220,6 +253,7 @@ export async function getPoliticians(days?: number, limit = 60): Promise<Politic
               SUM(t.action='purchase') AS buys,
               SUM(t.action IN ('sale','sale_partial')) AS sells,
               SUM(COALESCE(${MID},0)) AS volume_mid,
+              SUM(${TRANSCRIBED}) AS transcribed,
               AVG(${DELAY}) AS avg_delay,
               AVG(${LAG}) AS avg_lag,
               SUM(CASE WHEN ${DELAY} > 45 THEN 1 ELSE 0 END) AS late_count
@@ -239,6 +273,8 @@ export type PoliticianTotals = {
   volume_mid: number;
   late_trades: number;
   members_late: number;
+  /** Rows transcribed from scans across every member: not in `volume_mid`. */
+  transcribed: number;
 };
 
 /**
@@ -252,6 +288,7 @@ export async function getPoliticianTotals(): Promise<PoliticianTotals> {
       `WITH per_member AS (
          SELECT COALESCE(p.full_name, f.filer_name) AS member_name,
                 SUM(COALESCE(${MID},0)) AS volume_mid,
+                SUM(${TRANSCRIBED}) AS transcribed,
                 SUM(CASE WHEN ${DELAY} > 45 THEN 1 ELSE 0 END) AS late_count
          FROM transactions t
          JOIN filings f ON f.id = t.filing_id
@@ -262,7 +299,8 @@ export async function getPoliticianTotals(): Promise<PoliticianTotals> {
        SELECT COUNT(*) AS members,
               COALESCE(SUM(volume_mid),0) AS volume_mid,
               COALESCE(SUM(late_count),0) AS late_trades,
-              SUM(CASE WHEN late_count > 0 THEN 1 ELSE 0 END) AS members_late
+              SUM(CASE WHEN late_count > 0 THEN 1 ELSE 0 END) AS members_late,
+              COALESCE(SUM(transcribed),0) AS transcribed
        FROM per_member`
     )
     .get() as PoliticianTotals;
@@ -295,10 +333,10 @@ export async function getPoliticianDetail(member: string): Promise<PoliticianDet
               COUNT(DISTINCT t.ticker) AS tickers,
               SUM(t.action='purchase') AS buys,
               SUM(t.action IN ('sale','sale_partial')) AS sells,
-              SUM(COALESCE(t.amount_min_cents,0)) AS volume_min,
-              CASE WHEN SUM(t.amount_max_cents IS NULL AND t.amount_exact_cents IS NULL) > 0
-                   THEN NULL ELSE SUM(COALESCE(t.amount_max_cents, t.amount_exact_cents, 0)) END AS volume_max,
+              SUM(COALESCE(${VOL_MIN},0)) AS volume_min,
+              ${VOLUME_MAX} AS volume_max,
               SUM(COALESCE(${MID},0)) AS volume_mid,
+              SUM(${TRANSCRIBED}) AS transcribed,
               AVG(${DELAY}) AS avg_delay,
               AVG(${LAG}) AS avg_lag,
               SUM(CASE WHEN ${DELAY} > 45 THEN 1 ELSE 0 END) AS late_count,
@@ -321,6 +359,7 @@ export type PoliticianTickerRow = {
   buys: number;
   sells: number;
   volume_mid: number;
+  transcribed: number;
   last_tx_date: string | null;
 };
 
@@ -336,6 +375,7 @@ export async function getPoliticianTickers(member: string, limit = 40): Promise<
               SUM(t.action='purchase') AS buys,
               SUM(t.action IN ('sale','sale_partial')) AS sells,
               SUM(COALESCE(${MID},0)) AS volume_mid,
+              SUM(${TRANSCRIBED}) AS transcribed,
               MAX(t.tx_date) AS last_tx_date
        FROM transactions t
        JOIN filings f ON f.id = t.filing_id
@@ -362,6 +402,9 @@ export type Pipeline = {
   lastUpdated: string | null;
   failures: { doc_id: string; filer_name: string; last_error: string | null; pdf_url: string }[];
   coverage: { parsed: number; unreadable: number };
+  /** Filings and rows read by transcribing a scan: counted as trades, in no
+   *  total. Zero of each while `vision.enabled` is off. */
+  transcribed: { filings: number; rows: number };
 };
 
 export async function getPipeline(): Promise<Pipeline> {
@@ -396,6 +439,13 @@ export async function getPipeline(): Promise<Pipeline> {
       `SELECT SUM(status IN ${COUNTED}) AS parsed, SUM(status = 'failed') AS unreadable FROM filings`
     )
     .get() as Pipeline["coverage"];
+  const transcribed = db
+    .prepare(
+      `SELECT COUNT(DISTINCT f.id) AS filings, COUNT(t.id) AS rows
+       FROM filings f LEFT JOIN transactions t ON t.filing_id = f.id
+       WHERE f.status IN ${COUNTED} AND ${TRANSCRIBED}`
+    )
+    .get() as Pipeline["transcribed"];
 
   return {
     byStatus,
@@ -405,5 +455,6 @@ export async function getPipeline(): Promise<Pipeline> {
     lastUpdated: last?.t ?? null,
     failures,
     coverage,
+    transcribed,
   };
 }
