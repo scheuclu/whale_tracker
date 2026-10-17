@@ -161,6 +161,9 @@ def notify_insiders(conn: sqlite3.Connection, config: Config, dry_run: bool = Fa
     sent += sent_clusters
 
     filing_rules = settings.rules_of_kind("filing")
+    # Cooldown rows touched on this run, so a dry run previews the folding
+    # without writing it, and a real run reads what it just wrote.
+    cooldowns: dict[tuple[str, str, str], dict] = {}
     for filing in db.insider_filings_by_status(conn, insiders.PENDING_STATUS,
                                                unnotified_only=True):
         rows, owners = insider_alerts.load_filing(conn, filing["id"])
@@ -187,16 +190,46 @@ def notify_insiders(conn: sqlite3.Connection, config: Config, dry_run: bool = Fa
                      filing["accession"], filing["ticker"] or filing["issuer_cik"])
             continue
 
+        key = insider_alerts.cooldown_key(match)
+        previous = cooldowns[key] if key in cooldowns else (
+            db.insider_cooldown(conn, *key) if key else None)
+        decision = insider_alerts.cooldown_decision(
+            previous, match, settings.filing_refire_days, settings.cluster_refire_growth)
+        if not decision.fire:
+            # The same owner, issuer and direction was reported inside the
+            # window and the run has not grown enough to say so again. One
+            # accumulation programme is one decision: Nippon Life buying
+            # Corebridge sent 24 of these. Folded, not dropped — history for
+            # the dashboard, and counted into the run's cumulative so the
+            # next refire message carries it.
+            cooldowns[key] = decision.state
+            if not dry_run:
+                db.set_insider_status(conn, filing["id"], insiders.HISTORY_STATUS)
+                db.save_insider_cooldown(conn, decision.state)
+                conn.commit()
+            log.info("insider filing %s folded into the cooldown for %s (%s, %s)",
+                     filing["accession"], filing["ticker"], key[0], match.direction)
+            continue
+
         context = None
         if filing["ticker"]:
             context = _insider_context(conn, settings, filing["ticker"], match.direction,
                                        today)
-        text = telegram.format_insider_filing(match, context)
-        if _deliver(config, text, dry_run) and not dry_run:
-            db.set_insider_status(conn, filing["id"], "notified")
-            db.mark_insider_notified(conn, filing["id"])
-            sent += 1
-            log.info("insider alert %r for %s", match.rule.name, filing["accession"])
+        text = telegram.format_insider_filing(
+            match, context, repeat=decision if decision.repeat else None)
+        if _deliver(config, text, dry_run):
+            # Only a delivered alert starts or extends a cooldown: a failed
+            # send leaves the filing pending and the state untouched, so the
+            # retry next run is judged exactly as this one was.
+            if key:
+                cooldowns[key] = decision.state
+            if not dry_run:
+                db.set_insider_status(conn, filing["id"], "notified")
+                db.mark_insider_notified(conn, filing["id"])
+                if key:
+                    db.save_insider_cooldown(conn, decision.state)
+                sent += 1
+                log.info("insider alert %r for %s", match.rule.name, filing["accession"])
         conn.commit()
     return sent
 

@@ -277,11 +277,29 @@ def owner_label(owner) -> str:
     return f"<b>{esc(name)}</b>" + (f" ({esc(role)})" if role else "")
 
 
-def format_insider_filing(match, cluster_context: InsiderCluster | None = None) -> str:
+def _ordinal(n: int) -> str:
+    suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
+def _repeat_line(repeat) -> str:
+    """"3rd filing in 12 days · cumulative $22M" — a refire of the same
+    owner's programme, so the reader sees the run rather than one filing."""
+    when = ("today" if repeat.days == 0 else "in 1 day" if repeat.days == 1
+            else f"in {repeat.days} days")
+    total = (f"cumulative <b>{esc(usd(repeat.cumulative_cents))}</b> (shares × reported price)"
+             if repeat.cumulative_cents is not None else "cumulative value unpriced")
+    return f"<b>{_ordinal(repeat.count)} filing {when}</b> · {total}"
+
+
+def format_insider_filing(match, cluster_context: InsiderCluster | None = None,
+                          repeat=None) -> str:
     """One message per Form 4 that a rule claimed.
 
     The rule's name is the headline, so the chat says *why* this filing was
-    worth interrupting for.
+    worth interrupting for. `repeat` is the cooldown decision when this is a
+    refire of a run already reported: the message then also carries how many
+    filings the run spans and their cumulative value.
     """
     filing = match.filing
     verb = "bought" if match.direction == "purchase" else "sold"
@@ -308,9 +326,10 @@ def format_insider_filing(match, cluster_context: InsiderCluster | None = None) 
         parts = [
             f"{emoji} <b>{esc(match.rule.name)} — {esc(symbol)}</b>",
             f"{who} {verb} <b>{esc(value)}</b> of {esc(filing['issuer_name'] or 'the issuer')}",
-            " · ".join(detail),
-            "",
         ]
+        if repeat is not None:
+            parts.append(_repeat_line(repeat))
+        parts += [" · ".join(detail), ""]
         parts += [_insider_row(r) for r in match.rows[:max_rows]]
         if len(match.rows) > max_rows:
             parts.append(f"…+{len(match.rows) - max_rows} more")

@@ -335,5 +335,8 @@ def insider_alert_preview(config: Config, window_days: int | None, limit: int,
                 print("\n" + telegram.format_insider_cluster(cluster, rule.name, cwindow) + "\n")
         print("\nNothing was sent. Alerts fire from `whale run` on newly stored filings;")
         print("already-examined filings are demoted to history and never re-alerted.")
+        print("Every rule match is listed: at send time a repeat by the same owner in the")
+        print(f"same issuer and direction within {config.insiders.filing_refire_days}d "
+              "(insiders.filing_refire_days) is folded unless the run has grown.")
     finally:
         conn.close()

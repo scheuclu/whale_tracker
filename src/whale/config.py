@@ -155,6 +155,20 @@ def _refire_growth(raw) -> float:
     return value
 
 
+def _refire_days(raw) -> int:
+    """The filing-rule cooldown length. 0 turns it off; less makes no sense."""
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        raise ConfigError(
+            f"insiders.filing_refire_days must be a whole number of days, not {raw!r}"
+        ) from None
+    if value < 0:
+        raise ConfigError(
+            f"insiders.filing_refire_days is {value}; it must be 0 (off) or more")
+    return value
+
+
 @dataclass
 class InsiderSettings:
     """SEC Form 4 ingestion. See config.yaml for the reasoning behind each."""
@@ -173,6 +187,13 @@ class InsiderSettings:
     # coordinated purchase arrive as a burst, so +1 insider per poll is the
     # normal shape of one event, not news. See stats.is_new_insider_cluster.
     cluster_refire_growth: float = 1.5
+    # Filing-rule cooldown. After an alert, the same primary owner filing
+    # again in the same issuer and direction within this many days is folded
+    # into history rather than sent, unless the run's cumulative value has
+    # grown `cluster_refire_growth`× past what was last reported. One
+    # accumulation programme is one decision: Nippon Life buying Corebridge
+    # sent 24 alerts in 33 days. 0 turns the cooldown off.
+    filing_refire_days: int = 30
     # A filing older than this on first sight is history, never a
     # notification: it stops a backlog being replayed into Telegram.
     max_filing_age_days: int = 7
@@ -328,6 +349,7 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
         cluster_window_days=int(n.get("cluster_window_days", 30)),
         min_insiders=int(n.get("min_insiders", 3)),
         cluster_refire_growth=_refire_growth(n.get("cluster_refire_growth", 1.5)),
+        filing_refire_days=_refire_days(n.get("filing_refire_days", 30)),
         max_filing_age_days=int(n.get("max_filing_age_days", 7)),
         alerts=[_parse_rule(r, i) for i, r in enumerate(n.get("alerts") or [])],
     )

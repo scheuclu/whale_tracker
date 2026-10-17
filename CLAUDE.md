@@ -165,6 +165,15 @@ parser stays faithful to the PDF and the UI flags the row rather than
 - A `--dry-run` must not demote, notify or record anything: previewing the
   queue never consumes it. `whale insider-alerts` is the tuning tool and
   ignores notification state so rules can be tested against history.
+- **Filing rules have a per-owner cooldown** keyed on (primary owner CIK,
+  issuer CIK, direction) and stored in `insider_alert_cooldowns`, not in
+  `alerts` (no owner column; its key must stay the cluster dedupe). A repeat
+  inside `insiders.filing_refire_days` is folded to history, like a cluster
+  member, and re-fires only when the run's cumulative value is
+  `cluster_refire_growth`× what was last reported — Nippon Life / CRBG was 24
+  alerts for one programme. Only a *delivered* alert writes the state, so a
+  failed send is judged afresh next run. The congressional watchlist is a
+  different mechanism and stays exempt from this and any other suppression.
 
 ## Data-viz
 

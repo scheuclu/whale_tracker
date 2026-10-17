@@ -89,6 +89,16 @@ insiders:
   # to report every additional insider; below 1.0 is refused, because it would
   # read as tuning while doing nothing.
   cluster_refire_growth: 1.5
+  # Cooldown for the filing rules below. After an alert, further filings by
+  # the same primary owner in the same issuer and direction within this many
+  # days are folded into history rather than sent again — unless the run's
+  # cumulative value has grown to cluster_refire_growth× what was last
+  # reported, when one message says "nth filing in N days, cumulative $X".
+  # One accumulation programme is one decision: Nippon Life buying Corebridge
+  # sent 24 alerts in 33 days, and 67 of the first 291 insider alerts were
+  # repeats of that shape. The window restarts from each message sent. 0 turns
+  # the cooldown off.
+  filing_refire_days: 30
   # A filing older than this on first sight is history, never a notification.
   # It is what stops a first run, or a backfill, replaying days into Telegram.
   max_filing_age_days: 7

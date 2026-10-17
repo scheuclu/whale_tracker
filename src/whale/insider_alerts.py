@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from dataclasses import dataclass
+from datetime import date
 
 from . import stats
 from .config import InsiderRule, InsiderSettings
@@ -132,6 +134,102 @@ def first_filing_match(filing: sqlite3.Row, owners: list[sqlite3.Row],
         if match is not None:
             return match
     return None
+
+
+# --- the filing-rule cooldown -------------------------------------------------
+#
+# A filing rule has no memory: Nippon Life bought Corebridge on 24 of the 33
+# business days to 2026-10-16 and each filing cleared the floor on its own,
+# so each was its own alert — 24 messages for one accumulation decision, and
+# 67 of the first 291 insider alerts were repeats of this shape. The cooldown
+# keys on (primary owner, issuer, direction) and mirrors the cluster rule:
+# a repeat inside the window is folded into history, and the run speaks again
+# only once its cumulative value is `cluster_refire_growth`× what was last
+# reported, so a programme that keeps growing stays visible without a message
+# per filing.
+
+
+@dataclass
+class CooldownDecision:
+    """What the cooldown says about one rule-matched filing."""
+
+    fire: bool
+    # Filings in the run so far, this one included; 1 means a fresh alert.
+    count: int
+    # From the run's first filing to this one, on filing date.
+    days: int
+    # Summed value of the run (shares × reported price); None if none was priced.
+    cumulative_cents: int | None
+    # The cooldown row to persist if this decision is acted on.
+    state: dict
+
+    @property
+    def repeat(self) -> bool:
+        return self.count > 1
+
+
+def cooldown_key(match: FilingMatch) -> tuple[str, str, str] | None:
+    """(primary owner CIK, issuer CIK, direction), or None when a filing has
+    no primary owner to key on — the audit flags those; here they just alert."""
+    if match.primary is None or not match.filing["issuer_cik"]:
+        return None
+    return (match.primary["insider_cik"], match.filing["issuer_cik"], match.direction)
+
+
+def _days_between(start: str | None, end: str | None) -> int | None:
+    try:
+        return (date.fromisoformat(end) - date.fromisoformat(start)).days
+    except (TypeError, ValueError):
+        return None
+
+
+def cooldown_decision(previous: sqlite3.Row | dict | None, match: FilingMatch,
+                      refire_days: int, growth: float) -> CooldownDecision:
+    """Whether this filing is a fresh alert, a refire, or a fold.
+
+    `previous` is the stored cooldown row for the key, or None. The window
+    runs from the last filing that was actually sent, so a refire restarts
+    it. Dates that cannot be compared count as outside the window: a missing
+    alert is the larger harm, so the unknown case fires.
+    """
+    filing = match.filing
+    value = match.value_cents
+    key = cooldown_key(match)
+    fresh = {
+        "insider_cik": key[0] if key else None,
+        "issuer_cik": filing["issuer_cik"],
+        "direction": match.direction,
+        "first_filing_date": filing["filing_date"],
+        "last_alert_filing_date": filing["filing_date"],
+        "last_alert_filing_id": filing["id"],
+        "filing_count": 1,
+        "cumulative_cents": value,
+        "reported_cents": value,
+    }
+    if previous is None or key is None or refire_days <= 0:
+        return CooldownDecision(True, 1, 0, value, fresh)
+    since_alert = _days_between(previous["last_alert_filing_date"], filing["filing_date"])
+    if since_alert is None or since_alert > refire_days:
+        return CooldownDecision(True, 1, 0, value, fresh)
+
+    count = previous["filing_count"] + 1
+    cumulative = previous["cumulative_cents"]
+    if value is not None:
+        cumulative = value if cumulative is None else cumulative + value
+    days = _days_between(previous["first_filing_date"], filing["filing_date"]) or 0
+    state = {f: previous[f] for f in fresh}
+    state.update(filing_count=count, cumulative_cents=cumulative)
+
+    reported = previous["reported_cents"]
+    # Materially bigger than last reported: strictly more, and at least
+    # `growth`× — the cluster rule's "one more insider, and half as many
+    # again". An unpriced run cannot grow, so it cannot refire.
+    grown = (cumulative is not None and reported is not None
+             and cumulative > reported and cumulative >= reported * growth)
+    if grown:
+        state.update(last_alert_filing_date=filing["filing_date"],
+                     last_alert_filing_id=filing["id"], reported_cents=cumulative)
+    return CooldownDecision(grown, count, days, cumulative, state)
 
 
 def cluster_matches(conn: sqlite3.Connection, settings: InsiderSettings,
