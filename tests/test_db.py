@@ -22,7 +22,7 @@ def _tables(conn):
 
 def test_fresh_database_is_current(tmp_path):
     conn = db.connect(tmp_path / "fresh.sqlite3")
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION == 7
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
     assert {"insiders", "insider_filings", "insider_filing_owners", "insider_transactions"} <= _tables(conn)
     conn.close()
 

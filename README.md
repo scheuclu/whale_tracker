@@ -272,8 +272,14 @@ separate `insider_*` tables — never mixed into the congressional data.
   table (options, warrants).
 - **The feed remembers ~2000 entries, about two business days.** A cursor
   marks how far each run got; if the pipeline is down longer than that, the
-  run records a gap and `python -m whale backfill-insiders --from … --to …`
-  repairs it from EDGAR's daily index. The same command loads history.
+  run records a gap and the poll runs that follow repair it from EDGAR's daily
+  index, after reading the live feed and within
+  `insiders.gap_repair_budget_seconds` per run — a gap that does not fit
+  narrows to what is left and continues next run. Filings recovered this way
+  pass through the same age gate as the feed, so a gap older than
+  `max_filing_age_days` is history and never an alert. The same walk is
+  available by hand as `python -m whale backfill-insiders --from … --to …`,
+  which also loads history.
 - **Late means past two business days**, federal holidays excluded, measured
   from the trade (or deemed execution) date to the filing date. The filer's own
   "late" box is kept separately, as filed.
