@@ -89,25 +89,27 @@ def sync(conn: sqlite3.Connection, config: Config) -> int:
 
 
 def _sync_senate(conn: sqlite3.Connection, config: Config) -> None:
-    """Best-effort. Senate eFD blocks datacenter IPs; a block is not an error."""
-    try:
-        filings = senate.fetch_ptrs(config.senate_proxy_url)
-    except senate.SenateBlocked as exc:
-        log.info("senate eFD unavailable (%s); House-only this run", exc)
-        db.set_state(conn, "senate_status", f"blocked: {exc}")
+    """Best-effort. Senate eFD blocks datacenter IPs; a block is not an error.
+
+    `senate.sync` never raises: it classifies the outcome into the vocabulary
+    `sync_state.senate_status` stores and `audit.check_senate` reads, so a
+    failure on our side cannot be filed under the known block.
+    """
+    result = senate.sync(config.senate_proxy_url)
+    db.set_state(conn, "senate_status", result.status)
+    if result.kind == senate.STATUS_BLOCKED:
+        log.info("senate eFD unavailable (%s); House-only this run", result.status)
         conn.commit()
         return
-    except Exception as exc:
-        log.warning("senate eFD failed unexpectedly: %s", exc)
-        db.set_state(conn, "senate_status", f"error: {exc}")
+    if result.kind != senate.STATUS_OK:
+        log.warning("senate eFD not reached: %s", result.status)
         conn.commit()
         return
 
-    db.set_state(conn, "senate_status", f"ok: {len(filings)} filings seen")
     # Senate PTRs are HTML reports, not the House's PDF template, so they need
     # their own parser. Recording them keeps the queue ready for that work.
     matcher = roster.Matcher(conn)
-    for f in filings:
+    for f in result.filings:
         if db.filing_exists(conn, "senate", f.doc_id):
             continue
         member = matcher.match(f"{f.first} {f.last}", None, "senate")

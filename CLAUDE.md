@@ -46,6 +46,13 @@ parser stays faithful to the PDF and the UI flags the row rather than
 - Cluster alerts consider only equity-like asset types. Members roll Treasury
   bills constantly; one member alone filed 99 T-bill transactions in 2026.
 - Senate is expected to fail. `senate.py` must never raise into the pipeline.
+  `sync_state.senate_status` is prefixed `ok:` / `blocked:` / `error:`.
+  `blocked` is eFD refusing us (403, challenge page, the agreement form
+  served where JSON belongs) and is the only outcome the audit calls
+  expected; `error` is the request failing on our side (empty proxy URL,
+  DNS, timeout) and warns. Blank environment secrets read as unset: GitHub
+  Actions passes an undefined secret as `""`, which is how Senate went
+  unattempted for every run while reading as the known block (#16).
 - **Disclosure delay is trade date -> filing date**, never the report's
   "Notification Date" column. Notification is when the *member* learned of the
   trade: someone trading their own account is notified same-day, so that column
