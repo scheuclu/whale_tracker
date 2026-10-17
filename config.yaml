@@ -137,6 +137,16 @@ insiders:
   # to report every additional insider; below 1.0 is refused, because it would
   # read as tuning while doing nothing.
   cluster_refire_growth: 1.5
+  # Cooldown for the filing rules below. After an alert, further filings by
+  # the same primary owner in the same issuer and direction within this many
+  # days are folded into history rather than sent again — unless the run's
+  # cumulative value has grown to cluster_refire_growth× what was last
+  # reported, when one message says "nth filing in N days, cumulative $X".
+  # One accumulation programme is one decision: Nippon Life buying Corebridge
+  # sent 24 alerts in 33 days, and 67 of the first 291 insider alerts were
+  # repeats of that shape. The window restarts from each message sent. 0 turns
+  # the cooldown off.
+  filing_refire_days: 30
   # A filing older than this on first sight is history, never a notification.
   # It is what stops a first run, or a backfill, replaying days into Telegram.
   max_filing_age_days: 7
@@ -186,14 +196,30 @@ insiders:
       titles: ["chief executive", "ceo", "chief financial", "cfo"]
       min_value_usd: 100000
 
-    # The catch-all: anyone else buying enough to be worth a message. At
-    # $250k this was 82 of the 173 insider alerts sent in the 16 days to
-    # 2026-09-23 — more than the other three rules combined, and mostly
-    # directors and 10% holders rather than the people who set guidance.
-    # $1M keeps the conviction buys and drops the routine half.
+    # Anyone else who runs the company buying enough to be worth a message.
+    # At $250k this was 82 of the 173 insider alerts sent in the 16 days to
+    # 2026-09-23 — more than the other three rules combined. $1M keeps the
+    # conviction buys; the role condition keeps it to the people who set
+    # guidance. Without it, 82 of the first 291 alerts had a 10% owner with
+    # no officer or director flag as the primary filer — Berkshire in Lennar,
+    # GoldenTree in QVC, Baker Bros in Kodiak, Nippon Life in Corebridge —
+    # funds and holding companies accumulating, which is also what the
+    # cooldown above exists for. Any one reporting owner satisfies `roles`,
+    # so a fund filing jointly with the founder on its board still counts.
     - name: Large insider buy
       direction: buy
+      roles: [officer, director]
       min_value_usd: 1000000
+
+    # A 10% holder buying is a different signal — a position, not a view from
+    # inside the building — and the routine shape of one is a long programme
+    # of mid-sized filings. A much higher floor keeps only the ones that are
+    # news on their own. Placed after the rule above so a fund whose joint
+    # filer is a director is still reported as an insider buy.
+    - name: Large 10% owner buy
+      direction: buy
+      roles: [ten_percent_owner]
+      min_value_usd: 10000000
 
     # Sales are routine, so this asks for three things at once: an officer, a
     # large amount, and no 10b5-1 plan. A planned sale was scheduled months

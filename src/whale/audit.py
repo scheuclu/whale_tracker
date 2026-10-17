@@ -763,6 +763,37 @@ def check_insider_coverage(conn, today: date | None = None) -> list[Finding]:
     return out
 
 
+def check_insider_notified_without_ticker(conn, today: date | None = None) -> list[Finding]:
+    """An insider alert went out for an issuer nobody can trade.
+
+    A Form 4 filed with the trading symbol NONE or N/A is a private BDC,
+    interval fund or similar non-listed vehicle. The filing rules and the
+    cluster finder skip those, so one reaching Telegram means that gate
+    regressed. Windowed to the last 30 days of notifications so the alerts
+    sent before the gate existed do not read as a standing fault every week.
+    """
+    cutoff = ((today or date.today()) - timedelta(days=30)).isoformat()
+    rows = _rows(conn, """
+        SELECT accession, issuer_name, ticker_as_filed, filing_date, notified_at
+        FROM insider_filings
+        WHERE status = 'notified' AND ticker IS NULL
+          AND (notified_at IS NULL OR substr(notified_at, 1, 10) >= ?)
+        ORDER BY notified_at DESC, id DESC
+    """, (cutoff,))
+    if not rows:
+        return []
+    return [Finding(
+        WARN, "insider_notified_without_ticker",
+        f"{len(rows)} insider alert(s) went out for an issuer with no ticker",
+        "The issuer filed its trading symbol as NONE or N/A — a private fund "
+        "or other non-listed vehicle — so nobody can act on the alert. Filing "
+        "rules and the cluster finder are meant to skip these and demote them "
+        "to history; one being notified means that gate stopped working.",
+        [f"{r['accession']}  {r['issuer_name']}  filed as {r['ticker_as_filed'] or '—'}"
+         f"  on {r['filing_date']}  notified {r['notified_at']}" for r in rows],
+    )]
+
+
 CHECKS = (
     check_empty_parsed_filings,
     check_nonstandard_amount_brackets,
@@ -784,6 +815,7 @@ CHECKS = (
     check_insider_dates,
     check_insider_feed_health,
     check_insider_coverage,
+    check_insider_notified_without_ticker,
 )
 
 

@@ -161,6 +161,16 @@ insiders:
       titles: ["chief executive", "ceo", "chief financial", "cfo"]
       min_value_usd: 100000
 
+    - name: Large insider buy          # the people who set guidance
+      direction: buy
+      roles: [officer, director]
+      min_value_usd: 1000000
+
+    - name: Large 10% owner buy        # a fund building a position: a higher bar
+      direction: buy
+      roles: [ten_percent_owner]
+      min_value_usd: 10000000
+
     - name: Unplanned executive sale
       direction: sell
       roles: [officer]
@@ -174,6 +184,12 @@ again only once it is `insiders.cluster_refire_growth`× the size last reported
 (default 1.5). Form 4 is due two business days after the trade, so a
 coordinated purchase arrives as a burst and would otherwise re-alert on every
 poll — one board's buying produced 25 messages for one decision before this.
+The filing rules have the same memory: the same owner filing again in the same
+issuer and direction within `insiders.filing_refire_days` (default 30) is
+folded into history rather than re-alerted, until the run's cumulative value
+reaches `cluster_refire_growth`× what was last reported — one message then
+reads "3rd filing in 12 days · cumulative $22M". Nippon Life's 24 Corebridge
+purchases in 33 days were 24 alerts before this.
 
 A rule may set `direction` (buy/sell/any), `min_value_usd` (summed per
 direction within one filing), `roles` (director / officer / ten_percent_owner /

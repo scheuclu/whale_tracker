@@ -35,7 +35,7 @@ from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS politicians (
@@ -212,6 +212,29 @@ CREATE INDEX IF NOT EXISTS idx_insider_tx_filing ON insider_transactions(filing_
 CREATE INDEX IF NOT EXISTS idx_insider_tx_date   ON insider_transactions(tx_date);
 """
 
+# Filing-rule cooldown: one row per (primary owner, issuer, direction), read
+# before a filing-rule alert is sent and rewritten after every rule-matched
+# filing, sent or folded. Its own table rather than a column on `alerts`:
+# that table has no owner and its (ticker, direction, kind) key must stay
+# the cluster dedupe. A "run" is one owner's programme of filings in one
+# issuer and direction, each inside `insiders.filing_refire_days` of the
+# last one that was sent.
+_COOLDOWN_DDL = """
+CREATE TABLE IF NOT EXISTS insider_alert_cooldowns (
+  insider_cik TEXT NOT NULL,
+  issuer_cik TEXT NOT NULL,
+  direction TEXT NOT NULL,               -- 'purchase' | 'sale'
+  first_filing_date TEXT NOT NULL,       -- the filing that opened the run
+  last_alert_filing_date TEXT NOT NULL,  -- the filing most recently sent; the window runs from here
+  last_alert_filing_id INTEGER,
+  filing_count INTEGER NOT NULL,         -- filings in the run, sent or folded
+  cumulative_cents INTEGER,              -- their summed value (shares × reported price); NULL when none was priced
+  reported_cents INTEGER,                -- the value the last message carried
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (insider_cik, issuer_cik, direction)
+);
+"""
+
 # Statuses whose transactions count toward statistics. A filing that failed to
 # parse contributes nothing, and one that is merely 'new' has no rows yet.
 COUNTED_STATUSES = ("parsed", "notified", "backfilled")
@@ -262,6 +285,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
             from . import insiders
 
             insiders.reparse_trade_dates(conn)
+    if version < 7:
+        # Numbered past a concurrent version-4 migration so the two can be
+        # reconciled at merge; idempotent, so running it on either side is safe.
+        conn.executescript(_COOLDOWN_DDL)
     if version < SCHEMA_VERSION:
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         conn.commit()
@@ -525,6 +552,36 @@ def set_insider_status(conn: sqlite3.Connection, filing_id: int, status: str,
     conn.execute(
         "UPDATE insider_filings SET status = ?, last_error = ?, updated_at = ? WHERE id = ?",
         (status, error, now_iso(), filing_id),
+    )
+
+
+def insider_cooldown(conn: sqlite3.Connection, insider_cik: str, issuer_cik: str,
+                     direction: str) -> sqlite3.Row | None:
+    """The filing-rule cooldown row for this owner, issuer and direction."""
+    return conn.execute(
+        """SELECT * FROM insider_alert_cooldowns
+           WHERE insider_cik = ? AND issuer_cik = ? AND direction = ?""",
+        (insider_cik, issuer_cik, direction),
+    ).fetchone()
+
+
+COOLDOWN_FIELDS = (
+    "insider_cik", "issuer_cik", "direction", "first_filing_date",
+    "last_alert_filing_date", "last_alert_filing_id", "filing_count",
+    "cumulative_cents", "reported_cents",
+)
+
+
+def save_insider_cooldown(conn: sqlite3.Connection, state: dict) -> None:
+    """Insert or replace the cooldown row described by `state`."""
+    values = [state[f] for f in COOLDOWN_FIELDS] + [now_iso()]
+    updates = ", ".join(f"{f}=excluded.{f}" for f in COOLDOWN_FIELDS[3:])
+    conn.execute(
+        f"INSERT INTO insider_alert_cooldowns ({', '.join(COOLDOWN_FIELDS)}, updated_at) "
+        f"VALUES ({', '.join('?' for _ in values)}) "
+        f"ON CONFLICT(insider_cik, issuer_cik, direction) DO UPDATE SET {updates}, "
+        "updated_at=excluded.updated_at",
+        values,
     )
 
 
