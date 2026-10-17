@@ -280,7 +280,7 @@ def test_a_scan_announced_as_unreadable_is_parsed_as_history_not_announced_again
     announced = _scan_filing(conn, "9000001", notified=True)
     silent = _scan_filing(conn, "9000002", notified=False)
     monkeypatch.setattr(pipeline.house, "fetch_pdf", lambda url: b"pdf")
-    monkeypatch.setattr(pipeline, "_parse_bytes", lambda b, c: (_parsed(), "vision"))
+    monkeypatch.setattr(pipeline, "_parse_bytes", lambda b, c, *a, **k: (_parsed(), "vision"))
     config = _config()
     assert pipeline.retry_scanned(conn, config) == 2
     assert pipeline.parse_pending(conn, config) == 2
@@ -304,7 +304,7 @@ def test_a_refused_scan_is_failed_with_its_own_method_and_reported_once(conn, mo
     fid = _scan_filing(conn, "9000003", notified=False)
     monkeypatch.setattr(pipeline.house, "fetch_pdf", lambda url: b"pdf")
 
-    def refuse(b, c):
+    def refuse(b, c, *a, **k):
         raise ScanUnreadable("the grid has 7 transaction rows but the model transcribed 6")
 
     monkeypatch.setattr(pipeline, "_parse_bytes", refuse)

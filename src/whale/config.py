@@ -205,6 +205,17 @@ def _refire_days(raw) -> int:
         raise ConfigError(
             f"insiders.filing_refire_days is {value}; it must be 0 (off) or more")
     return value
+def _seconds(raw, key: str) -> float:
+    """A non-negative number of seconds for `key`; 0 means no limit."""
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        raise ConfigError(f"{key} must be a number of seconds, not {raw!r}") from None
+    if value < 0:
+        raise ConfigError(f"{key} is {value}; it must be 0 (no limit) or a number of seconds")
+    return value
+
+
 def _budget_seconds(raw) -> float:
     """`insiders.gap_repair_budget_seconds`: seconds per poll run, or 0 for off.
 
@@ -355,9 +366,14 @@ class Config:
     insiders: InsiderSettings = field(default_factory=InsiderSettings)
     watchlist: WatchlistSettings = field(default_factory=WatchlistSettings)
     senate_enabled: bool = True
-    # Scanned-PDF transcription is opt-in; see config.yaml for the measured
-    # accuracy that makes it off by default.
+    # Scanned-PDF transcription; see config.yaml for the measured accuracy
+    # and the quarantine that lets it be on.
     vision_enabled: bool = False
+    # Seconds of model time one poll run may spend on scans; 0 = no limit.
+    # The first run with vision on had 53 scans queued, spent the job's whole
+    # 20-minute timeout on them and was killed before the commit step, so
+    # nothing it read was kept. Scans past the budget stay queued.
+    vision_budget_seconds: float = 480
     db_path: Path = DEFAULT_DB_PATH
     # Public URL of the dashboard, for links in messages. None means the
     # links are relative paths: still the right page, just not clickable.
@@ -444,6 +460,8 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
         watchlist=watchlist,
         senate_enabled=bool((raw.get("senate") or {}).get("enabled", True)),
         vision_enabled=bool((raw.get("vision") or {}).get("enabled", False)),
+        vision_budget_seconds=_seconds((raw.get("vision") or {}).get("budget_seconds", 480),
+                                       "vision.budget_seconds"),
         db_path=db_path,
         dashboard_url=dashboard_url,
         telegram_bot_token=_env("TELEGRAM_BOT_TOKEN"),

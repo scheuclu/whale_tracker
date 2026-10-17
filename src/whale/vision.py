@@ -179,7 +179,21 @@ def _transcribe(pdf_bytes: bytes, api_key: str) -> dict:
     text = (response.text or "").strip()
     if not text:
         raise ValueError("vision returned an empty response")
-    return json.loads(text)
+    return json_object(text)
+
+
+def json_object(text: str) -> dict:
+    """The JSON object in a model reply.
+
+    The request asks for JSON only, but a reply can still arrive fenced
+    (```json … ```) or with a sentence around it, and the first live run lost
+    a filing to exactly that. The outermost object is taken; a reply with no
+    object at all is still an error the caller reports.
+    """
+    start, end = text.find("{"), text.rfind("}")
+    if start == -1 or end < start:
+        raise ValueError(f"vision returned no JSON object: {text[:80]!r}")
+    return json.loads(text[start:end + 1])
 
 
 def join(data: dict, grid) -> ParsedFiling:

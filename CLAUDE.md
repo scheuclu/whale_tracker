@@ -112,6 +112,11 @@ parser stays faithful to the PDF and the UI flags the row rather than
   model, decides amount and type. Vision off plus a stored key is a
   legitimate state for debugging; the filings then wait as `failed`/`scanned`
   and are re-queued by `pipeline.retry_scanned` when it is turned back on.
+  Model time per run is capped by `vision.budget_seconds` (480 s; scans past
+  it stay `new` for the next run). The poll job's timeout is 20 minutes and
+  the commit step is last, so an uncapped backlog is killed and commits
+  nothing: the first run with vision on did exactly that with 53 scans
+  (2026-10-17), and every scheduled run after it would have repeated it.
 - Scanned paper filings are **captured for inspection** in the same database
   (`scan_pages`: one 1-bit PNG per page at 110 dpi, oriented the way
   `paper_form.py` turned it; `scan_rows`: every row the grid reader found,
