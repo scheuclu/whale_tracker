@@ -76,7 +76,7 @@ dashboard:
   # by bracket) that links to the member's page for the full table. Unset,
   # the link is the relative path (/politicians?m=...): correct, but Telegram
   # will not make it clickable.
-  url: ""
+  url: "https://whaletracker-blue.vercel.app"
 
 ingest:
   years: [2026]
