@@ -40,9 +40,21 @@ parser stays faithful to the PDF and the UI flags the row rather than
   `pdftotext`-style extraction runs adjacent columns together. Form labels
   carry `\x00` padding glyphs, which is how sub-field lines are detected.
 - The cluster window is measured on **trade date** and defaults to 90 days
-  because it must absorb the 45-day disclosure deadline. In the 2026 corpus the
-  observed lag is a median of 17 days, p90 of 33 — a 30-day window is only ever
-  about half-populated.
+  because it must absorb the 45-day disclosure deadline. Over the full corpus
+  (3,576 dated rows, 2026-10-17) the trade→filing delay is p50 25 / p90 ~80
+  days, but that tail is a handful of year-long catch-up filings (450 rows
+  exceed 45 days; five filings hold 379 of them). On 2026 trade dates alone it
+  is p50 24 / p90 38. A 30-day window is only ever about half-populated.
+- A cluster needs **both** `min_politicians` and `min_volume_usd`, and a member
+  counts only if their bracket **floors** in the window sum to
+  `min_member_floor_usd` (default $15,001: more than one lowest-bracket trade).
+  83% of equity-like rows are $1,001–$15,000 and MSFT alone had 11 distinct
+  buyers in 2026 filings, so participation without the floor is base rate.
+  There is no single-member cluster; one large trade is that filing's own
+  message. Members below the floor are named in the alert but never counted.
+  Dedupe compares against the last alert's count only while that alert's own
+  window (`fired_at + window_days`) still overlaps today's; the 33 alerts sent
+  under the old rule recorded inflated counts, and they age out this way.
 - Cluster alerts consider only equity-like asset types. Members roll Treasury
   bills constantly; one member alone filed 99 T-bill transactions in 2026.
 - Senate is expected to fail. `senate.py` must never raise into the pipeline.

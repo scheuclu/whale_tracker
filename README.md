@@ -377,8 +377,11 @@ a feed gap that needs a daily-index backfill, a stored filing with no rows or
 no primary reporting owner, and values that no longer equal shares × the filed
 price.
 
-Needs `ANTHROPIC_API_KEY` as a repo secret. Without it the audit still runs and
-is uploaded as a build artifact; only the analysis and PR step is skipped.
+Needs `ANTHROPIC_API_KEY` as a repo secret for the analysis. Without it the
+evidence is filed as a GitHub issue titled `Weekly review <date>` for a person
+to read (appended as a comment while an earlier week's issue is still open);
+only the analysis and PR step is skipped. The cron says Monday 07:00 UTC, but
+GitHub delivers scheduled runs hours late, so treat that as the earliest.
 
 ## Development
 

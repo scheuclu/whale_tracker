@@ -16,13 +16,25 @@ DEFAULT_DB_PATH = REPO_ROOT / "data" / "trades.sqlite3"
 DEFAULT_CLUSTER_ASSET_TYPES = ["ST", "OP", "EF", "ET", "CT", "RS", "SA"]
 
 
+# More than one lowest-bracket ($1,001–$15,000) trade. 83% of equity-like
+# rows sit in that bracket, so a member whose bracket floors in the window add
+# up to less than this is trading at the base rate, not converging on anything.
+DEFAULT_MIN_MEMBER_FLOOR_USD = 15_001
+
+
 @dataclass
 class AlertSettings:
     # 90 days, not 30: the window is on trade date and must absorb the
     # STOCK Act's 45-day disclosure deadline. See config.yaml.
     window_days: int = 90
+    # A cluster must clear BOTH of these. Either alone is base rate: see
+    # config.yaml for the measured alert history behind that.
     min_politicians: int = 3
     min_volume_usd: int = 500_000
+    # A member counts towards min_politicians only if the FLOORS of their
+    # brackets in the window — never the midpoints, which are estimates — sum
+    # to at least this. 0 turns the control off.
+    min_member_floor_usd: int = DEFAULT_MIN_MEMBER_FLOOR_USD
     cluster_asset_types: list[str] = field(
         default_factory=lambda: list(DEFAULT_CLUSTER_ASSET_TYPES)
     )
@@ -30,6 +42,10 @@ class AlertSettings:
     @property
     def min_volume_cents(self) -> int:
         return self.min_volume_usd * 100
+
+    @property
+    def min_member_floor_cents(self) -> int:
+        return self.min_member_floor_usd * 100
 
 
 @dataclass
@@ -155,6 +171,25 @@ def _refire_growth(raw) -> float:
             f"insiders.cluster_refire_growth is {value}; it must be at least 1.0 "
             "(1.0 = re-fire on every extra insider, 1.5 = only when half as "
             "many again have joined)")
+    return value
+
+
+def _member_floor(raw) -> int:
+    """The per-member bracket floor, a whole number of dollars, 0 or more.
+
+    A negative value would admit every member — one whose window holds a
+    single $1,001 trade included — while reading in config.yaml as if it were
+    tuned. That is the silent no-op this project refuses to ship, so it raises.
+    """
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        raise ConfigError(
+            f"alerts.min_member_floor_usd must be a whole number of dollars, "
+            f"not {raw!r}") from None
+    if value < 0:
+        raise ConfigError(
+            f"alerts.min_member_floor_usd is {value}; it must be 0 (off) or more")
     return value
 
 
@@ -324,6 +359,9 @@ class Config:
     # accuracy that makes it off by default.
     vision_enabled: bool = False
     db_path: Path = DEFAULT_DB_PATH
+    # Public URL of the dashboard, for links in messages. None means the
+    # links are relative paths: still the right page, just not clickable.
+    dashboard_url: str | None = None
 
     # Secrets from environment.
     telegram_bot_token: str | None = None
@@ -367,6 +405,8 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
         window_days=int(a.get("window_days", 90)),
         min_politicians=int(a.get("min_politicians", 3)),
         min_volume_usd=int(a.get("min_volume_usd", 500_000)),
+        min_member_floor_usd=_member_floor(
+            a.get("min_member_floor_usd", DEFAULT_MIN_MEMBER_FLOOR_USD)),
         cluster_asset_types=[
             str(t).upper()
             for t in (a.get("cluster_asset_types") or DEFAULT_CLUSTER_ASSET_TYPES)
@@ -395,6 +435,8 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
     watchlist = WatchlistSettings(
         members=[_parse_watch(w, i) for i, w in enumerate(raw.get("watchlist") or [])])
 
+    dashboard_url = str((raw.get("dashboard") or {}).get("url") or "").strip().rstrip("/") or None
+
     return Config(
         alerts=alerts,
         ingest=ingest,
@@ -403,6 +445,7 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
         senate_enabled=bool((raw.get("senate") or {}).get("enabled", True)),
         vision_enabled=bool((raw.get("vision") or {}).get("enabled", False)),
         db_path=db_path,
+        dashboard_url=dashboard_url,
         telegram_bot_token=_env("TELEGRAM_BOT_TOKEN"),
         telegram_chat_id=_env("TELEGRAM_CHAT_ID"),
         gemini_api_key=_env("GEMINI_API_KEY"),
