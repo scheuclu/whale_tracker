@@ -124,16 +124,18 @@ vision:
   # be found, or whose row count does not match the transcription, is
   # reported as unreadable with the reason.
   #
-  # OFF by default still, because transcribed rows are quarantined, not
-  # trusted: they count as trades and in member and ticker lists but enter no
-  # volume total, cluster or floor (stats.counts_toward_volume; TRANSCRIBED
-  # in web/lib/queries.ts), and the dashboard and Telegram label them
-  # "transcribed from scan". Paper forms carry no ticker, so they can never
-  # feed a cluster alert either way. Turning this on with a key re-queues the
-  # scans that failed for want of it; the ones already reported to Telegram
-  # as unreadable are stored as history, not announced again. Expect one
-  # model call per scanned filing, ~11% of PTRs.
-  enabled: false
+  # ON since 2026-10-17, and only because transcribed rows are quarantined,
+  # not trusted: they count as trades and in member and ticker lists but
+  # enter no volume total, cluster or floor (stats.counts_toward_volume;
+  # TRANSCRIBED in web/lib/queries.ts), and the dashboard and Telegram label
+  # them "transcribed from scan". Paper forms carry no ticker, so they can
+  # never feed a cluster alert either way. The first run with this on and a
+  # key re-queues the scans that failed for want of it; the ones already
+  # reported to Telegram as unreadable are stored as history, not announced
+  # again. Expect one model call per scanned filing, ~11% of PTRs. Every
+  # transcription stays inspectable on the dashboard's Scans page next to
+  # the page image it came from.
+  enabled: true
 
 insiders:
   # SEC Form 4: corporate officers, directors and 10% owners. Only open-market

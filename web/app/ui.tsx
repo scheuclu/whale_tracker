@@ -61,6 +61,14 @@ const STATUS_TONE: Record<string, { label: string; cls: string; dot: string }> =
     cls: "text-muted-foreground bg-muted border-border",
     dot: "bg-zinc-400",
   },
+  // A scan the grid reader has captured but no model has transcribed: the
+  // filing's status is still `failed`, yet "unreadable" would be false — its
+  // boxes were read, only the written text is missing.
+  not_transcribed: {
+    label: "not transcribed",
+    cls: "text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/25",
+    dot: "bg-amber-500",
+  },
 };
 
 function Pill({
@@ -133,7 +141,7 @@ export function TickerChip({
   if (!ticker) {
     return (
       <span
-        className="text-xs text-muted-foreground"
+        className="text-xs text-muted-foreground whitespace-nowrap"
         title={type ? ASSET_TYPE_LABEL[type] ?? type : undefined}
       >
         {type ? ASSET_TYPE_LABEL[type] ?? type : "no ticker"}

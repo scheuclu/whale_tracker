@@ -104,9 +104,14 @@ parser stays faithful to the PDF and the UI flags the row rather than
   lateness. Both are kept — `disclosure_delay_days` and `notification_lag_days`
   in `stats.py`, mirrored by `DELAY`/`LAG` in `web/lib/queries.ts`. Keep the
   Python and SQL definitions in agreement.
-- Scanned-PDF transcription is off by default and must stay that way until
-  vision rows are quarantined from the statistics (https://github.com/scheuclu/whale_tracker/issues/1). Do not flip
-  `vision.enabled` to close a coverage gap.
+- Scanned-PDF transcription (`vision.enabled`) is **on since 2026-10-17**, and
+  only because transcribed rows are quarantined from every volume figure,
+  cluster and value floor (https://github.com/scheuclu/whale_tracker/issues/1, #42). It was off until that
+  quarantine existed. The quarantine is the condition, not a detail: a
+  transcribed row must never enter a total, and the grid reader, not the
+  model, decides amount and type. Vision off plus a stored key is a
+  legitimate state for debugging; the filings then wait as `failed`/`scanned`
+  and are re-queued by `pipeline.retry_scanned` when it is turned back on.
 - Scanned paper filings are **captured for inspection** in the same database
   (`scan_pages`: one 1-bit PNG per page at 110 dpi, oriented the way
   `paper_form.py` turned it; `scan_rows`: every row the grid reader found,
