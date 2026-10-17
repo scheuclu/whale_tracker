@@ -5,13 +5,41 @@ alerts:
   # direction inside a rolling window — the signal this tracker exists for.
   #
   # The window is measured on the TRADE date, not the disclosure date, so it
-  # has to absorb the reporting lag: members have 45 days to disclose, and the
-  # observed lag in the 2026 corpus is a median of 17 days and p90 of 33. A
+  # has to absorb the reporting lag: members have 45 days to disclose. Over
+  # the whole corpus (3,576 dated rows on 2026-10-17) the trade→filing delay
+  # is a median of 25 days and a p90 of about 80 — but that tail is a handful
+  # of year-long catch-up filings: 450 rows exceed 45 days and five filings
+  # hold 379 of them. On 2026 trade dates alone it is p50 24 / p90 38. A
   # 30-day window is therefore only ever about half-populated; 90 days covers
-  # the statutory deadline with room to spare.
+  # the statutory deadline with room to spare, and the catch-up filings fall
+  # outside any window by definition.
   window_days: 90
+
+  # A cluster must clear BOTH thresholds below. They used to be alternatives,
+  # and the result was noise: of the 33 cluster alerts sent between 2026-09-07
+  # and 2026-10-17, 29 were under the volume floor (median estimated volume
+  # $49k), 3 were a single member ("1 politicians bought"), and 1 met both.
   min_politicians: 3
+  # Compared against the estimated midpoint of the window's brackets — the
+  # figure the alert prints as "mid", labelled as the estimate it is.
   min_volume_usd: 500000
+  # Base-rate control. 83% of equity-like rows (2,477 of 3,000) sit in the
+  # lowest bracket, $1,001–$15,000, and the most widely held names collect
+  # distinct traders all year regardless of any event: MSFT had 11 distinct
+  # buyers in 2026 filings, META 9, AAPL 6. "3 members bought MSFT" is the
+  # normal state of MSFT, not a convergence. The 2026-10-13 "5 politicians
+  # bought MSFT" alert was one member at $750k–$1.5M, one with two trades of
+  # $15k–$50k, and three at $1k–$15k each.
+  #
+  # So a member counts towards min_politicians only if the FLOORS of their
+  # brackets in the window add up to this much — floors, never midpoints,
+  # because the floor is the only figure the filing proves. 15,001 means
+  # "more than one lowest-bracket trade". Members below the floor are named
+  # in the alert but not counted. 0 turns the control off.
+  min_member_floor_usd: 15001
+  # There is no single-member "cluster" any more. One member's large trade is
+  # already reported by that filing's own message, and the watchlist below is
+  # for members whose every trade deserves an alert of its own.
 
   # Only real tradeable securities feed cluster alerts. Members roll Treasury
   # bills ([GS]) over constantly and hold mutual funds via managed accounts;
@@ -40,6 +68,15 @@ watchlist:
   - name: Nancy Pelosi
     bioguide_id: P000197
     every_trade: true
+
+dashboard:
+  # Public URL of the Vercel deployment, e.g. https://whale-tracker.vercel.app
+  # — no trailing slash needed. A routine filing with more than 40
+  # transactions is reported as a summary (largest trades in full, the rest
+  # by bracket) that links to the member's page for the full table. Unset,
+  # the link is the relative path (/politicians?m=...): correct, but Telegram
+  # will not make it clickable.
+  url: ""
 
 ingest:
   years: [2026]
