@@ -436,12 +436,13 @@ def check_alert_health(conn, today: date | None = None) -> list[Finding]:
 
 
 def check_senate(conn, today: date | None = None) -> list[Finding]:
-    """Senate is expected to fail — but only in one specific way.
+    """The Senate side's last attempt, read from `sync_state.senate_status`.
 
-    eFD's bot protection refusing a datacenter IP is the documented outcome and
-    reads as INFO. Anything else is not that: an empty proxy URL, DNS, a
-    timeout, an unexpected status mean the Senate side was never actually
-    tested, and filing those under "expected" is exactly how an unset secret
+    eFD answers GitHub's US runners (#40), so a block is not the expected
+    outcome any more: it is the Senate side going dark, and warns with the
+    fix named (a sticky US proxy). A failure on our side — an empty proxy
+    URL, DNS, a timeout — is kept apart from a block because it needs a
+    different human; filing the first under the second is how an unset secret
     went unnoticed for every run (#16).
     """
     from .db import get_state
@@ -450,26 +451,87 @@ def check_senate(conn, today: date | None = None) -> list[Finding]:
     status = get_state(conn, "senate_status")
     if status is None:
         # `senate.enabled: false`, or no run yet. Neither a pass nor a failure,
-        # so it gets its own code rather than being folded into the block.
+        # so it gets its own code rather than being folded into a block.
         return [Finding(INFO, "senate_not_attempted", "Senate eFD not attempted",
                         "No Senate run is recorded (`senate.enabled` is off, or the "
-                        "pipeline has not run yet). All figures are House-only.")]
+                        "pipeline has not run yet). Congressional figures cover the "
+                        "House only until one does.")]
     kind = status_kind(status)
     if kind == STATUS_OK:
         return [Finding(INFO, "senate_available", f"Senate eFD reachable: {status}",
-                        "Senate filings are being indexed and need a parser.")]
+                        "Senate PTRs are indexed from eFD and parsed from the electronic "
+                        "report pages; paper filings are listed as unreadable. "
+                        "`senate_parse_coverage` says how the parsing went.")]
     if kind == STATUS_BLOCKED:
-        return [Finding(INFO, "senate_blocked", f"Senate eFD unavailable ({status})",
-                        "Expected: eFD's bot protection refused the session, as it "
-                        "does from datacenter IPs. All figures are House-only.")]
-    # `error`, or a prefix this check does not know. Either way it is not the
-    # known block, so House-only is an untested outcome, not the expected one.
+        return [Finding(WARN, "senate_blocked", f"Senate eFD refused the session ({status})",
+                        "eFD refused the session, so no Senate filings are being added. "
+                        "Akamai geo-fences non-US addresses (a 403 on the agreement "
+                        "page itself) but has answered GitHub's US runners since "
+                        "2026-10-17, so from the runner this is news, not the norm. If "
+                        "it persists, set `SENATE_PROXY_URL` to a sticky US proxy: the "
+                        "agreement is bound to the accepting IP, so a rotating pool "
+                        "loses the session.")]
+    # `error`, or a prefix this check does not know. Either way the request
+    # never reached eFD, so the Senate side has not been tested this run.
     return [Finding(WARN, "senate_error", f"Senate eFD attempt failed ({status})",
-                    "A configuration or client failure, not the known bot-protection "
-                    "block: the request failed on our side or never left (bad proxy "
-                    "URL, DNS, timeout, unexpected HTTP status). Check "
-                    "`SENATE_PROXY_URL` and the pipeline log. Until this reads "
-                    "`blocked` or `ok`, the Senate side has not actually been tested.")]
+                    "A configuration or client failure, not eFD refusing us: the "
+                    "request failed on our side or never left (bad proxy URL, DNS, "
+                    "timeout, unexpected HTTP status). Check `SENATE_PROXY_URL` and "
+                    "the pipeline log. Until this reads `ok`, the Senate side has not "
+                    "actually been tested.")]
+
+
+def check_senate_parse_coverage(conn, today: date | None = None) -> list[Finding]:
+    """How the Senate filings that reached the parser actually went.
+
+    Silent while no Senate filing has been parsed, so it says nothing on a
+    database that only indexed them. Paper filings are unreadable by design
+    and are counted, not flagged. A parse error is eFD's template changing
+    under the parser, or a page that was not an electronic PTR; the parser
+    refuses to produce an empty filing rather than guess, so those warn with
+    the pages to open.
+    """
+    row = conn.execute(f"""
+        SELECT SUM(status IN {_counted()}) ok,
+               SUM(status = 'failed' AND parse_method = 'efd_paper') paper,
+               SUM(status = 'failed' AND COALESCE(parse_method, '') != 'efd_paper') errors,
+               SUM(status IN ('new', 'backfill_queued')) queued,
+               SUM(status = 'seen_skipped') unparsed_history
+        FROM filings WHERE chamber = 'senate'
+    """).fetchone()
+    ok, paper, errors = (row["ok"] or 0), (row["paper"] or 0), (row["errors"] or 0)
+    total = ok + paper + errors
+    if not total:
+        return []
+    findings = [Finding(
+        INFO, "senate_parse_coverage",
+        f"{ok} of {total} Senate filing(s) parsed; {paper} paper, {errors} parse error(s)",
+        "Electronic Senate PTRs are read from eFD's report pages (`efd_html`). "
+        "Paper filings are scanned images and are reported unreadable, like "
+        "House scans; they are never transcribed. A parse error means the "
+        "page did not carry the nine-column transactions table the parser "
+        "expects.",
+        [f"queued for parsing: {row['queued'] or 0}",
+         f"indexed, not yet backfilled: {row['unparsed_history'] or 0}"],
+    )]
+    if errors:
+        rows = _rows(conn, """
+            SELECT doc_id, filer_name, filing_date, last_error, pdf_url FROM filings
+            WHERE chamber = 'senate' AND status = 'failed'
+              AND COALESCE(parse_method, '') != 'efd_paper'
+            ORDER BY filing_date DESC
+        """)
+        findings.append(Finding(
+            WARN, "senate_parse_errors",
+            f"{errors} Senate filing(s) failed to parse",
+            "Either eFD changed its report template, or the page was not an "
+            "electronic PTR (the agreement form served in place of it, an "
+            "amendment of another shape). Open the pages below; the parser "
+            "refuses to store an empty filing rather than guess at the columns.",
+            [f"{r['doc_id']}  {r['filer_name']}  filed {r['filing_date']}  "
+             f"{r['last_error'] or ''}  {r['pdf_url']}" for r in rows],
+        ))
+    return findings
 
 
 
@@ -808,6 +870,7 @@ CHECKS = (
     check_transaction_density,
     check_alert_health,
     check_senate,
+    check_senate_parse_coverage,
     check_insider_empty_filings,
     check_insider_primary_owner,
     check_insider_values,
@@ -836,6 +899,8 @@ def run_checks(conn: sqlite3.Connection, today: date | None = None) -> list[Find
 def summary(conn: sqlite3.Connection) -> dict:
     row = conn.execute(f"""
         SELECT (SELECT COUNT(*) FROM filings) filings,
+               (SELECT COUNT(*) FROM filings WHERE chamber = 'house') house_filings,
+               (SELECT COUNT(*) FROM filings WHERE chamber = 'senate') senate_filings,
                (SELECT COUNT(*) FROM transactions) txs,
                (SELECT COUNT(DISTINCT ticker) FROM transactions WHERE ticker IS NOT NULL) tickers,
                (SELECT COUNT(DISTINCT politician_id) FROM transactions) members,
@@ -866,7 +931,8 @@ def report(db_path: Path, today: date | None = None) -> tuple[str, list[Finding]
         "",
         "## Corpus",
         "",
-        f"- House filings indexed: **{s['filings']}**",
+        f"- congressional filings indexed: **{s['filings']}** "
+        f"(House {s['house_filings']}, Senate {s['senate_filings']})",
         f"- congressional transactions: **{s['txs']}** across **{s['tickers']}** tickers "
         f"and **{s['members']}** members",
         f"- newest parsed filing: {s['newest']}",

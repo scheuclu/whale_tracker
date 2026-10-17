@@ -1,27 +1,34 @@
 """Senate eFD scraper — best-effort.
 
 Unlike the House, the Senate publishes no bulk file. The only route is the
-eFD search app, which is behind Akamai bot protection: it returns 403 to
-datacenter IPs regardless of headers, and it tracks the required
-"prohibition agreement" per source IP, so a rotating proxy pool breaks the
-session even when individual requests get through.
+eFD search app: accept its "prohibition agreement" once per session, POST the
+search, then fetch each report page. Electronic PTRs are HTML tables
+(`senate_ptr.py` reads them); paper PTRs are scanned images.
 
-This module therefore never raises into the pipeline: `sync` classifies every
-outcome into the status vocabulary below, which `sync_state.senate_status`
-stores, so House coverage continues and the dashboard can state honestly that
-Senate data is unavailable. The vocabulary keeps the site refusing us (the
-expected outcome from a datacenter IP) apart from the request failing on our
-side: an empty proxy URL was recorded as a Senate failure on every run, and
-nothing could tell that from the block it was documented as (#16).
+eFD sits behind Akamai, and for a long time this module documented it as
+blocking datacenter IPs outright. That was never observed: every earlier run
+failed on an empty proxy string before reaching the site (#16), and the first
+run after that fix got `ok: 100 filings seen` from a plain GitHub runner with
+no proxy (#40). What Akamai does refuse is non-US addresses — an Austrian
+residential IP gets a 403 `SERVE_403` page on the agreement URL itself. The
+agreement is bound to the accepting IP, so if eFD ever starts refusing the
+runner, `SENATE_PROXY_URL` must be a *sticky* US proxy; a rotating pool breaks
+the session even when individual requests get through.
 
-Set `SENATE_PROXY_URL` to a sticky residential proxy to make this path work.
+This module never raises into the pipeline: `sync` classifies every outcome
+into the status vocabulary below, which `sync_state.senate_status` stores, so
+House coverage continues whatever eFD does. The vocabulary keeps the site
+refusing us apart from the request failing on our side, because the two need
+different humans: a block wants a proxy, an error wants the config checked.
 """
 
 from __future__ import annotations
 
 import logging
 import re
+import time
 from dataclasses import dataclass, field
+from datetime import datetime
 
 import httpx
 
@@ -41,17 +48,25 @@ CSRF_RE = re.compile(r'name="csrfmiddlewaretoken"\s+value="([^"]+)"')
 # Periodic transaction reports only.
 REPORT_TYPE_PTR = "11"
 
+# Paper filings are served from this path as page images, never as a table.
+PAPER_PATH = "/search/view/paper/"
+
+# Politeness floor between requests on one session. eFD is a small government
+# app; a backfill of a hundred report pages at one a second is two minutes.
+MIN_REQUEST_INTERVAL = 1.0
+
 # Vocabulary of `sync_state.senate_status`. The prefix is the contract: the
 # dashboard only asks whether it starts with `ok`, and `audit.check_senate`
-# must tell the known block from a failure that needs a human.
+# must tell a block from a failure that needs a human.
 #
 #   ok: N filings seen      eFD answered and the search returned rows.
 #   blocked: <why>          eFD refused the session: a 403, a bot challenge, or
 #                           the prohibition agreement served where data should
-#                           be. Expected from a datacenter IP.
+#                           be. Seen from non-US addresses; not from the
+#                           GitHub runner, so from there it is news.
 #   error: <Type>: <why>    the request failed on our side or never left: a bad
 #                           proxy URL, DNS, a timeout, an unexpected HTTP
-#                           status. Not the known block.
+#                           status. Not a block.
 STATUS_OK = "ok"
 STATUS_BLOCKED = "blocked"
 STATUS_ERROR = "error"
@@ -122,16 +137,56 @@ def _accept_agreement(client: httpx.Client) -> None:
     post.raise_for_status()
 
 
-def fetch_ptrs(proxy_url: str | None = None, start_date: str | None = None,
-               max_rows: int = 100) -> list[SenateFiling]:
-    """Fetch recent Senate PTRs.
+def is_paper_url(url: str | None) -> bool:
+    """Whether a report URL points at a scanned paper filing."""
+    return bool(url) and PAPER_PATH in url
+
+
+class Session:
+    """One eFD session: the agreement accepted once, then reused for the
+    search and for every report page, at most one request a second.
 
     Raises SenateBlocked when eFD refuses; anything else (proxy, DNS, timeout,
-    an unexpected status) propagates. The pipeline goes through `sync`.
+    an unexpected status) propagates. The pipeline's entry points — `sync`
+    for the index, `pipeline._parse_senate_filings` for the pages — catch
+    both and never let them out.
     """
-    with _client(proxy_url) as client:
-        _accept_agreement(client)
 
+    def __init__(self, proxy_url: str | None = None,
+                 min_interval: float = MIN_REQUEST_INTERVAL):
+        self._proxy_url = proxy_url
+        self._min_interval = min_interval
+        self._client: httpx.Client | None = None
+        self._last_request = 0.0
+
+    def __enter__(self) -> "Session":
+        self.open()
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()
+
+    def open(self) -> None:
+        if self._client is not None:
+            return
+        client = _client(self._proxy_url)
+        try:
+            _accept_agreement(client)
+        except BaseException:
+            client.close()
+            raise
+        self._client = client
+        self._last_request = time.monotonic()
+
+    def close(self) -> None:
+        if self._client is not None:
+            self._client.close()
+            self._client = None
+
+    def search_ptrs(self, start_date: str | None = None,
+                    max_rows: int = 100) -> list[SenateFiling]:
+        """The PTR rows of the search, newest first."""
+        client = self._require_client()
         csrf = client.cookies.get("csrftoken")
         if not csrf:
             raise SenateBlocked("no csrftoken cookie after accepting the agreement")
@@ -150,6 +205,7 @@ def fetch_ptrs(proxy_url: str | None = None, start_date: str | None = None,
             "last_name": "",
             "csrfmiddlewaretoken": csrf,
         }
+        self._throttle()
         resp = client.post(REPORT_DATA, data=payload,
                            headers={"Referer": SEARCH, "X-CSRFToken": csrf})
         if resp.status_code == 403:
@@ -166,7 +222,42 @@ def fetch_ptrs(proxy_url: str | None = None, start_date: str | None = None,
                                     "agreement instead of JSON (proxy not sticky?)") from exc
             raise SenateBlocked(f"non-JSON response from eFD (bot challenge?): {exc}") from exc
 
-    return [f for f in (_row_to_filing(r) for r in rows) if f is not None]
+        return [f for f in (_row_to_filing(r) for r in rows) if f is not None]
+
+    def get_report(self, url: str) -> str:
+        """The HTML of one report page.
+
+        A 403 or the agreement form in place of the page means the session
+        was refused or lost — SenateBlocked, so the caller stops asking.
+        """
+        client = self._require_client()
+        self._throttle()
+        resp = client.get(url, headers={"Referer": SEARCH})
+        if resp.status_code == 403:
+            raise SenateBlocked(f"403 on {url}")
+        resp.raise_for_status()
+        if AGREEMENT_RE.search(resp.text):
+            raise SenateBlocked(f"{url} served the prohibition agreement instead of "
+                                "the report (session lost; proxy not sticky?)")
+        return resp.text
+
+    def _require_client(self) -> httpx.Client:
+        if self._client is None:
+            raise RuntimeError("Session is not open")
+        return self._client
+
+    def _throttle(self) -> None:
+        wait = self._min_interval - (time.monotonic() - self._last_request)
+        if wait > 0:
+            time.sleep(wait)
+        self._last_request = time.monotonic()
+
+
+def fetch_ptrs(proxy_url: str | None = None, start_date: str | None = None,
+               max_rows: int = 100) -> list[SenateFiling]:
+    """Fetch recent Senate PTRs in a session of their own. See `Session`."""
+    with Session(proxy_url) as session:
+        return session.search_ptrs(start_date, max_rows)
 
 
 @dataclass
@@ -231,3 +322,15 @@ def _row_to_filing(row: list) -> SenateFiling | None:
 
 def _strip_tags(value) -> str:
     return _TAG_RE.sub("", str(value or "")).strip()
+
+
+def iso_date(value: str | None) -> str | None:
+    """eFD prints MM/DD/YYYY; the database stores ISO like the House's."""
+    if not value:
+        return None
+    for fmt in ("%m/%d/%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(value.strip(), fmt).date().isoformat()
+        except ValueError:
+            continue
+    return None

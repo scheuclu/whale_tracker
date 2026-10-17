@@ -57,14 +57,46 @@ parser stays faithful to the PDF and the UI flags the row rather than
   under the old rule recorded inflated counts, and they age out this way.
 - Cluster alerts consider only equity-like asset types. Members roll Treasury
   bills constantly; one member alone filed 99 T-bill transactions in 2026.
-- Senate is expected to fail. `senate.py` must never raise into the pipeline.
-  `sync_state.senate_status` is prefixed `ok:` / `blocked:` / `error:`.
-  `blocked` is eFD refusing us (403, challenge page, the agreement form
-  served where JSON belongs) and is the only outcome the audit calls
-  expected; `error` is the request failing on our side (empty proxy URL,
-  DNS, timeout) and warns. Blank environment secrets read as unset: GitHub
-  Actions passes an undefined secret as `""`, which is how Senate went
-  unattempted for every run while reading as the known block (#16).
+- Senate eFD answers GitHub's US runners without a proxy (`ok: 100 filings
+  seen` on 2026-10-17, #40); the "Akamai blocks datacenter IPs" story was
+  never observed — every earlier run failed on an empty proxy string before
+  reaching the site. What eFD does refuse is non-US addresses (a 403 on the
+  agreement page itself). `SENATE_PROXY_URL` stays documented as a fallback
+  for the day eFD refuses the runner, and must then be a *sticky* US proxy:
+  the agreement is bound to the accepting IP. `senate.py` must still never
+  raise into the pipeline. `sync_state.senate_status` is prefixed `ok:` /
+  `blocked:` / `error:`; `blocked` is eFD refusing us (403, challenge page,
+  the agreement form served where data belongs) and now *warns* in the audit
+  with the proxy named as the fix; `error` is the request failing on our side
+  (empty proxy URL, DNS, timeout) and warns separately. Blank environment
+  secrets read as unset: GitHub Actions passes an undefined secret as `""`,
+  which is how Senate went unattempted for every run while reading as the
+  block (#16).
+- Senate PTRs are eFD HTML pages, not PDFs. `src/whale/senate_ptr.py` reads
+  the nine-column transactions table and emits `ptr.py`'s shapes, mapping the
+  eFD vocabulary onto the House codes so nothing downstream learns the
+  chamber: owner Self → NULL, Spouse → SP, Joint → JT, Dependent Child → DC;
+  type Purchase → purchase, Sale (Full) → sale, Sale (Partial) →
+  sale_partial, Exchange → exchange; asset type only where the meaning is the
+  same (Stock → ST, Stock Option → OP, Corporate Bond → CS, Municipal
+  Security → GS, Mutual Fund → MF, Exchange Traded Fund → EF …) — otherwise
+  `asset_type` is NULL and the Senate label is kept in `description`, never a
+  guessed code, because `cluster_asset_types` filters on it. Ticker `--` is
+  NULL. Brackets go through `amounts.parse_amount`. The Comment column and
+  the asset sub-detail (option strike/expiry, bond coupon/maturity) go in
+  `description`; the nine cells joined by ` | ` in `raw_text`. No
+  notification date or capital-gains box exists on the Senate form: both
+  stay NULL. Senate dates are stored ISO; the rows indexed before the parser
+  existed (MM/DD/YYYY, `year = 0`) are normalised idempotently by
+  `pipeline._normalise_senate_rows` on every sync and backfill.
+- A page without that exact table (an annual report, the agreement form, a
+  template change) raises `SenateParseError` and the filing is `failed` with
+  `parse_method = 'error'` — never "parsed, empty". **Paper Senate filings**
+  (`/search/view/paper/<id>/`) are scanned page images: classified by URL,
+  never fetched, `failed` with `parse_method = 'efd_paper'`, reported once
+  through the unparsed message like a House scan, and never transcribed.
+  The cluster window and asset-type filter are shared with the House by
+  design: both chambers have the same 45-day deadline.
 - **Disclosure delay is trade date -> filing date**, never the report's
   "Notification Date" column. Notification is when the *member* learned of the
   trade: someone trading their own account is notified same-day, so that column

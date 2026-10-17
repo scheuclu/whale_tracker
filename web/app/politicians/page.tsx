@@ -222,7 +222,7 @@ async function MemberDetail({ member, action }: { member: string; action?: strin
               {seat ? ` · ${seat}` : ""}
             </span>
           ) : (
-            <span title="The filer's name as printed on the PDF; it did not match the House roster">
+            <span title="The filer's name as printed on the filing; it did not match the congressional roster">
               not matched to the roster
             </span>
           )}

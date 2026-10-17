@@ -96,8 +96,17 @@ ingest:
   max_filing_age_days: 14
 
 senate:
-  # Senate eFD sits behind Akamai bot protection and is expected to fail from
-  # datacenter IPs. When it does, the run logs a skip and carries on.
+  # Senate PTRs come from the eFD search (efdsearch.senate.gov): the index of
+  # recent reports, then each electronic report page, parsed by
+  # senate_ptr.py into the same vocabulary as House filings. Paper filings
+  # are scanned images and are reported unreadable, like House scans.
+  #
+  # eFD answers GitHub's US runners without a proxy (first observed
+  # 2026-10-17, "ok: 100 filings seen"). Its Akamai front refuses non-US
+  # addresses with a 403; if it ever starts refusing the runner, set the
+  # SENATE_PROXY_URL secret to a *sticky* US proxy — the agreement eFD
+  # requires is bound to the accepting IP. A refusal or failure is recorded in
+  # sync_state and the run carries on with House data; it never raises.
   enabled: true
 
 vision:
