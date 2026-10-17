@@ -69,6 +69,15 @@ watchlist:
     bioguide_id: P000197
     every_trade: true
 
+dashboard:
+  # Public URL of the Vercel deployment, e.g. https://whale-tracker.vercel.app
+  # — no trailing slash needed. A routine filing with more than 40
+  # transactions is reported as a summary (largest trades in full, the rest
+  # by bracket) that links to the member's page for the full table. Unset,
+  # the link is the relative path (/politicians?m=...): correct, but Telegram
+  # will not make it clickable.
+  url: ""
+
 ingest:
   years: [2026]
   # On first sight of a filing, anything older than this is recorded but never

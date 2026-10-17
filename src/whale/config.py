@@ -314,6 +314,9 @@ class Config:
     # accuracy that makes it off by default.
     vision_enabled: bool = False
     db_path: Path = DEFAULT_DB_PATH
+    # Public URL of the dashboard, for links in messages. None means the
+    # links are relative paths: still the right page, just not clickable.
+    dashboard_url: str | None = None
 
     # Secrets from environment.
     telegram_bot_token: str | None = None
@@ -372,6 +375,8 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
     watchlist = WatchlistSettings(
         members=[_parse_watch(w, i) for i, w in enumerate(raw.get("watchlist") or [])])
 
+    dashboard_url = str((raw.get("dashboard") or {}).get("url") or "").strip().rstrip("/") or None
+
     return Config(
         alerts=alerts,
         ingest=ingest,
@@ -380,6 +385,7 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
         senate_enabled=bool((raw.get("senate") or {}).get("enabled", True)),
         vision_enabled=bool((raw.get("vision") or {}).get("enabled", False)),
         db_path=db_path,
+        dashboard_url=dashboard_url,
         telegram_bot_token=os.environ.get("TELEGRAM_BOT_TOKEN"),
         telegram_chat_id=os.environ.get("TELEGRAM_CHAT_ID"),
         gemini_api_key=os.environ.get("GEMINI_API_KEY"),

@@ -393,8 +393,9 @@ def notify_pending(conn: sqlite3.Connection, config: Config, dry_run: bool = Fal
             if ctx:
                 contexts[ticker] = ctx
 
-        text = telegram.format_filing(
-            member=filing["member_name"] or filing["filer_name"],
+        name = filing["member_name"] or filing["filer_name"]
+        common = dict(
+            member=name,
             party=filing["party"],
             state=_state_of(filing),
             district=_district_of(filing),
@@ -404,6 +405,16 @@ def notify_pending(conn: sqlite3.Connection, config: Config, dry_run: bool = Fal
             transactions=rows,
             contexts=contexts,
         )
+        if len(rows) > telegram.FILING_ROW_BUDGET:
+            # Past the budget every row would lose its asset name and trade
+            # date to fit. A summary — the largest trades in full, the rest
+            # by bracket, and the member's page for the whole table — says
+            # more than a wall of tickers. Watched members never reach here:
+            # their filings were split per transaction above and stay exempt.
+            text = telegram.format_filing_summary(
+                member_url=telegram.member_page_url(name, config.dashboard_url), **common)
+        else:
+            text = telegram.format_filing(**common)
         if _deliver(config, text, dry_run) and not dry_run:
             db.set_status(conn, filing["id"], "notified", None)
             db.mark_notified(conn, filing["id"])
