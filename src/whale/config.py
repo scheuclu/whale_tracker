@@ -158,6 +158,25 @@ def _refire_growth(raw) -> float:
     return value
 
 
+def _budget_seconds(raw) -> float:
+    """`insiders.gap_repair_budget_seconds`: seconds per poll run, or 0 for off.
+
+    A negative budget means nothing, yet would sit in config.yaml looking
+    like a setting. That is the silent no-op this project refuses, so it
+    raises.
+    """
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        raise ConfigError(
+            f"insiders.gap_repair_budget_seconds must be a number, not {raw!r}") from None
+    if value < 0:
+        raise ConfigError(
+            f"insiders.gap_repair_budget_seconds is {value}; it must be 0 (automatic "
+            "gap repair off) or a number of seconds")
+    return value
+
+
 @dataclass
 class InsiderSettings:
     """SEC Form 4 ingestion. See config.yaml for the reasoning behind each."""
@@ -179,6 +198,10 @@ class InsiderSettings:
     # A filing older than this on first sight is history, never a
     # notification: it stops a backlog being replayed into Telegram.
     max_filing_age_days: int = 7
+    # How long one poll run may spend walking the daily index to repair a
+    # recorded feed gap, after the live feed has been read. 0 switches the
+    # automatic repair off and leaves the gap to `backfill-insiders`.
+    gap_repair_budget_seconds: float = 480
     # No rules means no insider alerts, which is the safe default: an absent
     # config block must never start sending.
     alerts: list[InsiderRule] = field(default_factory=list)
@@ -345,6 +368,7 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
         min_insiders=int(n.get("min_insiders", 3)),
         cluster_refire_growth=_refire_growth(n.get("cluster_refire_growth", 1.5)),
         max_filing_age_days=int(n.get("max_filing_age_days", 7)),
+        gap_repair_budget_seconds=_budget_seconds(n.get("gap_repair_budget_seconds", 480)),
         alerts=[_parse_rule(r, i) for i, r in enumerate(n.get("alerts") or [])],
     )
 
