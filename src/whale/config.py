@@ -174,23 +174,6 @@ def _refire_growth(raw) -> float:
     return value
 
 
-def _member_floor(raw) -> int:
-    """The per-member bracket floor, a whole number of dollars, 0 or more.
-
-    A negative value would admit every member — one whose window holds a
-    single $1,001 trade included — while reading in config.yaml as if it were
-    tuned. That is the silent no-op this project refuses to ship, so it raises.
-    """
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        raise ConfigError(
-            f"alerts.min_member_floor_usd must be a whole number of dollars, "
-            f"not {raw!r}") from None
-    if value < 0:
-        raise ConfigError(
-            f"alerts.min_member_floor_usd is {value}; it must be 0 (off) or more")
-    return value
 def _budget_seconds(raw) -> float:
     """`insiders.gap_repair_budget_seconds`: seconds per poll run, or 0 for off.
 
@@ -210,6 +193,23 @@ def _budget_seconds(raw) -> float:
     return value
 
 
+def _member_floor(raw) -> int:
+    """The per-member bracket floor, a whole number of dollars, 0 or more.
+
+    A negative value would admit every member — one whose window holds a
+    single $1,001 trade included — while reading in config.yaml as if it were
+    tuned. That is the silent no-op this project refuses to ship, so it raises.
+    """
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        raise ConfigError(
+            f"alerts.min_member_floor_usd must be a whole number of dollars, "
+            f"not {raw!r}") from None
+    if value < 0:
+        raise ConfigError(
+            f"alerts.min_member_floor_usd is {value}; it must be 0 (off) or more")
+    return value
 @dataclass
 class InsiderSettings:
     """SEC Form 4 ingestion. See config.yaml for the reasoning behind each."""
