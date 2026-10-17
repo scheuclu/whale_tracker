@@ -301,6 +301,19 @@ class Config:
         return bool(self.edgar_user_agent and self.edgar_user_agent.strip())
 
 
+def _env(name: str) -> str | None:
+    """An optional secret from the environment; blank means unset.
+
+    GitHub Actions passes an undefined secret as an empty string, and "" is
+    not "no proxy": `httpx.Client(proxy="")` raises before any request is
+    made, which was recorded as a Senate failure on every run (#16).
+    """
+    value = os.environ.get(name)
+    if value is None or not value.strip():
+        return None
+    return value
+
+
 def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
                 db_path: Path = DEFAULT_DB_PATH) -> Config:
     raw = {}
@@ -346,9 +359,9 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
         senate_enabled=bool((raw.get("senate") or {}).get("enabled", True)),
         vision_enabled=bool((raw.get("vision") or {}).get("enabled", False)),
         db_path=db_path,
-        telegram_bot_token=os.environ.get("TELEGRAM_BOT_TOKEN"),
-        telegram_chat_id=os.environ.get("TELEGRAM_CHAT_ID"),
-        gemini_api_key=os.environ.get("GEMINI_API_KEY"),
-        senate_proxy_url=os.environ.get("SENATE_PROXY_URL"),
-        edgar_user_agent=os.environ.get("EDGAR_USER_AGENT"),
+        telegram_bot_token=_env("TELEGRAM_BOT_TOKEN"),
+        telegram_chat_id=_env("TELEGRAM_CHAT_ID"),
+        gemini_api_key=_env("GEMINI_API_KEY"),
+        senate_proxy_url=_env("SENATE_PROXY_URL"),
+        edgar_user_agent=_env("EDGAR_USER_AGENT"),
     )

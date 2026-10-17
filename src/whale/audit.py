@@ -436,14 +436,40 @@ def check_alert_health(conn, today: date | None = None) -> list[Finding]:
 
 
 def check_senate(conn, today: date | None = None) -> list[Finding]:
+    """Senate is expected to fail — but only in one specific way.
+
+    eFD's bot protection refusing a datacenter IP is the documented outcome and
+    reads as INFO. Anything else is not that: an empty proxy URL, DNS, a
+    timeout, an unexpected status mean the Senate side was never actually
+    tested, and filing those under "expected" is exactly how an unset secret
+    went unnoticed for every run (#16).
+    """
     from .db import get_state
+    from .senate import STATUS_BLOCKED, STATUS_OK, status_kind
 
     status = get_state(conn, "senate_status")
-    if status and status.startswith("ok"):
+    if status is None:
+        # `senate.enabled: false`, or no run yet. Neither a pass nor a failure,
+        # so it gets its own code rather than being folded into the block.
+        return [Finding(INFO, "senate_not_attempted", "Senate eFD not attempted",
+                        "No Senate run is recorded (`senate.enabled` is off, or the "
+                        "pipeline has not run yet). All figures are House-only.")]
+    kind = status_kind(status)
+    if kind == STATUS_OK:
         return [Finding(INFO, "senate_available", f"Senate eFD reachable: {status}",
                         "Senate filings are being indexed and need a parser.")]
-    return [Finding(INFO, "senate_blocked", f"Senate eFD unavailable ({status or 'not attempted'})",
-                    "Expected. All figures are House-only.")]
+    if kind == STATUS_BLOCKED:
+        return [Finding(INFO, "senate_blocked", f"Senate eFD unavailable ({status})",
+                        "Expected: eFD's bot protection refused the session, as it "
+                        "does from datacenter IPs. All figures are House-only.")]
+    # `error`, or a prefix this check does not know. Either way it is not the
+    # known block, so House-only is an untested outcome, not the expected one.
+    return [Finding(WARN, "senate_error", f"Senate eFD attempt failed ({status})",
+                    "A configuration or client failure, not the known bot-protection "
+                    "block: the request failed on our side or never left (bad proxy "
+                    "URL, DNS, timeout, unexpected HTTP status). Check "
+                    "`SENATE_PROXY_URL` and the pipeline log. Until this reads "
+                    "`blocked` or `ok`, the Senate side has not actually been tested.")]
 
 
 
