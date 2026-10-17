@@ -35,7 +35,7 @@ from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS politicians (
@@ -181,7 +181,8 @@ CREATE INDEX IF NOT EXISTS idx_insider_owners_cik ON insider_filing_owners(insid
 CREATE TABLE IF NOT EXISTS insider_transactions (
   id INTEGER PRIMARY KEY,
   filing_id INTEGER NOT NULL REFERENCES insider_filings(id) ON DELETE CASCADE,
-  tx_date TEXT,                        -- as filed
+  tx_date TEXT,                        -- as filed, except an offset-suffixed value is parsed to its date
+  tx_date_as_filed TEXT,               -- the verbatim value when tx_date was parsed out of it; NULL when identical
   deemed_execution_date TEXT,          -- as filed; starts the 2-day clock when present
   security_title TEXT,
   transaction_code TEXT NOT NULL,      -- 'P' | 'S'
@@ -253,6 +254,14 @@ def _migrate(conn: sqlite3.Connection) -> None:
         # the old string follow it, or the next run would re-send a
         # convergence it has already reported.
         _rederive_insider_tickers(conn)
+    if version < 6:
+        # Offset-suffixed trade dates (#20): "2026-09-08-05:00" is the 8th.
+        # Parse the stored rows the same way ingest now does and derive
+        # `late` for them, so the audit stops listing them every week.
+        if _add_column(conn, "insider_transactions", "tx_date_as_filed TEXT"):
+            from . import insiders
+
+            insiders.reparse_trade_dates(conn)
     if version < SCHEMA_VERSION:
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         conn.commit()
@@ -554,14 +563,14 @@ def replace_insider_transactions(conn: sqlite3.Connection, filing_id: int,
     for r in rows:
         conn.execute(
             """INSERT INTO insider_transactions
-               (filing_id, tx_date, deemed_execution_date, security_title,
+               (filing_id, tx_date, tx_date_as_filed, deemed_execution_date, security_title,
                 transaction_code, action, acquired_disposed, timeliness, shares,
                 price_per_share, amount_min_cents, amount_max_cents,
                 amount_exact_cents, shares_after, direct_or_indirect,
                 nature_of_ownership, footnotes, late, implausible)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
-                filing_id, r.get("tx_date"), r.get("deemed_execution_date"),
+                filing_id, r.get("tx_date"), r.get("tx_date_as_filed"), r.get("deemed_execution_date"),
                 r.get("security_title"), r["transaction_code"], r["action"],
                 r.get("acquired_disposed"), r.get("timeliness"), r.get("shares"),
                 r.get("price_per_share"), r.get("amount_min_cents"),

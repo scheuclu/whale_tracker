@@ -146,6 +146,8 @@ export async function getInsiderClusters(days = 30, minInsiders = 3, limit = 12)
 export type InsiderTradeRow = {
   id: number;
   tx_date: string | null;
+  /** The verbatim transactionDate when tx_date was parsed out of an offset-suffixed value. */
+  tx_date_as_filed: string | null;
   action: string;
   transaction_code: string;
   shares: number | null;
@@ -204,7 +206,7 @@ export async function getInsiderTrades(opts: {
 
   return db
     .prepare(
-      `SELECT t.id, t.tx_date, t.action, t.transaction_code, t.shares, t.price_per_share,
+      `SELECT t.id, t.tx_date, t.tx_date_as_filed, t.action, t.transaction_code, t.shares, t.price_per_share,
               t.amount_min_cents, t.amount_max_cents, t.amount_exact_cents,
               t.security_title, t.direct_or_indirect, t.nature_of_ownership,
               t.timeliness, t.late, t.implausible, t.footnotes,

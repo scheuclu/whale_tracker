@@ -324,6 +324,7 @@ def _tx_row(t: Transaction, filing_date: str, reference_price: float | None = No
         _float(t.shares), _float(t.price_per_share), value, reference_price)
     return {
         "tx_date": t.tx_date,
+        "tx_date_as_filed": t.tx_date_as_filed,
         "deemed_execution_date": t.deemed_execution_date,
         "security_title": t.security_title,
         "transaction_code": t.transaction_code,
@@ -480,6 +481,30 @@ def recompute_late(conn: sqlite3.Connection) -> int:
                      (None if late is None else int(late), r["id"]))
     conn.commit()
     return len(rows)
+
+
+def reparse_trade_dates(conn: sqlite3.Connection) -> int:
+    """Parse offset-suffixed trade dates already stored verbatim, as ingest
+    now does, and derive `late` for them. Rows that do not match are left
+    exactly as they are. Returns how many rows were re-parsed."""
+    rows = conn.execute(
+        """SELECT t.id, t.tx_date, t.deemed_execution_date, f.filing_date
+           FROM insider_transactions t JOIN insider_filings f ON f.id = t.filing_id
+           WHERE t.tx_date IS NOT NULL AND t.tx_date_as_filed IS NULL"""
+    ).fetchall()
+    reparsed = 0
+    for r in rows:
+        tx_date, as_filed = form4.parse_filed_date(r["tx_date"])
+        if as_filed is None:
+            continue
+        late = stats.form4_is_late(r["deemed_execution_date"] or tx_date, r["filing_date"])
+        conn.execute(
+            "UPDATE insider_transactions SET tx_date = ?, tx_date_as_filed = ?, late = ? WHERE id = ?",
+            (tx_date, as_filed, None if late is None else int(late), r["id"]),
+        )
+        reparsed += 1
+    conn.commit()
+    return reparsed
 
 
 def recompute_implausible(conn: sqlite3.Connection) -> int:

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from xml.etree import ElementTree
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -38,6 +38,12 @@ TICKER_PLACEHOLDERS = frozenset({"", "NONE", "N/A", "NA", "-", "--", "NULL"})
 _TICKER_SEPARATORS = re.compile(r"[,/\s]+")
 
 _ACCEPTED_RE = re.compile(r"<ACCEPTANCE-DATETIME>\s*(\d{14})|ACCEPTANCE-DATETIME:\s*(\d{14})")
+
+# One filer's software writes transaction dates with a UTC offset:
+# "2026-09-08-05:00". That is a date, unambiguously, so the date part is
+# stored and the verbatim string kept beside it. Nothing else is touched — a
+# value this does not match is stored exactly as filed.
+_DATE_WITH_OFFSET_RE = re.compile(r"(\d{4}-\d{2}-\d{2})[+-]\d{2}:\d{2}")
 _DOCUMENT_RE = re.compile(r"<DOCUMENT>(.*?)</DOCUMENT>", re.S)
 _XML_RE = re.compile(r"<XML>(.*?)</XML>", re.S)
 
@@ -80,6 +86,9 @@ class Transaction:
     nature_of_ownership: str | None
     footnote_ids: list[str] = field(default_factory=list)
     footnotes: list[str] = field(default_factory=list)
+    # The verbatim transactionDate when `tx_date` was parsed out of it (an
+    # offset-suffixed value); None when the two are identical.
+    tx_date_as_filed: str | None = None
 
     @property
     def value_cents(self) -> int | None:
@@ -243,9 +252,11 @@ def _owner(node) -> Owner:
 
 def _transaction(node, footnotes: dict[str, str]) -> Transaction:
     ids = [el.get("id") for el in node.iter("footnoteId") if el.get("id")]
+    tx_date, tx_date_as_filed = parse_filed_date(_value(node, "transactionDate"))
     return Transaction(
         security_title=_value(node, "securityTitle"),
-        tx_date=_value(node, "transactionDate"),
+        tx_date=tx_date,
+        tx_date_as_filed=tx_date_as_filed,
         deemed_execution_date=_value(node, "deemedExecutionDate"),
         transaction_code=_text(node, "transactionCoding/transactionCode") or "",
         timeliness=_value(node, "transactionTimeliness"),
@@ -258,6 +269,26 @@ def _transaction(node, footnotes: dict[str, str]) -> Transaction:
         footnote_ids=ids,
         footnotes=[footnotes[i] for i in ids if i in footnotes],
     )
+
+
+def parse_filed_date(raw: str | None) -> tuple[str | None, str | None]:
+    """(date to store, verbatim string or None when nothing was parsed away).
+
+    Only the offset-suffixed shape is parsed: "2026-09-08-05:00" is the 8th
+    with a UTC offset, and reading it as the 8th is not correcting the
+    filing. Anything else — including a malformed date — comes back exactly
+    as filed with no verbatim copy, so `late` stays unknown for it.
+    """
+    if raw is None:
+        return None, None
+    m = _DATE_WITH_OFFSET_RE.fullmatch(raw.strip())
+    if m is None:
+        return raw, None
+    try:
+        date.fromisoformat(m.group(1))
+    except ValueError:
+        return raw, None
+    return m.group(1), raw
 
 
 def _text(node, path: str) -> str | None:

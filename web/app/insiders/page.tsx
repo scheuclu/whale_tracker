@@ -312,7 +312,12 @@ function TradeList({ trades, showIssuer }: { trades: InsiderTradeRow[]; showIssu
             </span>
             <PlanTag value={r.aff_10b5_one} />
             <div className="flex-1" />
-            <span className="tabular text-xs text-muted-foreground">{shortDate(r.tx_date)}</span>
+            <span
+              className="tabular text-xs text-muted-foreground"
+              title={r.tx_date_as_filed ? `filed as "${r.tx_date_as_filed}"` : undefined}
+            >
+              {shortDate(r.tx_date)}
+            </span>
             <InsiderDelayTag days={r.delay_days} late={r.late} timeliness={r.timeliness} />
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
