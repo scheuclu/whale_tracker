@@ -12,8 +12,9 @@ cursor is written after every one, kept or rejected, so a run that stops
 part-way (throttled, network error, out of time) has finished everything at
 or below the cursor and touched nothing above it; the next tick continues.
 If the feed has forgotten more than it remembers — an outage longer than
-about two business days — the run records a gap for `backfill-insiders` to
-repair from the daily index.
+about two business days — the run records a gap, and the poll runs that
+follow repair it from the daily index (`repair_gap`), a time budget at a
+time, once the live feed has been read.
 
 A kept filing enters as `parsed` only when alert rules exist and it is recent
 enough to be worth interrupting for; otherwise it enters as `backfilled`,
@@ -27,6 +28,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+import statistics
 import time
 from collections import Counter
 from dataclasses import dataclass, field
@@ -41,7 +43,8 @@ from .form4 import Form4, SecHeader, Transaction
 
 log = logging.getLogger(__name__)
 
-# Leaves room in the 20-minute job for the House steps and an optional backfill.
+# Leaves room in the 20-minute job for the House steps and a gap repair
+# (`repair_gap`, budgeted by `insiders.gap_repair_budget_seconds`).
 SYNC_BUDGET_SECONDS = 420
 BACKFILL_BUDGET_SECONDS = 480
 
@@ -276,9 +279,12 @@ def store_filing(conn: sqlite3.Connection, header: SecHeader, doc: Form4, ref: F
         for owner in doc.owners:
             db.upsert_insider(conn, owner.cik, owner.name)
         db.replace_insider_owners(conn, filing_id, [_owner_row(o) for o in doc.owners])
+        # The issuer's price history is the yardstick for an implausible
+        # value; this filing's own rows are not part of it.
+        reference = stats.issuer_reference_price(conn, doc.issuer_cik, exclude_filing_id=filing_id)
         db.replace_insider_transactions(
             conn, filing_id,
-            [_tx_row(t, filing_date) for t in form4.open_market(doc.transactions)],
+            [_tx_row(t, filing_date, reference) for t in form4.open_market(doc.transactions)],
         )
     except Exception:
         conn.rollback()
@@ -312,12 +318,15 @@ def _owner_row(o: form4.Owner) -> dict:
     }
 
 
-def _tx_row(t: Transaction, filing_date: str) -> dict:
+def _tx_row(t: Transaction, filing_date: str, reference_price: float | None = None) -> dict:
     value = t.value_cents
     # A deemed execution date, when given, is when the clock starts.
     late = stats.form4_is_late(t.deemed_execution_date or t.tx_date, filing_date)
+    implausible = stats.form4_is_implausible(
+        _float(t.shares), _float(t.price_per_share), value, reference_price)
     return {
         "tx_date": t.tx_date,
+        "tx_date_as_filed": t.tx_date_as_filed,
         "deemed_execution_date": t.deemed_execution_date,
         "security_title": t.security_title,
         "transaction_code": t.transaction_code,
@@ -335,6 +344,7 @@ def _tx_row(t: Transaction, filing_date: str) -> dict:
         "nature_of_ownership": t.nature_of_ownership,
         "footnotes": "\n".join(t.footnotes) or None,
         "late": None if late is None else int(late),
+        "implausible": None if implausible is None else int(implausible),
     }
 
 
@@ -364,13 +374,22 @@ def _set_status(conn: sqlite3.Connection, status: str) -> None:
 def backfill_range(conn: sqlite3.Connection, config: Config, start: date, end: date,
                    client: EdgarClient | None = None,
                    budget_seconds: float = BACKFILL_BUDGET_SECONDS,
-                   limit: int | None = None, clock=time.monotonic) -> SyncResult:
+                   limit: int | None = None, clock=time.monotonic,
+                   status: str | None = HISTORY_STATUS,
+                   today: date | None = None) -> SyncResult:
     """Walk the daily form index from `start` to `end`, inclusive.
 
     Independent of the feed cursor. Progress is recorded per completed day in
-    `edgar_backfill_through`; a run that stops early logs where to resume.
+    `edgar_backfill_through`; a run that stops early logs where to resume,
+    and a recorded feed gap narrows to the days it did not reach.
     About 420 filings a day at ~7 requests/second is a minute per day of
     history, so callers chunk by time budget rather than by day count.
+
+    Every filing enters with `status`: history by default, which is what the
+    manual command means. None applies the feed's own age gate
+    (`ingest_status`) instead, for a gap repair standing in for poll runs
+    that were lost — the alerts those runs owed are still sent, and anything
+    older than the gate is history as it would have been from the feed.
     """
     result = SyncResult()
     if not config.insiders_configured:
@@ -418,9 +437,8 @@ def backfill_range(conn: sqlite3.Connection, config: Config, start: date, end: d
                 if ref.accession in known:
                     continue
                 try:
-                    # History never notifies, however recent the day's index.
                     outcome = process_filing(conn, config, client, ref, source="index",
-                                             status=HISTORY_STATUS)
+                                             status=status, today=today)
                 except (EdgarThrottled, httpx.HTTPError) as exc:
                     result.aborted = _abort_reason(exc)
                     stopped = True
@@ -439,6 +457,8 @@ def backfill_range(conn: sqlite3.Connection, config: Config, start: date, end: d
 
         if result.aborted:
             log.warning("backfill stopped (%s); resume with --from %s", result.aborted, day)
+            # Every day before the one it stopped on was walked to the end.
+            _clear_gap_if_covered(conn, start, day - timedelta(days=1))
         else:
             _clear_gap_if_covered(conn, start, end)
     finally:
@@ -448,17 +468,109 @@ def backfill_range(conn: sqlite3.Connection, config: Config, start: date, end: d
 
 
 def _clear_gap_if_covered(conn: sqlite3.Connection, start: date, end: date) -> None:
+    """`start..end` has been walked to the end: clear the recorded gap when
+    that covers all of it, or narrow the gap to the days still unwalked when
+    it covers the start. The gap only ever shortens from the front, so it
+    cannot clear before its last day has been walked; a walk that leaves the
+    gap's first day unexamined changes nothing."""
     gap = db.get_state(conn, STATE_GAP)
-    if not gap or ".." not in gap:
+    span = _parse_gap(gap)
+    if span is None:
         return
-    try:
-        gap_start, gap_end = (date.fromisoformat(s) for s in gap.split("..", 1))
-    except ValueError:
+    gap_start, gap_end = span
+    if start > gap_start or end < gap_start:
         return
-    if start <= gap_start and end >= gap_end:
+    if end >= gap_end:
         db.set_state(conn, STATE_GAP, None)
-        conn.commit()
         log.info("insider feed gap %s repaired", gap)
+    else:
+        remaining = f"{end + timedelta(days=1)}..{gap_end}"
+        db.set_state(conn, STATE_GAP, remaining)
+        log.info("insider feed gap %s narrowed to %s", gap, remaining)
+    conn.commit()
+
+
+def _parse_gap(gap: str | None) -> tuple[date, date] | None:
+    if not gap or ".." not in gap:
+        return None
+    try:
+        start, end = (date.fromisoformat(s) for s in gap.split("..", 1))
+    except ValueError:
+        return None
+    return start, end
+
+
+# --- gap repair, inside the poll run -----------------------------------------
+
+
+def repair_gap(conn: sqlite3.Connection, config: Config, feed: SyncResult,
+               client: EdgarClient | None = None, today: date | None = None,
+               budget_seconds: float | None = None,
+               clock=time.monotonic) -> SyncResult | None:
+    """Walk the daily index for the recorded feed gap, inside a time budget.
+
+    Runs after the live feed (`feed` is that sync's result, for the status
+    line) so a long repair can never starve it. Days are walked oldest first
+    and the gap narrows to whatever is left: it clears only once its last day
+    has been walked to the end, and a day EDGAR may still be writing is left
+    for a later run (`_final_index_day`). Never raises — an unexpected
+    failure is recorded in `edgar_status` instead. Returns the walk's result,
+    or None when there was nothing to do.
+    """
+    gap = db.get_state(conn, STATE_GAP)
+    span = _parse_gap(gap)
+    if span is None or not config.insiders_configured:
+        return None
+    if budget_seconds is None:
+        budget_seconds = config.insiders.gap_repair_budget_seconds
+    if budget_seconds <= 0:
+        return None  # switched off; the gap stays for `backfill-insiders`
+    gap_start, gap_end = span
+    today = today or date.today()
+    end = min(gap_end, _final_index_day(today))
+    feed_text = f"feed {feed.stored} stored / {feed.seen} seen"
+    if end < gap_start:
+        _set_status(conn, f"ok: {feed_text}; gap {gap} waits for EDGAR to close its "
+                          f"daily index; repair resumes {gap_start + timedelta(days=2)}")
+        return None
+    try:
+        result = backfill_range(conn, config, gap_start, end, client=client,
+                                budget_seconds=budget_seconds, clock=clock,
+                                status=None, today=today)
+    except Exception as exc:
+        log.exception("insider feed gap %s repair failed", gap)
+        _set_status(conn, f"error: gap {gap} repair failed: {exc}; {feed_text}")
+        return None
+    remaining = db.get_state(conn, STATE_GAP)
+    walked = f"{result.stored} stored / {result.seen} seen from the daily index"
+    if result.aborted == "budget":
+        status = (f"ok: {feed_text}; gap {gap} repair out of time ({walked}), "
+                  f"{remaining} remains; continuing next run")
+    elif result.aborted:
+        status = (f"{result.aborted}; gap {gap} repair stopped ({walked}), "
+                  f"{remaining} remains; {feed_text}")
+    elif remaining:
+        status = (f"ok: {feed_text}; gap {gap} repaired through {end} ({walked}); "
+                  f"{remaining} waits for EDGAR to close its daily index")
+    else:
+        status = f"ok: {feed_text}; gap {gap} repaired ({walked})"
+    _set_status(conn, status)
+    log.info("insider feed gap %s: %s", gap, result.summary())
+    return result
+
+
+def _final_index_day(today: date) -> date:
+    """The newest day whose daily index can be taken as complete.
+
+    EDGAR accepts Form 4s until 10 PM ET, and only once that window has
+    closed — 03:00 UTC the next day — is the day's `form.idx` final. `today`
+    is the runner's calendar date with no time of day, so a run in the first
+    hours of a UTC day may precede yesterday's close; walking an index EDGAR
+    is still writing would mark the day covered with filings missing, and
+    the gap would clear early. Staying two days behind costs a day's delay
+    on the last day of a gap and nothing else.
+    """
+    return today - timedelta(days=2)
 
 
 def recompute_late(conn: sqlite3.Connection) -> int:
@@ -473,3 +585,62 @@ def recompute_late(conn: sqlite3.Connection) -> int:
                      (None if late is None else int(late), r["id"]))
     conn.commit()
     return len(rows)
+
+
+def reparse_trade_dates(conn: sqlite3.Connection) -> int:
+    """Parse offset-suffixed trade dates already stored verbatim, as ingest
+    now does, and derive `late` for them. Rows that do not match are left
+    exactly as they are. Returns how many rows were re-parsed."""
+    rows = conn.execute(
+        """SELECT t.id, t.tx_date, t.deemed_execution_date, f.filing_date
+           FROM insider_transactions t JOIN insider_filings f ON f.id = t.filing_id
+           WHERE t.tx_date IS NOT NULL AND t.tx_date_as_filed IS NULL"""
+    ).fetchall()
+    reparsed = 0
+    for r in rows:
+        tx_date, as_filed = form4.parse_filed_date(r["tx_date"])
+        if as_filed is None:
+            continue
+        late = stats.form4_is_late(r["deemed_execution_date"] or tx_date, r["filing_date"])
+        conn.execute(
+            "UPDATE insider_transactions SET tx_date = ?, tx_date_as_filed = ?, late = ? WHERE id = ?",
+            (tx_date, as_filed, None if late is None else int(late), r["id"]),
+        )
+        reparsed += 1
+    conn.commit()
+    return reparsed
+
+
+def recompute_implausible(conn: sqlite3.Connection) -> int:
+    """Rebuild the derived `implausible` flag for every stored row.
+
+    The issuer-relative branch of the rule depends on what else is stored, so
+    a flag set at ingest can go stale as an issuer's history fills in; this
+    re-judges every row against the current table. Returns how many rows are
+    now flagged.
+    """
+    rows = conn.execute(
+        """SELECT t.id, t.filing_id, f.issuer_cik, f.status, t.shares, t.price_per_share,
+                  t.amount_exact_cents
+           FROM insider_transactions t JOIN insider_filings f ON f.id = t.filing_id"""
+    ).fetchall()
+    # Reference prices per (issuer, filing) in memory: one query per row would
+    # be thousands of median scans over the same few rows.
+    by_issuer: dict[str, list[sqlite3.Row]] = {}
+    for r in rows:
+        by_issuer.setdefault(r["issuer_cik"], []).append(r)
+    flagged = 0
+    for r in rows:
+        others = [
+            x["price_per_share"] for x in by_issuer[r["issuer_cik"]]
+            if x["filing_id"] != r["filing_id"] and x["status"] in db.COUNTED_STATUSES
+            and x["price_per_share"] is not None and x["price_per_share"] > 0
+        ]
+        verdict = stats.form4_is_implausible(
+            r["shares"], r["price_per_share"], r["amount_exact_cents"],
+            statistics.median(others) if others else None)
+        flagged += verdict is True
+        conn.execute("UPDATE insider_transactions SET implausible = ? WHERE id = ?",
+                     (None if verdict is None else int(verdict), r["id"]))
+    conn.commit()
+    return flagged

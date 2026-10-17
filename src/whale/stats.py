@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import math
 import sqlite3
+import statistics
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
@@ -426,6 +427,89 @@ def form4_is_late(tx_date: str | None, filing_date: str | None) -> bool | None:
                                  date.fromisoformat(filing_date)) > FORM4_DEADLINE_BUSINESS_DAYS
 
 
+# Implausible as-filed values. The recurring Form 4 mistake is a price cell
+# that holds the *aggregate* consideration: SL Science (SLBT) filed 4,545,306
+# shares at $2,272,653.00 — the footnote says "aggregate purchase price of
+# US$2,272,653" — and the stored value became $10.3 trillion, four orders of
+# magnitude above every real row in the table. InnSuites (IHT, a ~$1.50
+# stock) did the same twice ($22,593.60 and $50,410.80 a share), and a
+# $5 microcap (UUU) once ($5,134.00). The row stays as filed; the flag keeps
+# its value out of every total and threshold. Thresholds are from the corpus:
+#
+# - Value above $5B. The largest real row stored is a $1.86B block sale
+#   (FANG, 9.1M shares at $205.26); $5B is 2.7× that record. A genuine block
+#   above it would be flagged and listed by the audit for a human to judge,
+#   which beats a phantom $10T leading the leaderboard.
+# - Price above $10,000 with at least 1,000 shares. No US common stock other
+#   than BRK.A (~$700k) is quoted above $10,000, and the highest real price
+#   stored is SNDK at $1,734.94; the IHT rows sit at $22k–$50k. Price alone
+#   is not enough — a director buying a handful of BRK.A is real — so the
+#   share count is the second signal: 1,000 A-shares in one open-market row
+#   would be $700M, nothing like which is stored, while the
+#   aggregate-in-price-cell error produces exactly this shape (many shares,
+#   absurd price).
+# - Price more than 20× the median price in the issuer's *other* stored
+#   filings. Catches the error for an issuer with a history (UUU: $5,134
+#   against a $5.05 median) at a price the absolute floor would miss. Other
+#   filings, not other rows: the mistake is per filing, so a filing's rows
+#   agree with each other. 20× leaves room for a 1:10 reverse split; a
+#   1:20 or larger one would flag the first post-split filing until the
+#   history catches up (`backfill-insiders --recompute-implausible`).
+#
+# What it cannot catch: an issuer whose only stored rows are mispriced, at a
+# price under $10,000 (or under 1,000 shares) and a value under $5B — there
+# is nothing to compare against.
+IMPLAUSIBLE_VALUE_CENTS = 5_000_000_000 * 100
+IMPLAUSIBLE_PRICE_USD = 10_000.0
+IMPLAUSIBLE_PRICE_MIN_SHARES = 1_000.0
+IMPLAUSIBLE_PRICE_RATIO = 20.0
+
+
+def form4_is_implausible(shares: float | None, price_per_share: float | None,
+                         value_cents: int | None,
+                         reference_price: float | None = None) -> bool | None:
+    """Whether a Form 4 row's as-filed value is beyond belief.
+
+    Derived once at ingest and stored (`insider_transactions.implausible`),
+    like `late`; SQL reads the column. `reference_price` is the issuer's
+    median price across its other stored filings (`issuer_reference_price`),
+    or None when there are none. None when the row has no value to judge.
+    """
+    if shares is None or price_per_share is None or value_cents is None:
+        return None
+    if value_cents > IMPLAUSIBLE_VALUE_CENTS:
+        return True
+    if price_per_share > IMPLAUSIBLE_PRICE_USD and shares >= IMPLAUSIBLE_PRICE_MIN_SHARES:
+        return True
+    if reference_price and price_per_share > IMPLAUSIBLE_PRICE_RATIO * reference_price:
+        return True
+    return False
+
+
+def issuer_reference_price(conn: sqlite3.Connection, issuer_cik: str | None,
+                           exclude_filing_id: int | None = None) -> float | None:
+    """Median price per share across the issuer's other counted filings.
+
+    The filing being judged is left out so that a re-parse does not compare
+    a filing against its own earlier rows.
+    """
+    if not issuer_cik:
+        return None
+    marks = ", ".join("?" for _ in COUNTED_STATUSES)
+    sql = f"""
+        SELECT t.price_per_share FROM insider_transactions t
+        JOIN insider_filings f ON f.id = t.filing_id
+        WHERE f.issuer_cik = ? AND f.status IN ({marks})
+          AND t.price_per_share IS NOT NULL AND t.price_per_share > 0
+    """
+    params: list = [issuer_cik, *COUNTED_STATUSES]
+    if exclude_filing_id is not None:
+        sql += " AND t.filing_id != ?"
+        params.append(exclude_filing_id)
+    prices = [r[0] for r in conn.execute(sql, params)]
+    return statistics.median(prices) if prices else None
+
+
 @dataclass
 class IssuerStat:
     issuer_cik: str
@@ -442,6 +526,9 @@ class IssuerStat:
     buy_volume: Volume = field(default_factory=Volume)
     sell_volume: Volume = field(default_factory=Volume)
     last_tx_date: str | None = None
+    # Rows flagged `implausible`: counted as trades, worth nothing to any
+    # volume. See `form4_is_implausible`.
+    implausible_count: int = 0
 
     @property
     def filing_count(self) -> int:
@@ -494,8 +581,12 @@ def insider_issuer_stats(conn: sqlite3.Connection, window_days: int | None = Non
             s.insider_names[who] = r["insider_name"]
         amounts = (r["amount_min_cents"], r["amount_max_cents"], r["amount_exact_cents"])
         # A row without a price has an unknown value, not an open-ended one:
-        # it counts as a trade and adds nothing to any total.
+        # it counts as a trade and adds nothing to any total. An implausible
+        # as-filed value is unknown in the same way — never a large one.
         priced = any(a is not None for a in amounts)
+        if r["implausible"] == 1:
+            s.implausible_count += 1
+            priced = False
         if priced:
             s.volume.add(*amounts)
         if r["action"] in BUY_ACTIONS:

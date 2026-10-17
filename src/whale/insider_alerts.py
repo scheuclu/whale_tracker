@@ -69,8 +69,13 @@ def load_filing(conn: sqlite3.Connection,
 
 
 def _direction_value(rows: list[sqlite3.Row]) -> int | None:
-    """Summed value of these rows, or None when none of them carries a price."""
-    values = [r["amount_exact_cents"] for r in rows if r["amount_exact_cents"] is not None]
+    """Summed value of these rows, or None when none of them carries a price.
+
+    A row flagged `implausible` is unknown too, not large: a price cell that
+    holds the aggregate consideration must not clear a value floor.
+    """
+    values = [r["amount_exact_cents"] for r in rows
+              if r["amount_exact_cents"] is not None and r["implausible"] != 1]
     return sum(values) if values else None
 
 

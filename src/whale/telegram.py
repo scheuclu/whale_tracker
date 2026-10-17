@@ -259,6 +259,11 @@ def _insider_row(row) -> str:
     shares = _shares(row["shares"])
     if row["amount_exact_cents"] is None:
         return f"{emoji} {esc(shares)} sh · <i>no price filed</i>"
+    if row["implausible"] == 1:
+        # Reproduced, not believed: the figure is shown because it is what
+        # was filed, and labelled because it counts toward nothing.
+        return (f"{emoji} {esc(shares)} sh @ {esc(_price(row['price_per_share']))}"
+                f" = {esc(usd(row['amount_exact_cents']))} · <i>as filed, implausible</i>")
     return (f"{emoji} {esc(shares)} sh @ {esc(_price(row['price_per_share']))}"
             f" = <b>{esc(usd(row['amount_exact_cents']))}</b>")
 
@@ -305,7 +310,12 @@ def format_insider_filing(match, cluster_context: InsiderCluster | None = None,
     verb = "bought" if match.direction == "purchase" else "sold"
     emoji = ACTION_EMOJI.get(match.direction, "⚪️")
     symbol = filing["ticker"] or filing["issuer_name"] or "unknown issuer"
-    value = usd(match.value_cents) if match.value_cents is not None else "an unpriced amount"
+    if match.value_cents is not None:
+        value = usd(match.value_cents)
+    elif any(r["implausible"] == 1 for r in match.rows):
+        value = "an implausible as-filed amount"
+    else:
+        value = "an unpriced amount"
 
     who = owner_label(match.primary)
     joint = len(match.owners) - 1
