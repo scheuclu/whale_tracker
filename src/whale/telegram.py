@@ -71,9 +71,16 @@ def _tx_line(tx: dict) -> str:
         detail.append(f"traded {traded}" + (f" ({delay}d delay)" if delay is not None else ""))
     if owner := OWNER_LABEL.get(tx.get("owner") or ""):
         detail.append(owner)
+    if tx.get("transcribed"):
+        # Read off a scanned paper form by the grid reader and a vision
+        # model: shown, and kept out of every total.
+        detail.append(TRANSCRIBED_LABEL)
     if detail:
         line += "\n     " + " · ".join(detail)
     return line
+
+
+TRANSCRIBED_LABEL = "transcribed from scan"
 
 
 def format_filing(member: str, party: str | None, state: str | None,
@@ -290,7 +297,8 @@ def _tx_line_compact(tx: dict) -> str:
     symbol = tx.get("ticker") or (tx.get("asset_name") or "—")[:20]
     amount = format_amount(tx.get("amount_min_cents"), tx.get("amount_max_cents"),
                            tx.get("amount_exact_cents"))
-    return f"{emoji} {esc(label)} <b>{esc(symbol)}</b> {esc(amount)}"
+    note = " <i>(scan)</i>" if tx.get("transcribed") else ""
+    return f"{emoji} {esc(label)} <b>{esc(symbol)}</b> {esc(amount)}{note}"
 
 
 def _context_line(ctx: TickerStat | None) -> str | None:

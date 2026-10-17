@@ -165,6 +165,21 @@ export default async function PipelinePage() {
               eFD from the Senate; without a vision model configured they are reported
               to Telegram with a link but contribute no transactions to the totals.
             </p>
+            <p className="text-[11px] text-muted-foreground">
+              Every scanned filing, captured or not, with what the grid reader saw on each page:{" "}
+              <a href="/scans" className="underline underline-offset-2 hover:text-primary">
+                inspect scans
+              </a>
+              .
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              {p.transcribed.filings
+                ? `${p.transcribed.filings.toLocaleString()} scanned filing${p.transcribed.filings === 1 ? "" : "s"} ` +
+                  `(${p.transcribed.rows.toLocaleString()} rows) were transcribed: text by a vision model, ` +
+                  "ticked boxes by the grid reader. Those rows are labelled on every page and count as " +
+                  "trades, but enter no volume total, cluster or floor."
+                : "No filing has been transcribed from a scan: transcription is off (vision.enabled)."}
+            </p>
           </Card>
         </div>
       </section>
@@ -218,8 +233,9 @@ export default async function PipelinePage() {
 
 const METHOD_LABEL: Record<string, string> = {
   text: "PDF text layer (House)",
-  vision: "Vision model (House scan)",
+  vision: "Transcribed from scan (House; quarantined from totals)",
   scanned: "Scanned — unread (House)",
+  vision_failed: "Scanned — transcription refused (House; grid not found or readings disagree)",
   efd_html: "eFD report page (Senate)",
   efd_paper: "Paper filing — unread (Senate)",
   error: "Parse error",

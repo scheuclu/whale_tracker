@@ -316,12 +316,21 @@ separate `insider_*` tables — never mixed into the congressional data.
 ### Other limits
 
 - **Scanned paper filings.** About 11% of PTRs are filed on paper and arrive as
-  image-only PDFs with no text layer. They are reported to Telegram with a link
-  and contribute no transactions; `python -m whale status` counts them.
-  Gemini transcription exists (`vision.enabled` in `config.yaml`) but is **off
-  by default**: the paper form records amounts as a checkbox grid with rotated
-  headers that every model tested misreads, at roughly a 25% row error rate.
-  Measurement and proposed fix: https://github.com/scheuclu/whale_tracker/issues/1
+  image-only PDFs with no text layer. By default they are reported to Telegram
+  with a link and contribute no transactions; `python -m whale status` counts
+  them. Transcription (`vision.enabled` in `config.yaml`) is a hybrid: Gemini
+  reads the written text, and `src/whale/paper_form.py` reads the ticked
+  amount and type boxes off the printed grid, because the model misreads
+  those on about a quarter of rows (issue #1). Transcribed rows are
+  quarantined — labelled "transcribed from scan", counted as trades, and kept
+  out of every volume total, cluster and floor — and a box the reader cannot
+  call is stored as unknown rather than guessed. Paper forms carry no ticker,
+  so they never feed a cluster alert either way. Measured accuracy and what
+  turning it on does are in the `vision:` block of `config.yaml`. Every scan
+  can be inspected regardless: `python -m whale capture-scans` stores each
+  page as a small image with the grid reader's rows (resumable, no API key),
+  and the dashboard's `/scans` page draws the reader's decisions over the
+  page. The pipeline captures new scans as they arrive.
 - **Assets without tickers.** Treasury bills, municipal bonds, structured notes
   and private funds are stored but carry no symbol, so they appear in a member's
   totals and not in ticker rollups. Some members trade almost nothing else.

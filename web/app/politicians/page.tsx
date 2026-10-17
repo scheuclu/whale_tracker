@@ -5,6 +5,7 @@ import {
   getPoliticians,
   getTransactions,
 } from "@/lib/queries";
+import { getScanFilings } from "@/lib/scan-queries";
 import { memberHref, shortDate, usd } from "@/lib/format";
 import {
   Card,
@@ -15,7 +16,7 @@ import {
   StatTile,
   VolumeRange,
 } from "../charts";
-import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, TickerChip } from "../ui";
+import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, ScanTag, TickerChip } from "../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -175,12 +176,13 @@ const FILTERS = [
 ];
 
 async function MemberDetail({ member, action }: { member: string; action?: string }) {
-  let detail, tickers, trades;
+  let detail, tickers, trades, scans;
   try {
-    [detail, tickers, trades] = await Promise.all([
+    [detail, tickers, trades, scans] = await Promise.all([
       getPoliticianDetail(member),
       getPoliticianTickers(member, 40),
       getTransactions({ member, action, limit: TRADE_PAGE }),
+      getScanFilings({ member }),
     ]);
   } catch (err) {
     return <Empty>{(err as Error).message}</Empty>;
@@ -239,6 +241,15 @@ async function MemberDetail({ member, action }: { member: string; action?: strin
               · bioguide
             </a>
           ) : null}
+          {scans.length ? (
+            <a
+              href={`/scans?m=${encodeURIComponent(member)}`}
+              className="underline-offset-2 hover:text-primary hover:underline"
+              title="Paper filings scanned without a text layer; inspect what the grid reader saw"
+            >
+              · {scans.length} scanned filing{scans.length === 1 ? "" : "s"}
+            </a>
+          ) : null}
         </p>
       </div>
 
@@ -253,7 +264,15 @@ async function MemberDetail({ member, action }: { member: string; action?: strin
           value={String(detail.tickers)}
           hint={`across ${detail.filings} filing${detail.filings === 1 ? "" : "s"}`}
         />
-        <StatTile label="Volume (est.)" value={usd(detail.volume_mid)} hint="bracket midpoints" />
+        <StatTile
+          label="Volume (est.)"
+          value={usd(detail.volume_mid)}
+          hint={
+            detail.transcribed
+              ? `bracket midpoints · ${detail.transcribed} transcribed row${detail.transcribed === 1 ? "" : "s"} not counted`
+              : "bracket midpoints"
+          }
+        />
         <StatTile
           label="Late disclosures"
           value={String(detail.late_count)}
@@ -360,6 +379,7 @@ async function MemberDetail({ member, action }: { member: string; action?: strin
                       exact={r.amount_exact_cents}
                     />
                     <OwnerTag owner={r.owner} />
+                    <ScanTag transcribed={r.transcribed} docId={r.doc_id} />
                     <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">
                       {r.asset_name}
                     </span>

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
-import { Activity, Briefcase, Landmark, LineChart, Moon, Receipt, Sun } from "lucide-react";
+import { Activity, Briefcase, Landmark, LineChart, Moon, Receipt, ScanLine, Sun } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const TABS = [
@@ -12,6 +12,7 @@ const TABS = [
   { href: "/tickers", label: "Tickers", icon: LineChart },
   { href: "/politicians", label: "Politicians", icon: Landmark },
   { href: "/insiders", label: "Insiders", icon: Briefcase },
+  { href: "/scans", label: "Scans", icon: ScanLine },
   { href: "/pipeline", label: "Pipeline", icon: Activity },
 ];
 

@@ -27,6 +27,7 @@ from pathlib import Path
 
 from .amounts import BRACKETS
 from .db import COUNTED_STATUSES, connect
+from .stats import TRANSCRIBED_METHOD
 
 # Severity ordering, worst first.
 ERROR, WARN, INFO = "error", "warning", "info"
@@ -291,6 +292,7 @@ def check_missing_transaction_fields(conn, today: date | None = None) -> list[Fi
             SELECT f.doc_id, t.asset_name FROM transactions t
             JOIN filings f ON f.id = t.filing_id
             WHERE f.status IN {_counted()}
+              AND COALESCE(f.parse_method, '') != '{TRANSCRIBED_METHOD}'
               AND (t.{column} IS NULL OR t.{column} = '' OR t.{column} = 'unknown')
         """)
         if rows:
@@ -301,10 +303,13 @@ def check_missing_transaction_fields(conn, today: date | None = None) -> list[Fi
                 [f"filing {r['doc_id']}  {r['asset_name'][:50]}" for r in rows],
             ))
 
+    # Transcribed rows are left to `check_vision_rows`: a box the grid reader
+    # could not call is the expected outcome there, not a parser fault.
     no_amount = _rows(conn, f"""
         SELECT f.doc_id, t.asset_name, f.parse_method FROM transactions t
         JOIN filings f ON f.id = t.filing_id
         WHERE f.status IN {_counted()}
+          AND COALESCE(f.parse_method, '') != '{TRANSCRIBED_METHOD}'
           AND t.amount_min_cents IS NULL AND t.amount_exact_cents IS NULL
     """)
     if no_amount:
@@ -360,8 +365,7 @@ def check_parse_coverage(conn, today: date | None = None) -> list[Finding]:
     """How much of the corpus is actually readable."""
     row = conn.execute("""
         SELECT SUM(status = 'failed') failed,
-               SUM(status IN ('parsed','notified','backfilled')) ok,
-               SUM(parse_method = 'vision') vision
+               SUM(status IN ('parsed','notified','backfilled')) ok
         FROM filings WHERE chamber = 'house'
     """).fetchone()
     total = (row["failed"] or 0) + (row["ok"] or 0)
@@ -369,21 +373,69 @@ def check_parse_coverage(conn, today: date | None = None) -> list[Finding]:
         return []
     pct = 100 * (row["failed"] or 0) / total
     severity = ERROR if pct > 25 else WARN if pct > 15 else INFO
-    findings = [Finding(
+    return [Finding(
         severity, "parse_coverage",
         f"{row['failed']} of {total} filings unreadable ({pct:.0f}%)",
         "Scanned paper filings have no text layer. A sharp rise here means "
         "either more members filed on paper, or the text-layer detection "
         "threshold in ptr.py is now rejecting readable filings.",
     )]
-    if row["vision"]:
-        findings.append(Finding(
-            WARN, "vision_rows_in_stats",
-            f"{row['vision']} filing(s) were transcribed by the vision model",
-            "Vision transcription measured ~25% row error on the amount grid. "
-            "Those rows currently count toward the statistics; see issue #1.",
-        ))
-    return findings
+
+
+def check_vision_rows(conn, today: date | None = None) -> list[Finding]:
+    """What was transcribed from scans, and how much of it could not be read.
+
+    Transcribed rows (`parse_method = 'vision'`) count as trades and toward
+    member and ticker lists but enter no volume figure, cluster or floor
+    (stats.counts_toward_volume; `TRANSCRIBED` in web/lib/queries.ts). The
+    grid reader reports a box it cannot call as unknown rather than guess,
+    so a share of unknown amounts or types is the expected shape of this
+    data and reads as INFO. It becomes a warning when more than a quarter
+    of the rows are unknown in either field: at that rate a form has
+    changed, or the scans are too poor for the reader, and the filings are
+    better reported as unreadable than half-read.
+    """
+    row = conn.execute(f"""
+        SELECT COUNT(DISTINCT f.id) filings, COUNT(t.id) rows_,
+               SUM(t.amount_min_cents IS NULL AND t.amount_exact_cents IS NULL) no_amount,
+               SUM(t.action IS NULL OR t.action = '' OR t.action = 'unknown') no_action
+        FROM filings f LEFT JOIN transactions t ON t.filing_id = f.id
+        WHERE f.chamber = 'house' AND f.status IN {_counted()}
+          AND f.parse_method = '{TRANSCRIBED_METHOD}'
+    """).fetchone()
+    refused = conn.execute("""
+        SELECT COUNT(*) n FROM filings
+        WHERE chamber = 'house' AND status = 'failed' AND parse_method = 'vision_failed'
+    """).fetchone()["n"]
+    if not row["filings"] and not refused:
+        return []
+    rows = row["rows_"] or 0
+    no_amount, no_action = row["no_amount"] or 0, row["no_action"] or 0
+    worst = max(no_amount, no_action) / rows if rows else 0.0
+    severity = WARN if worst > 0.25 else INFO
+    evidence = _rows(conn, f"""
+        SELECT f.doc_id, f.filer_name, COUNT(t.id) n,
+               SUM(t.amount_min_cents IS NULL AND t.amount_exact_cents IS NULL) na,
+               SUM(t.action IS NULL OR t.action = '' OR t.action = 'unknown') nt
+        FROM filings f LEFT JOIN transactions t ON t.filing_id = f.id
+        WHERE f.chamber = 'house' AND f.status IN {_counted()}
+          AND f.parse_method = '{TRANSCRIBED_METHOD}'
+        GROUP BY f.id ORDER BY (na + nt) DESC, f.filing_date DESC
+    """)
+    return [Finding(
+        severity, "vision_rows",
+        f"{row['filings']} filing(s), {rows} row(s) transcribed from scans — "
+        f"{no_amount} without a readable amount, {no_action} without a type"
+        + (f"; {refused} scan(s) refused as unreadable" if refused else ""),
+        "Transcribed rows count as trades and in member and ticker lists, and "
+        "contribute nothing to any volume, cluster or floor. An unknown amount "
+        "or type is a box the grid reader would not call, kept as unknown "
+        "rather than guessed. A refused scan is one whose grid could not be "
+        "found or whose two readings did not line up; it is reported with a "
+        "link, like a scan vision never saw.",
+        [f"{r['doc_id']}  {r['filer_name']}  {r['n']} rows, {r['na']} no amount, "
+         f"{r['nt']} no type" for r in evidence],
+    )]
 
 
 def check_transaction_density(conn, today: date | None = None) -> list[Finding]:
@@ -867,6 +919,7 @@ CHECKS = (
     check_unmatched_filers,
     check_date_anomalies,
     check_parse_coverage,
+    check_vision_rows,
     check_transaction_density,
     check_alert_health,
     check_senate,

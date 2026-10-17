@@ -110,18 +110,29 @@ senate:
   enabled: true
 
 vision:
-  # Reads scanned paper PTRs with Gemini when GEMINI_API_KEY is set.
+  # Reads scanned paper PTRs when GEMINI_API_KEY is set: Gemini transcribes
+  # the written text (filer, asset names, dates, owner), and src/whale/
+  # paper_form.py reads the ticked amount and type boxes off the printed grid
+  # itself. The model's own reading of the boxes was wrong on about a quarter
+  # of rows (issue #1); the grid reader, measured on the 53 scanned filings
+  # in the 2026 corpus, decomposed every page of 50 of them (the other three
+  # are one faint page each in 30–40 page spreadsheet attachments) and, on a
+  # hand-labelled set of 164 rows across 16 filings and all four form layouts
+  # seen, called 161 amounts and 155 types with no wrong answers — the rest it
+  # left unknown (a poor scan, an X drawn outside its box). A box it cannot
+  # call is stored as unknown, never guessed, and a filing whose grid cannot
+  # be found, or whose row count does not match the transcription, is
+  # reported as unreadable with the reason.
   #
-  # OFF by default, on measured accuracy. The paper form records the amount as
-  # a checkbox grid with rotated column headers, and every model tested
-  # (gemini-3.6-flash, 3.8-flash, pro-latest) misreads it. On the committed
-  # fixture, one row's amount is wrong in 3 of 3 trials and one row's
-  # buy/sell direction in 2 of 3 — about a quarter of rows carry an error.
-  #
-  # Those filings are ~11% of the corpus. Reporting them as unreadable, with a
-  # link, is honest; silently folding a 25%-error transcription into the volume
-  # and cluster statistics is not. Turn this on only if you would rather have
-  # approximate coverage than none, and read the Pipeline page accordingly.
+  # OFF by default still, because transcribed rows are quarantined, not
+  # trusted: they count as trades and in member and ticker lists but enter no
+  # volume total, cluster or floor (stats.counts_toward_volume; TRANSCRIBED
+  # in web/lib/queries.ts), and the dashboard and Telegram label them
+  # "transcribed from scan". Paper forms carry no ticker, so they can never
+  # feed a cluster alert either way. Turning this on with a key re-queues the
+  # scans that failed for want of it; the ones already reported to Telegram
+  # as unreadable are stored as history, not announced again. Expect one
+  # model call per scanned filing, ~11% of PTRs.
   enabled: false
 
 insiders:
