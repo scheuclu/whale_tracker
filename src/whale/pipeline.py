@@ -248,9 +248,21 @@ def _normalise_senate_rows(conn: sqlite3.Connection) -> int:
              AND (state_district IS NULL OR state_district = '')
              AND (SELECT p.state FROM politicians p WHERE p.id = filings.politician_id) IS NOT NULL"""
     ).rowcount
+    # Tickers stored from an exchange row's two-line cell ("-- AMCR") before
+    # the parser learned to drop eFD's "--" placeholder: re-derive them the
+    # way the parser now does. Nothing matches once converted.
+    for row in conn.execute(
+        """SELECT t.id, t.ticker FROM transactions t JOIN filings f ON f.id = t.filing_id
+           WHERE f.chamber = 'senate' AND t.ticker IS NOT NULL
+             AND (t.ticker LIKE '%--%' OR t.ticker LIKE '% %')"""
+    ).fetchall():
+        symbol, _ = senate_ptr.ticker_from_cell(row["ticker"])
+        conn.execute("UPDATE transactions SET ticker = ? WHERE id = ?", (symbol, row["id"]))
+        fixed += 1
     if fixed:
         conn.commit()
-        log.info("senate: normalised %d filing row(s) (ISO dates, state from the roster)", fixed)
+        log.info("senate: normalised %d row(s) (ISO dates, state from the roster, ticker cells)",
+                 fixed)
     return fixed
 
 

@@ -315,11 +315,14 @@ def _transaction(cells: list[_Cell]) -> Transaction:
     if label and code is None:
         parts.append(f"Asset type: {label}")
     parts += asset.details
+    symbol, symbols = ticker_from_cell(ticker.text)
+    if symbol is None and symbols:
+        parts.append("Tickers: " + ", ".join(symbols))
 
     return Transaction(
         asset_name=asset.text,
         action=map_action(kind.text),
-        ticker=ticker.text.upper() if _present(ticker.text) else None,
+        ticker=symbol,
         asset_type=code,
         owner=map_owner(owner.text),
         tx_date=_iso_date(tx_date.text),
@@ -338,6 +341,18 @@ def _filer_name(chunks: list[str]) -> str:
 
 def _present(text: str) -> bool:
     return bool(text) and text != "--"
+
+
+def ticker_from_cell(text: str | None) -> tuple[str | None, list[str]]:
+    """The ticker cell with eFD's "--" placeholder dropped.
+
+    An exchange row lists one symbol per leg and prints "--" for a leg that
+    has none, so the cell can read "-- AMCR" (one real symbol) or "BERY AMCR"
+    (two). One symbol is the ticker. Several come back for the description
+    and the ticker stays NULL: choosing a leg would be a guess.
+    """
+    symbols = [t.upper() for t in _collapse(text).split() if t != "--"]
+    return (symbols[0] if len(symbols) == 1 else None), symbols
 
 
 def _collapse(text: str | None) -> str:
