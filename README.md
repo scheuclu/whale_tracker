@@ -161,6 +161,16 @@ insiders:
       titles: ["chief executive", "ceo", "chief financial", "cfo"]
       min_value_usd: 100000
 
+    - name: Large insider buy          # the people who set guidance
+      direction: buy
+      roles: [officer, director]
+      min_value_usd: 1000000
+
+    - name: Large 10% owner buy        # a fund building a position: a higher bar
+      direction: buy
+      roles: [ten_percent_owner]
+      min_value_usd: 10000000
+
     - name: Unplanned executive sale
       direction: sell
       roles: [officer]
