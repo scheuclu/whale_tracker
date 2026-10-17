@@ -333,7 +333,8 @@ def format_insider_cluster(cluster: InsiderCluster, rule_name: str,
                            window_days: int) -> str:
     """Several insiders converging on one issuer."""
     verb = "bought" if cluster.direction == "buy" else "sold"
-    symbol = cluster.ticker or f"CIK {cluster.issuer_cik}"
+    # Never a bare CIK: a ten-digit number tells the reader nothing.
+    symbol = cluster.ticker or cluster.issuer_name or "unknown issuer"
     parts = [
         f"🔥 <b>{esc(rule_name)} — {esc(symbol)}</b>",
         f"{cluster.insider_count} insiders {verb} {esc(cluster.issuer_name or 'this issuer')} "

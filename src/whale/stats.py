@@ -562,6 +562,11 @@ def find_insider_clusters(conn: sqlite3.Connection, settings: InsiderSettings,
     floor = settings.min_insiders if min_insiders is None else min_insiders
     clusters = []
     for s in insider_issuer_stats(conn, window, today).values():
+        if not s.ticker:
+            # Filed as NONE / N/A: a non-listed vehicle. A convergence there is
+            # not actionable, and its alert would have to be keyed on a bare
+            # CIK — two of the first cluster alerts read "0001742952".
+            continue
         for direction, insiders, count, volume in (
             ("buy", s.buy_insiders, s.buy_count, s.buy_volume),
             ("sell", s.sell_insiders, s.sell_count, s.sell_volume),

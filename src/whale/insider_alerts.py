@@ -94,6 +94,12 @@ def match_filing(filing: sqlite3.Row, owners: list[sqlite3.Row],
     """Whether one rule claims this filing, and on which direction."""
     if rule.kind != "filing":
         return None
+    if not filing["ticker"]:
+        # Filed with the trading symbol NONE or N/A: a private BDC, interval
+        # fund or similar non-listed vehicle. Nobody can act on it, so no rule
+        # claims it; the pipeline demotes it to history, where the dashboard
+        # still counts it. 16 of the first 291 insider alerts were these.
+        return None
 
     plan = filing["aff_10b5_one"]
     if rule.exclude_10b5_1 and plan == 1:
