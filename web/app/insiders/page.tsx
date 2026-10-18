@@ -12,8 +12,44 @@ import {
 import { price, shares, shortDate, usd } from "@/lib/format";
 import { Card, DivergingSplit, Empty, MagnitudeBars, SectionTitle, StatTile } from "../charts";
 import { ActionBadge, Amount, InsiderDelayTag, PlanTag, ResponsiveTable, RoleTag, SectorTag, TickerChip } from "../ui";
+import {
+  ISSUER_SORT,
+  ROW_LIMITS,
+  isDefaultSort,
+  parseLimit,
+  parseSort,
+  sortParams,
+  type IssuerSortKey,
+} from "@/lib/table-sort";
+import {
+  BODY_ROW,
+  BarCell,
+  DATA_TABLE,
+  HEAD_ROW,
+  SortHeader,
+  SplitCell,
+  TableFooter,
+  describeSort,
+  sortHref,
+} from "../sortable-table";
+import { RowLinkBody, StickyThead } from "../table-client";
 
 export const dynamic = "force-dynamic";
+
+const ISSUER_ORDER_NAMES: Record<IssuerSortKey, string> = {
+  value: "value bought + sold",
+  ticker: "ticker",
+  issuer: "issuer name",
+  insiders: "distinct insiders",
+  filings: "filings",
+  buysell: "share of purchases",
+  bought: "value bought",
+  sold: "value sold",
+  last: "last trade",
+};
+
+const VALUE_HINT =
+  "Shares × the price as filed: exact but computed, and a filer may report a weighted average. A dash means none in the window, or no price was filed; dashes sort last.";
 
 /**
  * Corporate insiders — SEC Form 4. Only filings with open-market buys or
@@ -50,13 +86,16 @@ function pill(active: boolean) {
 export default async function InsidersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ t?: string; w?: string; action?: string; cik?: string }>;
+  searchParams: Promise<{ t?: string; w?: string; action?: string; cik?: string; sort?: string; dir?: string; n?: string }>;
 }) {
   const params = await searchParams;
   if (params.t) return <IssuerDetail ticker={params.t.toUpperCase()} />;
 
   const windowKey = params.w ?? "30";
   const days = windowKey === "all" ? undefined : Number(windowKey) || 30;
+  const sort = parseSort(ISSUER_SORT, params);
+  const { n, limit } = parseLimit(params.n);
+  const rowsParam = n === "more" ? "200" : n;
   const query = (overrides: { w?: string; action?: string }) => {
     const q = new URLSearchParams();
     const w = "w" in overrides ? overrides.w : params.w;
@@ -64,22 +103,50 @@ export default async function InsidersPage({
     if (w) q.set("w", w);
     if (action) q.set("action", action);
     if (params.cik) q.set("cik", params.cik);
+    // The issuers table's order travels with every other link on the page.
+    for (const [k, v] of Object.entries(sortParams(ISSUER_SORT, sort))) if (v) q.set(k, v);
     const s = q.toString();
     return s ? `/insiders?${s}` : "/insiders";
   };
+  const tableKeep = { w: params.w, action: params.action, cik: params.cik, n: rowsParam };
 
-  let totals, issuers, clusters, trades, sectors;
+  let totals, issuers, clusters, trades, sectors, table;
   try {
-    [totals, issuers, clusters, trades, sectors] = await Promise.all([
+    [totals, issuers, clusters, trades, sectors, table] = await Promise.all([
       getInsiderTotals(),
       getInsiderIssuers(days, 40),
       getInsiderClusters(30, 3, 12),
       getInsiderTrades({ action: params.action, cik: params.cik, days, limit: 120 }),
       getInsiderSectors(days),
+      // The charts rank by value; the table follows the URL's sort, applied
+      // in SQL to every issuer in the window before the limit.
+      !n && isDefaultSort(ISSUER_SORT, sort) ? null : getInsiderIssuers(days, limit, sort),
     ]);
   } catch (err) {
     return <Empty>{(err as Error).message}</Empty>;
   }
+  table ??= issuers;
+  const issuerTotal = table[0]?.total_rows ?? table.length;
+  // One scale for both value columns, over the whole window, so a bar means
+  // the same in either column and whichever way the table is sorted.
+  const maxValue = table[0]?.max_value ?? 0;
+  const withRows = (count: string) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries({ ...tableKeep, ...sortParams(ISSUER_SORT, sort), n: count })) if (v) q.set(k, v);
+    return `/insiders?${q.toString()}#all-issuers`;
+  };
+  const issuerHeader = (column: IssuerSortKey, label: string, opts: { align?: "left" | "right"; hint?: string } = {}) => (
+    <SortHeader
+      spec={ISSUER_SORT}
+      sort={sort}
+      column={column}
+      href={sortHref(ISSUER_SORT, sort, column, { path: "/insiders", keep: tableKeep, hash: "all-issuers" })}
+      align={opts.align}
+      hint={opts.hint}
+    >
+      {label}
+    </SortHeader>
+  );
   if (!totals.filings) {
     return (
       <Empty>
@@ -197,49 +264,73 @@ export default async function InsidersPage({
         </div>
       </section>
 
-      <section>
+      <section id="all-issuers" className="table-anchor">
         <SectionTitle>All issuers</SectionTitle>
-        {issuers.length ? (
-          <ResponsiveTable>
-            <table className="w-full text-[13px]">
-              <thead>
-                <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.06em] text-muted-foreground">
-                  <th className="px-4 py-2.5 font-medium">Ticker</th>
-                  <th className="px-4 py-2.5 font-medium">Issuer</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Insiders</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Filings</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Buy / Sell</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Bought</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Sold</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Last trade</th>
-                </tr>
-              </thead>
-              <tbody>
-                {issuers.map((r) => (
-                  <tr key={r.issuer_cik} className="border-b border-border/50 last:border-0 hover:bg-muted/50">
-                    <td className="px-4 py-2">
-                      {r.ticker ? (
-                        <a href={issuerHref(r.ticker)} className="font-mono font-semibold hover:text-primary">
-                          {r.ticker}
-                        </a>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">no ticker</span>
-                      )}
-                    </td>
-                    <td className="max-w-[18rem] truncate px-4 py-2 text-muted-foreground">{r.issuer_name}</td>
-                    <td className="tabular px-4 py-2 text-right font-medium">{r.insiders}</td>
-                    <td className="tabular px-4 py-2 text-right text-muted-foreground">{r.filings}</td>
-                    <td className="tabular px-4 py-2 text-right text-muted-foreground">
-                      {r.buys} / {r.sells}
-                    </td>
-                    <td className="tabular px-4 py-2 text-right">{r.buy_value ? usd(r.buy_value) : "—"}</td>
-                    <td className="tabular px-4 py-2 text-right">{r.sell_value ? usd(r.sell_value) : "—"}</td>
-                    <td className="tabular px-4 py-2 text-right text-muted-foreground">{shortDate(r.last_tx_date)}</td>
+        {table.length ? (
+          <>
+            <ResponsiveTable>
+              <table className={DATA_TABLE}>
+                <StickyThead>
+                  <tr className={HEAD_ROW}>
+                    {issuerHeader("ticker", "Ticker", { align: "left" })}
+                    {issuerHeader("issuer", "Issuer", { align: "left" })}
+                    {issuerHeader("insiders", "Insiders", {
+                      hint: "Distinct primary reporting owners: a founder and their holding company on one filing count once.",
+                    })}
+                    {issuerHeader("filings", "Filings", {
+                      hint: "Stored Form 4s. Related parties filing separately still count twice here.",
+                    })}
+                    {issuerHeader("buysell", "Buy / Sell", {
+                      hint: "Open-market purchases / sales. Sorts by the share that are purchases.",
+                    })}
+                    {issuerHeader("bought", "Bought", { hint: VALUE_HINT })}
+                    {issuerHeader("sold", "Sold", { hint: VALUE_HINT })}
+                    {issuerHeader("last", "Last trade")}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </ResponsiveTable>
+                </StickyThead>
+                <RowLinkBody>
+                  {table.map((r) => (
+                    <tr
+                      key={r.issuer_cik}
+                      className={BODY_ROW}
+                      data-href={r.ticker ? issuerHref(r.ticker) : undefined}
+                    >
+                      <td className="px-3 py-2">
+                        {r.ticker ? (
+                          <a href={issuerHref(r.ticker)} className="row-name font-mono font-semibold hover:text-primary">
+                            {r.ticker}
+                          </a>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">no ticker</span>
+                        )}
+                      </td>
+                      <td className="max-w-[10rem] truncate px-3 py-2 text-muted-foreground sm:max-w-[18rem]" title={r.issuer_name ?? undefined}>
+                        {r.issuer_name}
+                      </td>
+                      <td className="tabular px-3 py-2 text-right font-medium">{r.insiders}</td>
+                      <td className="tabular px-3 py-2 text-right text-muted-foreground">{r.filings}</td>
+                      <SplitCell buys={r.buys} sells={r.sells} />
+                      <BarCell value={r.buy_value || null} max={maxValue} tone="buy">
+                        {r.buy_value ? usd(r.buy_value) : <span className="text-muted-foreground">—</span>}
+                      </BarCell>
+                      <BarCell value={r.sell_value || null} max={maxValue} tone="sell">
+                        {r.sell_value ? usd(r.sell_value) : <span className="text-muted-foreground">—</span>}
+                      </BarCell>
+                      <td className="tabular px-3 py-2 text-right text-muted-foreground">{shortDate(r.last_tx_date)}</td>
+                    </tr>
+                  ))}
+                </RowLinkBody>
+              </table>
+            </ResponsiveTable>
+            <TableFooter
+              shown={table.length}
+              total={issuerTotal}
+              noun="issuers in this window"
+              orderLabel={describeSort(ISSUER_SORT, sort, ISSUER_ORDER_NAMES, { last: { asc: "oldest first", desc: "newest first" } })}
+              moreHref={table.length < ROW_LIMITS.more ? withRows("200") : undefined}
+              allHref={withRows("all")}
+            />
+          </>
         ) : (
           <Empty>No insider trades in this window.</Empty>
         )}
