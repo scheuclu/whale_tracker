@@ -97,7 +97,7 @@ export function TimelineFrame({ children }: { children: React.ReactNode }) {
           }}
         >
           <div className="tabular text-[13px] font-semibold text-foreground">{tip.value}</div>
-          <div className="truncate text-foreground/80">{tip.head}</div>
+          <div className="truncate text-ink-2">{tip.head}</div>
           <div className="text-muted-foreground">{tip.meta}</div>
           {tip.note ? <div className="mt-1 text-muted-foreground">{tip.note}</div> : null}
         </div>

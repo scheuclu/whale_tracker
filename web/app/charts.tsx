@@ -160,7 +160,7 @@ function Sparkbars({ values, label, names }: { values: number[]; label: string; 
               fill={current ? "var(--viz-seq)" : "var(--viz-axis)"}
               opacity={current ? 1 : v > 0 ? 0.5 : 0.25}
               // The column under the pointer lifts to full ink; its count is in the title.
-              className="viz-grow-y transition-opacity duration-150 group-hover/spark:opacity-100 motion-reduce:transition-none"
+              className="viz-grow-y transition-opacity duration-(--dur) group-hover/spark:opacity-100 motion-reduce:transition-none"
               style={{ "--viz-i": i } as React.CSSProperties}
             />
           </g>
@@ -230,7 +230,7 @@ export function MagnitudeBars({
                 : "grid-cols-[1rem_6.5rem_minmax(0,1fr)_4rem] sm:grid-cols-[1.25rem_7.5rem_minmax(0,1fr)_5rem]"
             )}
           >
-            <div aria-hidden className="tabular text-right text-[12px] text-muted-foreground/70">
+            <div aria-hidden className="tabular text-right text-[12px] text-muted-foreground">
               {i + 1}
             </div>
             <div className="min-w-0">
@@ -273,8 +273,8 @@ export function MagnitudeBars({
                 lines={[d.detail, note]}
               />
             </div>
-            <div className="tabular whitespace-nowrap text-right text-[13px] font-medium text-foreground/90">
-              <Figure text={d.valueLabel} />
+            <div className="tabular whitespace-nowrap text-right text-[13px] font-medium text-foreground">
+              <Figure value={d.valueLabel} />
             </div>
           </div>
         );
@@ -311,28 +311,13 @@ export const VIZ_FOCUS =
  * the 12px meta size.
  */
 export const TIP_SURFACE =
-  "rounded-lg border border-border bg-popover px-2.5 py-1.5 text-left text-[12px] leading-snug text-popover-foreground shadow-[0_4px_14px_-6px_rgb(12_12_17/0.18),0_1px_2px_rgb(12_12_17/0.05)] dark:shadow-[0_8px_20px_-8px_rgb(0_0_0/0.7)]";
+  "rounded-control border border-border bg-popover px-2.5 py-1.5 text-left text-[12px] leading-snug text-popover-foreground shadow-popover";
 
 /** A bar row: the hit target is the whole row, washed on hover, with a visible focus ring. */
 export const BAR_ROW = cn(
-  "block rounded-lg px-1.5 py-1 transition-colors duration-150 ease-out motion-reduce:transition-none hover:bg-muted",
+  "block rounded-control px-1.5 py-1 transition-colors duration-(--dur) ease-(--ease-out) motion-reduce:transition-none hover:bg-raised",
   VIZ_FOCUS
 );
-
-/**
- * A figure with its unit suffix (k, M, B, %, d) set in muted ink a step
- * smaller, so the digits carry the weight. Anything else prints as given.
- */
-function Figure({ text }: { text: string }) {
-  const m = /^(.*\d)([kKMBT%d])$/.exec(text);
-  if (!m) return <>{text}</>;
-  return (
-    <>
-      {m[1]}
-      <span className="text-[0.85em] text-muted-foreground">{m[2]}</span>
-    </>
-  );
-}
 
 /**
  * Hover/focus detail for one bar, anchored at the bar's end. CSS only: shown
@@ -375,7 +360,7 @@ export function BarTip({
       style={{ left: `${at}%`, background: "var(--popover)" }}
     >
       <div className="tabular text-[13px] font-semibold text-foreground">{value}</div>
-      <div className="text-foreground/80">{name}</div>
+      <div className="text-ink-2">{name}</div>
       {lines.filter(Boolean).map((l) => (
         <div key={l} className="text-muted-foreground">
           {l}
@@ -562,7 +547,7 @@ function SplitBar({ value, pct, side, i }: { value: number; pct: number; side: "
       />
       <span
         className={cn(
-          "viz-fade tabular absolute top-1/2 -translate-y-1/2 text-[12px] leading-none text-muted-foreground transition-colors duration-150 group-hover/bar:text-foreground group-focus-visible/bar:text-foreground motion-reduce:transition-none",
+          "viz-fade tabular absolute top-1/2 -translate-y-1/2 text-[12px] leading-none text-muted-foreground transition-colors duration-(--dur) group-hover/bar:text-foreground group-focus-visible/bar:text-foreground motion-reduce:transition-none",
           buy ? "right-full pr-1.5" : "left-full pl-1.5"
         )}
         style={{ "--viz-i": i } as React.CSSProperties}
@@ -669,15 +654,15 @@ export function VolumeRange({
       {lo >= 18 ? <AxisLabel at={0} className="bottom-0 text-muted-foreground">$0</AxisLabel> : null}
       {apart ? (
         <>
-          <AxisLabel at={lo} className="bottom-0 text-foreground/85">
+          <AxisLabel at={lo} className="bottom-0 text-foreground">
             {floor}
           </AxisLabel>
-          <AxisLabel at={hi} className="bottom-0 text-foreground/85">
+          <AxisLabel at={hi} className="bottom-0 text-foreground">
             {ceiling}
           </AxisLabel>
         </>
       ) : (
-        <AxisLabel at={hi} className="bottom-0 text-foreground/85">
+        <AxisLabel at={hi} className="bottom-0 text-foreground">
           {floor} {term("·")} {ceiling}
         </AxisLabel>
       )}
@@ -806,19 +791,19 @@ export function ColumnSeries({ data, height = 128 }: { data: ColumnSeriesDatum[]
               tabIndex={0}
               aria-label={`${d.label}: ${d.valueLabel}${d.detail ? ` — ${d.detail}` : ""}`}
               className={cn(
-                "group relative flex h-full min-w-0 flex-1 flex-col items-center justify-end rounded-md transition-colors duration-150 ease-out hover:bg-muted focus-visible:bg-muted motion-reduce:transition-none",
+                "group relative flex h-full min-w-0 flex-1 flex-col items-center justify-end rounded-md transition-colors duration-(--dur) ease-(--ease-out) hover:bg-raised focus-visible:bg-raised motion-reduce:transition-none",
                 VIZ_FOCUS
               )}
             >
               {labelled ? (
                 <span className="tabular mb-1 text-[12px] leading-4 text-muted-foreground">
-                  <Figure text={d.valueLabel} />
+                  <Figure value={d.valueLabel} />
                 </span>
               ) : null}
               {/* ≤24px wide; 4px rounded cap, square at the baseline. */}
               <div
                 aria-hidden
-                className="viz-grow-y w-full max-w-6 transition-opacity duration-150 group-hover:opacity-80 motion-reduce:transition-none"
+                className="viz-grow-y w-full max-w-6 transition-opacity duration-(--dur) group-hover:opacity-80 motion-reduce:transition-none"
                 style={{
                   height: `${pct}%`,
                   minHeight: d.value > 0 ? 2 : 0,
@@ -932,7 +917,7 @@ export function MonthlyColumns({ data, height = 112 }: { data: ColumnDatum[]; he
   // the table carry the values and the caps stay empty rather than collide.
   const cap = cn("tabular hidden text-[11px] leading-[14px] text-muted-foreground", n <= 14 && "sm:block");
   const stack =
-    "flex w-full max-w-6 flex-col gap-[2px] transition-opacity duration-150 ease-out group-hover:opacity-80 group-focus-visible:opacity-80 motion-reduce:transition-none";
+    "flex w-full max-w-6 flex-col gap-[2px] transition-opacity duration-(--dur) ease-(--ease-out) group-hover:opacity-80 group-focus-visible:opacity-80 motion-reduce:transition-none";
 
   return (
     <div className="flex gap-[2px]">
@@ -946,7 +931,7 @@ export function MonthlyColumns({ data, height = 112 }: { data: ColumnDatum[]; he
             aria-label={`${d.name}: ${d.tip.join("; ")}`}
             // The whole slot is the target; a faint wash marks the period under the pointer.
             className={cn(
-              "group relative flex min-w-0 flex-1 flex-col rounded-md transition-colors duration-150 ease-out hover:bg-muted focus-visible:bg-muted motion-reduce:transition-none",
+              "group relative flex min-w-0 flex-1 flex-col rounded-md transition-colors duration-(--dur) ease-(--ease-out) hover:bg-raised focus-visible:bg-raised motion-reduce:transition-none",
               VIZ_FOCUS
             )}
           >
@@ -1142,7 +1127,7 @@ export function MonthlyLines({
               >
                 {/* Crosshair: snaps to the period, so the reader aims at a month, not a 2px line. */}
                 <div
-                  className="absolute inset-y-0 left-1/2 w-px opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100 group-focus-visible:opacity-100 motion-reduce:transition-none"
+                  className="absolute inset-y-0 left-1/2 w-px opacity-0 transition-opacity duration-(--dur) ease-(--ease-out) group-hover:opacity-100 group-focus-visible:opacity-100 motion-reduce:transition-none"
                   style={{ background: "var(--viz-axis)" }}
                 />
                 <Tip title={names[i]} lines={tips[i]} index={i} count={n} />
@@ -1233,14 +1218,14 @@ function Tip({ title, lines, index, count }: { title: string; lines: string[]; i
         // Not laid out on a phone until hovered or focused: a hidden panel
         // still counts toward the page's scroll width.
         "max-sm:hidden max-sm:max-w-[16rem] max-sm:group-hover:block max-sm:group-focus-visible:block",
-        "pointer-events-none absolute bottom-full z-20 mb-2 w-max max-w-[18rem] translate-y-0.5 opacity-0 transition-[opacity,translate] duration-150 ease-out group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100 motion-reduce:transition-none",
+        "pointer-events-none absolute bottom-full z-20 mb-2 w-max max-w-[18rem] translate-y-0.5 opacity-0 transition-[opacity,translate] duration-(--dur) ease-(--ease-out) group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100 motion-reduce:transition-none",
         TIP_SURFACE,
         align
       )}
     >
       <div className="text-[13px] font-semibold text-foreground">{title}</div>
       {lines.map((l, i) => (
-        <div key={i} className="tabular text-foreground/75">
+        <div key={i} className="tabular text-ink-2">
           {l}
         </div>
       ))}
