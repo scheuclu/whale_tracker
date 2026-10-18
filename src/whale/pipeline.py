@@ -11,6 +11,7 @@ import json
 import logging
 import sqlite3
 import time
+from dataclasses import dataclass, field
 from datetime import date
 
 from . import (db, house, insider_alerts, insiders, roster, senate, senate_ptr, stats,
@@ -25,16 +26,109 @@ log = logging.getLogger(__name__)
 
 def run(config: Config, dry_run: bool = False) -> None:
     conn = db.connect(config.db_path)
+    tally = RunTally()
     try:
         sync(conn, config)
         retry_scanned(conn, config)
-        parse_pending(conn, config)
-        notify_pending(conn, config, dry_run=dry_run)
-        notify_clusters(conn, config, dry_run=dry_run)
-        _sync_insiders(conn, config)
-        notify_insiders(conn, config, dry_run=dry_run)
+        tally.filings_parsed = parse_pending(conn, config, tally=tally)
+        tally.alerts_sent += notify_pending(conn, config, dry_run=dry_run)
+        tally.alerts_sent += notify_clusters(conn, config, dry_run=dry_run)
+        tally.insiders_stored = _sync_insiders(conn, config)
+        tally.alerts_sent += notify_insiders(conn, config, dry_run=dry_run)
+        tally.outcome = "ok"
+    except Exception as exc:
+        tally.outcome = "failed"
+        tally.error = f"{type(exc).__name__}: {exc}"
+        raise
     finally:
-        conn.close()
+        try:
+            record_run(conn, tally, dry_run=dry_run)
+        finally:
+            conn.close()
+
+
+# --- run log ----------------------------------------------------------------
+
+# sync_state key: the last RUN_LOG_SIZE pipeline runs as a JSON list, newest
+# first. One entry per `run`, written in its `finally`, so a run that failed
+# is logged with what it managed before it broke:
+#   {started, finished, duration_s, filings_parsed, alerts_sent,
+#    scans_transcribed, insiders_stored, outcome ("ok" | "failed"), error}
+# The Pipeline page lists it and the audit reads it. A dry run leaves no
+# entry: it is a preview, and must not appear on the page as a run. A run
+# the job timeout kills leaves none either — SIGTERM ends the process
+# without reaching the `finally` — so the Actions history stays the record
+# for those; the weekly review digests it.
+RUN_LOG_STATE = "recent_runs"
+RUN_LOG_SIZE = 20
+
+
+@dataclass
+class RunTally:
+    """What one `run` did, filled in as the steps return."""
+
+    started: str = field(default_factory=db.now_iso)
+    filings_parsed: int = 0
+    alerts_sent: int = 0
+    scans_transcribed: int = 0
+    insiders_stored: int = 0
+    outcome: str = "failed"
+    error: str | None = None
+    clock: object = time.monotonic
+    _t0: float = field(init=False)
+
+    def __post_init__(self) -> None:
+        self._t0 = self.clock()
+
+    def entry(self) -> dict:
+        return {
+            "started": self.started,
+            "finished": db.now_iso(),
+            "duration_s": round(self.clock() - self._t0, 1),
+            "filings_parsed": self.filings_parsed,
+            "alerts_sent": self.alerts_sent,
+            "scans_transcribed": self.scans_transcribed,
+            "insiders_stored": self.insiders_stored,
+            "outcome": self.outcome,
+            "error": self.error,
+        }
+
+
+def recent_runs(conn: sqlite3.Connection) -> list[dict]:
+    """The logged runs, newest first; empty when none, or when the value no
+    longer parses (a log that cannot be read is replaced, not fatal)."""
+    raw = db.get_state(conn, RUN_LOG_STATE)
+    if raw is None:
+        return []
+    try:
+        runs = json.loads(raw)
+    except ValueError:
+        log.warning("sync_state %r is not JSON; starting the run log afresh", RUN_LOG_STATE)
+        return []
+    if not isinstance(runs, list):
+        log.warning("sync_state %r is not a list; starting the run log afresh", RUN_LOG_STATE)
+        return []
+    return [r for r in runs if isinstance(r, dict)]
+
+
+def record_run(conn: sqlite3.Connection, tally: RunTally, dry_run: bool = False) -> None:
+    """Prepend this run to the log and keep the newest RUN_LOG_SIZE.
+
+    Called from `run`'s `finally`. Rolls back first: every step commits what
+    it means to keep, so anything still pending belongs to the unit a failing
+    step was in the middle of, and the log entry's commit must not carry it
+    along. Never raises — a log write that fails must neither turn a good run
+    red nor mask the exception of a failing one.
+    """
+    if dry_run:
+        return
+    try:
+        conn.rollback()
+        runs = [tally.entry()] + recent_runs(conn)[:RUN_LOG_SIZE - 1]
+        db.set_state(conn, RUN_LOG_STATE, json.dumps(runs))
+        conn.commit()
+    except Exception:
+        log.exception("could not record the run in sync_state %r", RUN_LOG_STATE)
 
 
 # --- sync -------------------------------------------------------------------
@@ -269,33 +363,36 @@ def _normalise_senate_rows(conn: sqlite3.Connection) -> int:
 
 def _sync_insiders(conn: sqlite3.Connection, config: Config,
                    client: insiders.EdgarClient | None = None,
-                   today: date | None = None) -> None:
+                   today: date | None = None) -> int:
     """Best-effort, and last: an EDGAR slowdown must never delay House alerts.
 
     `insiders.sync` absorbs the failures it knows about (throttling, network,
     a malformed filing); this guard is for everything else. A recorded feed
     gap is repaired afterwards, so a walk of the daily index can never starve
     the live feed, and only when the feed was read to the end: a throttled
-    or out-of-time sync is no moment to ask EDGAR for more.
+    or out-of-time sync is no moment to ask EDGAR for more. Returns how many
+    filings were stored, feed and repair together, for the run log.
     """
     if not config.insiders.enabled:
-        return
+        return 0
     try:
         result = insiders.sync(conn, config, client=client, today=today)
     except Exception as exc:
         log.exception("insider sync failed unexpectedly")
         db.set_state(conn, insiders.STATE_STATUS, f"error: {exc}")
         conn.commit()
-        return
+        return 0
     log.info("insiders: %s", result.summary())
     if result.aborted:
-        return
+        return result.stored
     try:
-        insiders.repair_gap(conn, config, result, client=client, today=today)
+        repaired = insiders.repair_gap(conn, config, result, client=client, today=today)
     except Exception as exc:
         log.exception("insider gap repair failed unexpectedly")
         db.set_state(conn, insiders.STATE_STATUS, f"error: gap repair failed: {exc}")
         conn.commit()
+        return result.stored
+    return result.stored + (repaired.stored if repaired else 0)
 
 
 def notify_insiders(conn: sqlite3.Connection, config: Config, dry_run: bool = False,
@@ -457,12 +554,15 @@ class VisionDeferred(Exception):
 def parse_pending(conn: sqlite3.Connection, config: Config,
                   statuses: tuple[str, ...] = ("new",),
                   target_status: str = "parsed", limit: int | None = None,
-                  silent: bool = False, clock=time.monotonic) -> int:
+                  silent: bool = False, clock=time.monotonic,
+                  tally: RunTally | None = None) -> int:
     """Download and parse queued filings into transactions.
 
     `silent` marks everything it touches as already notified, which is what
     backfill needs: history should populate the statistics without replaying
-    months of filings into Telegram.
+    months of filings into Telegram. `tally`, when `run` passes one, counts
+    the scans a vision model transcribed — the return value counts every
+    filing parsed and cannot tell them apart.
 
     House filings are PDFs from the Clerk; Senate filings are eFD report pages
     and take `_parse_senate_filings`. Both land in the same `transactions`
@@ -532,6 +632,8 @@ def parse_pending(conn: sqlite3.Connection, config: Config,
 
         if method == "vision":
             vision_spent += clock() - started
+            if tally is not None:
+                tally.scans_transcribed += 1
         rows = [_transaction_row(t) for t in parsed.transactions]
         db.replace_transactions(conn, filing["id"], filing["politician_id"], rows)
         # A filing Telegram has already heard of — a scan reported as
