@@ -13,11 +13,13 @@ caller is expected to render it as "≥".
 
 from __future__ import annotations
 
+import bisect
 import math
+import re
 import sqlite3
 import statistics
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from .amounts import usd
 from .config import AlertSettings, InsiderSettings
@@ -757,3 +759,196 @@ def find_insider_clusters(conn: sqlite3.Connection, settings: InsiderSettings,
             ))
     clusters.sort(key=lambda c: (c.insider_count, c.volume.mid_cents), reverse=True)
     return clusters
+
+
+# --- alert outcomes (what the ticker did next) --------------------------------
+#
+# Whether an alert carried any signal is measured by the alerted ticker's own
+# move after it, close to close, against the benchmark over the same trading
+# days. This is the ticker's move, never a trade's return: congressional
+# amounts are brackets, nothing here touches one, and no position is assumed.
+# Derived once here and stored in `alert_outcomes` by prices.sync; SQL and the
+# dashboard read the stored columns and never re-derive a return.
+
+BENCHMARK_TICKER = "SPY"
+OUTCOME_HORIZONS = (5, 20, 60)
+# Fewer alerts than this and a median or hit rate is an anecdote: reported as
+# "insufficient data" rather than as a figure. Mirrors MIN_SAMPLE in
+# web/lib/outcome-queries.ts — keep them in step.
+MIN_OUTCOME_SAMPLE = 5
+
+# Two early insider clusters were keyed on the issuer's bare CIK because the
+# Form 4 carried no trading symbol. Nothing lists them, so nothing prices them.
+_CIK_SHAPED_RE = re.compile(r"^\d{10}$")
+
+try:
+    from zoneinfo import ZoneInfo
+
+    EASTERN = ZoneInfo("America/New_York")
+except Exception:  # no tz database on this host: fall back to standard time
+    EASTERN = timezone(timedelta(hours=-5), "EST")  # type: ignore[assignment]
+
+
+def is_listed_ticker(ticker: str | None) -> bool:
+    """Whether an alert's key is a symbol a price series could exist for.
+    Mirrors `isListedTicker` in web/lib/outcome-queries.ts."""
+    return bool(ticker) and not _CIK_SHAPED_RE.match(ticker)
+
+
+def alert_date_eastern(fired_at: str) -> date:
+    """The alert's calendar date in US market time.
+
+    `fired_at` is UTC, and the poll runs at 00:00 and 03:00 UTC are still the
+    previous evening in New York: an alert at 02:11Z on a Saturday went out
+    on Friday evening, after Friday's close. Day 0 is that Friday, so the
+    measurement starts from the last close before the alert and the next
+    session's reaction is inside it — which is what an event study wants.
+    """
+    stamp = datetime.fromisoformat(fired_at.replace(" ", "T").replace("Z", "+00:00"))
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    return stamp.astimezone(EASTERN).date()
+
+
+@dataclass
+class AlertOutcome:
+    alert_id: int
+    kind: str
+    ticker: str
+    direction: str | None
+    t0_date: str
+    t0_close: float
+    # Trading days after t0 the benchmark series covers; a horizon past it
+    # is pending, not missing.
+    days_elapsed: int
+    returns: dict[int, float | None] = field(default_factory=dict)
+    benchmark: dict[int, float | None] = field(default_factory=dict)
+    excess: dict[int, float | None] = field(default_factory=dict)
+
+    def row(self) -> dict:
+        """The `alert_outcomes` columns (db.OUTCOME_COLUMNS)."""
+        out = {"alert_id": self.alert_id, "ticker": self.ticker, "t0_date": self.t0_date,
+               "t0_close": self.t0_close, "days_elapsed": self.days_elapsed}
+        for h in OUTCOME_HORIZONS:
+            out[f"ret_{h}"] = self.returns.get(h)
+            out[f"bench_{h}"] = self.benchmark.get(h)
+            out[f"excess_{h}"] = self.excess.get(h)
+        return out
+
+
+def _price_series(conn: sqlite3.Connection) -> dict[str, dict[str, float]]:
+    series: dict[str, dict[str, float]] = {}
+    for r in conn.execute("SELECT ticker, date, close FROM prices WHERE close > 0"):
+        series.setdefault(r["ticker"], {})[r["date"]] = r["close"]
+    return series
+
+
+def alert_outcomes(conn: sqlite3.Connection, benchmark: str = BENCHMARK_TICKER,
+                   horizons: tuple[int, ...] = OUTCOME_HORIZONS) -> list[AlertOutcome]:
+    """What each alert's ticker did at +5/+20/+60 trading days, minus the benchmark.
+
+    The trading calendar is the benchmark's own series: a day with a SPY close
+    is a session, so holidays and weekends fall out without a calendar of
+    their own. t0 is the first session on or after the alert's US-Eastern date
+    (an alert on Labor Day measures from the Tuesday close); horizon h is the
+    h-th session after it, and its return is close(t0+h) / close(t0) − 1 for
+    the ticker and for the benchmark alike, the excess being the difference.
+    A horizon the series does not reach yet is None, as is one where the
+    ticker has no close that day. An alert whose ticker has no close on t0 —
+    no series at all, or one that ends before the alert — has no outcome.
+    """
+    series = _price_series(conn)
+    bench = series.get(benchmark)
+    if not bench:
+        return []
+    calendar = sorted(bench)
+    out: list[AlertOutcome] = []
+    for a in conn.execute(
+            "SELECT id, kind, ticker, direction, fired_at FROM alerts "
+            "WHERE ticker IS NOT NULL ORDER BY id"):
+        if not is_listed_ticker(a["ticker"]):
+            continue
+        closes = series.get(a["ticker"])
+        if not closes:
+            continue
+        i0 = bisect.bisect_left(calendar, alert_date_eastern(a["fired_at"]).isoformat())
+        if i0 >= len(calendar):
+            continue
+        t0 = calendar[i0]
+        c0 = closes.get(t0)
+        if c0 is None:
+            continue
+        o = AlertOutcome(alert_id=a["id"], kind=a["kind"], ticker=a["ticker"],
+                         direction=a["direction"], t0_date=t0, t0_close=c0,
+                         days_elapsed=len(calendar) - 1 - i0)
+        for h in horizons:
+            if i0 + h >= len(calendar):
+                o.returns[h] = o.benchmark[h] = o.excess[h] = None
+                continue
+            day = calendar[i0 + h]
+            o.benchmark[h] = bench[day] / bench[t0] - 1
+            ch = closes.get(day)
+            o.returns[h] = None if ch is None else ch / c0 - 1
+            o.excess[h] = None if ch is None else o.returns[h] - o.benchmark[h]
+        out.append(o)
+    return out
+
+
+def signed_excess(excess: float | None, direction: str | None) -> float | None:
+    """The excess return read the way the alert pointed.
+
+    A sell alert is a claim that the ticker will fall, so its hit is a fall:
+    the sign is flipped for 'sell' and left for 'buy'. An alert with no one
+    direction (a filing on both sides) made no directional claim and is
+    excluded from every aggregate. Mirrors `signedExcess` in the web query.
+    """
+    if excess is None or direction not in ("buy", "sell"):
+        return None
+    return -excess if direction == "sell" else excess
+
+
+@dataclass
+class OutcomeStat:
+    kind: str
+    horizon: int
+    n: int
+    # Median of the direction-signed excess returns; None when n is 0.
+    median_excess: float | None
+    # Share of alerts whose signed excess was positive; None when n is 0.
+    hit_rate: float | None
+    min_sample: int = MIN_OUTCOME_SAMPLE
+
+    @property
+    def sufficient(self) -> bool:
+        return self.n >= self.min_sample
+
+
+def outcome_summary(conn: sqlite3.Connection, min_sample: int = MIN_OUTCOME_SAMPLE,
+                    horizons: tuple[int, ...] = OUTCOME_HORIZONS) -> list[OutcomeStat]:
+    """Per alert kind and horizon: n, median signed excess, hit rate.
+
+    Read from the stored `alert_outcomes` rows, so the CLI and the dashboard
+    (`summarize` in web/lib/outcome-queries.ts) aggregate the same figures
+    the same way: median with the even-count average, a hit being a signed
+    excess strictly above zero. Kinds with no outcome row at all are left
+    out; a kind is listed with n = 0 at a horizon none of its alerts reach.
+    """
+    cols = ", ".join(f"o.excess_{h}" for h in horizons)
+    rows = conn.execute(
+        f"SELECT a.kind, a.direction, {cols} FROM alert_outcomes o "
+        "JOIN alerts a ON a.id = o.alert_id"
+    ).fetchall()
+    kinds = [k for k in ALERT_KINDS if any(r["kind"] == k for r in rows)]
+    kinds += sorted({r["kind"] for r in rows} - set(ALERT_KINDS))
+    out = []
+    for kind in kinds:
+        for h in horizons:
+            signed = [s for r in rows if r["kind"] == kind
+                      for s in [signed_excess(r[f"excess_{h}"], r["direction"])]
+                      if s is not None]
+            out.append(OutcomeStat(
+                kind=kind, horizon=h, n=len(signed),
+                median_excess=statistics.median(signed) if signed else None,
+                hit_rate=sum(1 for s in signed if s > 0) / len(signed) if signed else None,
+                min_sample=min_sample))
+    return out

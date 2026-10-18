@@ -194,7 +194,48 @@ parser stays faithful to the PDF and the UI flags the row rather than
   deadline, so there is no reporting lag to absorb.
 - `4/A`, Forms 3/5 and the derivative table are not ingested yet (counted in
   `sync_state.edgar_skipped`).
-- `insiders.sync` runs **last** in `pipeline.run` and must never raise into it.
+- `insiders.sync` runs after every congressional step in `pipeline.run` and
+  must never raise into it; only the price step (`prices.sync`) runs after
+  it, under the same rule.
+
+## Alert outcomes (`prices`, `alert_outcomes`, the /alerts summary)
+
+- `prices` holds daily closes for the tickers alerts have named plus SPY,
+  from an **unofficial external series** (`prices.source`: `yahoo` default,
+  `stooq` per issue #53 — walled by a browser check on 2026-10-18, reported
+  as `blocked`, never solved). It exists for one descriptive measurement and
+  is **never shown as advice**. Coverage is what the source carries: no
+  series for CIK-keyed insider alerts, exchange-prefixed foreign symbols or
+  anything the source does not know; those alerts read "no prices yet" or
+  "no price series", not 0.
+- An outcome is the **ticker's move, not a trade's return**: close(t0+h) /
+  close(t0) − 1 at h = 5/20/60 trading days, minus SPY over the same
+  sessions. No bracket, midpoint or position enters it. t0 is the first
+  session on or after the alert's **US-Eastern** date (an 02:00Z alert went
+  out the previous evening), so an alert sent after the close measures from
+  that close and includes the next open's reaction. The calendar is SPY's
+  own series, so holidays fall out without a calendar of their own.
+- **Derived once in Python** (`stats.alert_outcomes`), stored by
+  `prices.sync` after every refresh, and only **read** by SQL and
+  `web/lib/outcome-queries.ts`. The aggregate (median signed excess, hit
+  rate, n per kind and horizon) is computed twice — `stats.outcome_summary`
+  and `summarize` in the web query — on the same stored rows; both are
+  tested against the same hand-made fixture. A sell alert's hit is a fall
+  (`signed_excess`); an alert with no one direction is excluded. Under
+  `MIN_OUTCOME_SAMPLE` (5, mirrored as `MIN_SAMPLE`) a figure is
+  "insufficient data", never a number.
+- A horizon the series does not reach yet is NULL and reads "pending", not
+  0; a session's close is stored only after 16:05 ET. Each ticker is
+  refreshed once per UTC day under `prices.budget_seconds`, benchmark first
+  then longest-unseen, so a throttle rotates through the list. The web
+  queries tolerate a database without the tables (the committed file
+  migrates only when the pipeline next runs).
+- Audit: `check_price_coverage` (INFO, right after `check_alert_recording`)
+  reports alerts with a t0 close over all alerts and the source status;
+  `prices_stale` WARNs only when a ticker has had no newer close for more
+  than 5 trading days **and** the step has not successfully asked for it
+  since — a series the source answered for with nothing newer (a buyout)
+  is evidence, not a weekly warning.
 
 ## Insider alerts
 
