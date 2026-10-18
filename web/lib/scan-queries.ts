@@ -39,6 +39,9 @@ export type ScanPage = {
   height: number;
   dpi: number;
   rotation: number;
+  /** Why the page yielded no transactions: the reader could not decompose
+   *  it, there is no table on it, or the join refused it (row counts or
+   *  disputed types; its rows are then `page_refused`). */
   error: string | null;
   /** Rows the grid reader found on this page, and how many it left unknown / linked. */
   rows: number;
@@ -60,6 +63,15 @@ export type ScanRow = {
   amount_margin: number | null;
   action: string | null;
   type_margin: number | null;
+  /**
+   * The reader's verdict on the row — `read`, `unknown_amount`,
+   * `unknown_type`, `unknown` — or, once the hybrid path has joined the
+   * filing (src/whale/scan_capture.py), the join's: `type_disputed` (joined;
+   * the model's type reading contradicted the grid's, and the grid's is the
+   * one on the transaction) or `page_refused` (read by the grid but not
+   * joined: the page's row count disagreed with the model's, so the page
+   * was set aside alone and has no transactions — `ScanPage.error` says so).
+   */
   status: string;
   transaction_id: number | null;
   /** From the linked transaction, when there is one. */

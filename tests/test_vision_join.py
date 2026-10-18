@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from whale import vision
-from whale.paper_form import GridReading, GridRow, Layout, read_pdf
+from whale.paper_form import GridPage, GridReading, GridRow, Layout, read_pdf
 from whale.vision import ScanUnreadable, VisionUnavailable, join, parse_scanned
 
 FIXTURE = Path(__file__).parent / "fixtures" / "ptr_scanned_9116308.pdf"
@@ -28,8 +28,7 @@ def grid(*specs, layout=CURRENT):
         rows.append(GridRow(page=0, top=100 * i, bottom=100 * i + 60, layout=layout,
                             amount_marks=list(amount), type_marks=list(types),
                             flag_marks=list(flags[0]) if flags else [], date_ink=0.2))
-    page = type("P", (), {"rows": rows, "index": 0})()
-    return GridReading([page])
+    return GridReading([GridPage(0, 0, rows, layout)])
 
 
 def model(*rows, **header):
@@ -72,14 +71,20 @@ def test_row_count_mismatch_is_unreadable_with_the_counts():
         join(m, g)
 
 
-def test_one_type_disagreement_is_tolerated_two_are_not():
-    g = grid(([2], [0]), ([0], [2]), ([1], [0]))
-    one = model(("A", "sale", "C"), ("B", "sale_partial", "A"), ("C", "purchase", "B"))
-    parsed = join(one, g)
-    assert [t.action for t in parsed.transactions] == ["purchase", "sale_partial", "purchase"]
-    two = model(("A", "sale", "C"), ("B", "purchase", "A"), ("C", "purchase", "B"))
-    with pytest.raises(ScanUnreadable, match="contradicts the grid on 2 rows"):
-        join(two, g)
+def test_a_few_type_disagreements_are_flagged_a_run_of_them_refuses():
+    # The grid's type is kept either way; the disputed rows are flagged, and
+    # only past the threshold (three, and over a quarter: the rule is in
+    # test_vision_per_page) is the filing not trusted at all.
+    g = grid(([2], [0]), ([0], [2]), ([1], [0]), ([1], [3]))
+    two = model(("A", "sale", "C"), ("B", "purchase", "A"), ("C", "purchase", "B"),
+                ("D", "exchange", "B"))
+    parsed = join(two, g)
+    assert [t.action for t in parsed.transactions] == ["purchase", "sale_partial", "purchase", "exchange"]
+    assert parsed.disputed_rows == [0, 1]
+    three = model(("A", "sale", "C"), ("B", "purchase", "A"), ("C", "sale", "B"),
+                  ("D", "exchange", "B"))
+    with pytest.raises(ScanUnreadable, match="contradicts the grid on 3 of 4 rows"):
+        join(three, g)
 
 
 def test_sale_versus_partial_sale_is_not_a_contradiction():
