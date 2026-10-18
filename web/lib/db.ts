@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { DB_TTL_SECONDS } from "./cache-policy";
 
 /**
  * In production the bot commits `data/trades.sqlite3` to the repo and this
@@ -25,11 +26,24 @@ const DB_TOKEN = process.env.TRADES_DB_TOKEN ?? process.env.GITHUB_TOKEN;
 // migrated /tmp copy for a render or a test); it is read in `refresh`, not
 // folded in here — see the note there about Turbopack's tracing.
 const LOCAL_DB = path.join(process.cwd(), "..", "data", "trades.sqlite3");
-const TTL_MS = 120_000;
+/**
+ * How often an instance re-checks the database. The check is conditional
+ * (If-None-Match on the blob's ETag), so an unchanged file — nearly every
+ * check, the pipeline commits a few times a day — is a 304 with no body
+ * rather than an 18 MB download; that is what makes a short TTL cheap. It is
+ * one term of the dashboard's staleness bound: see lib/cache-policy.ts.
+ */
+const TTL_MS = DB_TTL_SECONDS * 1000;
 /** Grace period before closing a superseded handle in-flight queries may hold. */
 const RETIRE_MS = 60_000;
 
-let cached: { db: Database.Database; file: string | null; fetchedAt: number } | null = null;
+let cached: {
+  db: Database.Database;
+  file: string | null;
+  fetchedAt: number;
+  /** The remote copy's ETag, sent back as If-None-Match on the next check. */
+  etag: string | null;
+} | null = null;
 let inflight: Promise<Database.Database> | null = null;
 let seq = 0;
 
@@ -92,12 +106,19 @@ async function refresh(): Promise<Database.Database> {
     }
     const db = new Database(override ?? LOCAL_DB, { readonly: true, fileMustExist: true });
     const previous = cached;
-    cached = { db, file: null, fetchedAt: Date.now() };
+    cached = { db, file: null, fetchedAt: Date.now(), etag: null };
     if (previous) retire(previous);
     return db;
   }
 
-  const resp = await fetch(source.url, { cache: "no-store", headers: source.headers });
+  const etag = cached?.etag;
+  const headers = etag ? { ...source.headers, "If-None-Match": etag } : source.headers;
+  const resp = await fetch(source.url, { cache: "no-store", headers });
+  if (resp.status === 304 && cached) {
+    // Unchanged since the copy we hold: keep the handle, restart the TTL.
+    cached.fetchedAt = Date.now();
+    return cached.db;
+  }
   if (!resp.ok) {
     if (cached) return cached.db; // stale is better than broken
     throw new Error(
@@ -115,7 +136,7 @@ async function refresh(): Promise<Database.Database> {
   const db = new Database(file, { readonly: true, fileMustExist: true });
 
   const previous = cached;
-  cached = { db, file, fetchedAt: Date.now() };
+  cached = { db, file, fetchedAt: Date.now(), etag: resp.headers.get("etag") };
   if (previous) retire(previous);
   return db;
 }

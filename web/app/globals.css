@@ -507,6 +507,13 @@ body::before {
   .site-header + main > * {
     animation: page-in 260ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
   }
+  /* Not on the document's first paint (header-shell.tsx). Zero duration
+     rather than no animation: the name stays the same, so lifting this
+     after the reader's first interaction does not restart it on content
+     already shown — only elements inserted later get the 260 ms. */
+  .site-header[data-first-load] + main > * {
+    animation-duration: 0s;
+  }
 }
 @keyframes page-in {
   from {

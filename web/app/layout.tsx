@@ -6,6 +6,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { cn } from "@/lib/utils";
 import { WhaleMark, Wordmark } from "./brand";
 import { HeaderShell } from "./header-shell";
+import { LiveRelativeTime } from "./live-relative-time";
 import { SiteFooter } from "./site-footer";
 import { getPipeline } from "@/lib/queries";
 import { getInsiderTotals } from "@/lib/insider-queries";
@@ -119,7 +120,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 </span>
                 <span className="tabular">
                   <span className="sr-only sm:not-sr-only">synced </span>
-                  {synced}
+                  <LiveRelativeTime iso={syncedAt} initial={synced} />
                   {syncTone === "stale" ? <span className="sr-only"> (stale)</span> : null}
                 </span>
               </Link>
