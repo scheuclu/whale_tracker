@@ -378,12 +378,11 @@ body::before {
 }
 
 /* Day headers park under the site header (--sticky-top is measured by
-   app/sticky-offset.tsx; the fallback covers first paint). */
+   app/sticky-offset.tsx; the fallback covers first paint). Opaque: rows
+   scrolling underneath must not read through the label. */
 .feed-day-head {
   top: var(--sticky-top, 7rem);
-  background: color-mix(in srgb, var(--card-solid) 90%, transparent);
-  backdrop-filter: blur(12px) saturate(140%);
-  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  background: var(--card-solid);
 }
 
 /* One trade: two lines on a phone, one line from 640px. On a phone the

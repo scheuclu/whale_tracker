@@ -122,7 +122,7 @@ function DaySection({ day, today, index }: { day: DayGroup<TransactionRow>; toda
       <h3
         id={id}
         className={cn(
-          "feed-day-head sticky z-10 flex h-8 items-center gap-2 border-b border-border px-3 text-xs sm:px-4",
+          "feed-day-head sticky z-20 flex h-8 items-center gap-2 border-b border-border px-3 text-xs sm:px-4",
           index > 0 && "border-t"
         )}
       >

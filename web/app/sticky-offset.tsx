@@ -17,7 +17,9 @@ export function StickyOffset({ selector = "body header" }: { selector?: string }
     const apply = () => {
       // A header that scrolls away leaves nothing to park under.
       const pinned = /^(sticky|fixed)$/.test(getComputedStyle(el).position);
-      const h = pinned ? Math.round(el.getBoundingClientRect().height) : 0;
+      // Floor, not round: a fractional header height rounded up would leave
+      // a sub-pixel strip between the header and whatever parks below it.
+      const h = pinned ? Math.floor(el.getBoundingClientRect().height) : 0;
       root.style.setProperty("--sticky-top", `${h}px`);
     };
     apply();
