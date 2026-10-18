@@ -197,6 +197,11 @@ export function tickerHref(symbol: string): string {
   return `/tickers/${encodeURIComponent(symbol.toUpperCase())}`;
 }
 
+/** An issuer's Form 4 insider page. */
+export function insiderIssuerHref(symbol: string): string {
+  return `/insiders?t=${encodeURIComponent(symbol.toUpperCase())}`;
+}
+
 /** One committee's roster with each seat holder's trading totals, keyed on
  *  its thomas_id ('HSIF'; 'HSIF16' for a subcommittee). */
 export function committeeHref(id: string): string {

@@ -8,13 +8,19 @@
  *    project (a bare host, no scheme). Present on every deployment, previews
  *    included, so a preview's canonicals still name production and never the
  *    SSO-protected deployment URL a crawler cannot fetch.
- * 3. localhost, for `next start` on a laptop.
+ * 3. The request's own origin, when the caller has one (API route handlers
+ *    on a local run), so a link printed by the API opens where it was read.
+ * 4. localhost, for `next start` on a laptop.
  */
-export function siteUrl(env: Record<string, string | undefined> = process.env): string {
+export function siteUrl(
+  env: Record<string, string | undefined> = process.env,
+  requestOrigin?: string
+): string {
   const explicit = env.NEXT_PUBLIC_SITE_URL?.trim();
   if (explicit) return explicit.replace(/\/+$/, "");
   const vercel = env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
   if (vercel) return `https://${vercel.replace(/^https?:\/\//, "").replace(/\/+$/, "")}`;
+  if (requestOrigin) return requestOrigin.replace(/\/+$/, "");
   return "http://localhost:3000";
 }
 

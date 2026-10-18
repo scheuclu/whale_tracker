@@ -9,6 +9,7 @@ import { getTimelineTrades, type TimelineTrade } from "@/lib/timeline-queries";
 import { TradeTimeline } from "../../timeline";
 
 import { TickerMembers } from "../ticker-members";
+import { AgentAlternates } from "../../agent-alternates";
 
 /*
  * One ticker's page, `/tickers/<SYMBOL>`. Moved out of app/tickers/page.tsx
@@ -35,6 +36,7 @@ export async function TickerDetail({ stat }: { stat: TickerRow }) {
 
   return (
     <div className="space-y-8">
+      <AgentAlternates ticker={ticker} />
       <div>
         <a href="/tickers" className="text-xs text-muted-foreground hover:text-primary">
           ← all tickers

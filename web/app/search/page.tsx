@@ -3,7 +3,8 @@ import { memberHref, shortDate, tickerHref } from "@/lib/format";
 import { searchInsiderIssuers } from "@/lib/insider-queries";
 import { searchMembers, searchRoster, searchTickers } from "@/lib/queries";
 import { Card, Empty, SectionTitle } from "../charts";
-import { PartyBadge } from "../ui";
+import { BUTTON_PRIMARY, FIELD, PartyBadge } from "../ui";
+import { cn } from "@/lib/utils";
 import { MemberAvatar } from "../avatar";
 import { pageMetadata } from "@/lib/seo";
 
@@ -44,7 +45,7 @@ export default async function SearchPage({
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Search</h1>
         <form method="get" action="/search" role="search" className="mt-3 flex max-w-xl items-center gap-2">
-          <label className="relative flex-1">
+          <label className="relative min-w-0 flex-1">
             <span className="sr-only">Search members, tickers and insider issuers</span>
             <Search
               className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
@@ -55,15 +56,12 @@ export default async function SearchPage({
               name="q"
               defaultValue={q}
               maxLength={QUERY_MAX}
-              placeholder="Member, ticker or insider issuer"
+              placeholder="Search members, tickers, issuers"
               autoFocus={!q}
-              className="h-10 w-full rounded-full border border-border bg-card pl-9 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none"
+              className={cn(FIELD, "h-10 pl-9 pr-3 text-sm")}
             />
           </label>
-          <button
-            type="submit"
-            className="h-10 rounded-full border border-primary/40 bg-primary/10 px-4 text-sm font-medium transition-colors hover:bg-primary/20"
-          >
+          <button type="submit" className={cn(BUTTON_PRIMARY, "h-10 px-4 text-sm")}>
             Search
           </button>
         </form>

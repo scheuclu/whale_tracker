@@ -7,6 +7,7 @@ import { ExportLink } from "../../feed-controls";
 
 import { TradeList, TradeRow } from "../../trade-row";
 import { MemberHero } from "../../politicians/member-hero";
+import { AgentAlternates } from "../../agent-alternates";
 
 /*
  * One member's page, `/members/<slug>`. Moved out of app/politicians/page.tsx
@@ -58,6 +59,7 @@ export async function MemberDetail({
 
   return (
     <div className="space-y-8">
+      <AgentAlternates member={bioguideId} />
       <div className="space-y-3">
         <a href="/politicians" className="text-xs text-muted-foreground hover:text-primary">
           ← all members

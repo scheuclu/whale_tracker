@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
+import { TIP_SURFACE } from "./charts";
 import { ScrollX } from "./scroll-area";
 
 type Tip = { left: number; top: number; below: boolean; head: string; value: string; meta: string; note: string };
@@ -87,7 +89,7 @@ export function TimelineFrame({ children }: { children: React.ReactNode }) {
       {tip ? (
         <div
           role="tooltip"
-          className="tl-tip pointer-events-none absolute z-20 w-max max-w-[300px] rounded-lg border border-border px-3 py-2 text-[12px] shadow-lg"
+          className={cn(TIP_SURFACE, "pointer-events-none absolute z-20 w-max max-w-[300px] px-3 py-2")}
           style={{
             left: tip.left,
             top: tip.top,
@@ -95,9 +97,9 @@ export function TimelineFrame({ children }: { children: React.ReactNode }) {
           }}
         >
           <div className="tabular text-[13px] font-semibold text-foreground">{tip.value}</div>
-          <div className="truncate text-foreground/80">{tip.head}</div>
+          <div className="truncate text-ink-2">{tip.head}</div>
           <div className="text-muted-foreground">{tip.meta}</div>
-          {tip.note ? <div className="mt-1 text-[11px] text-muted-foreground">{tip.note}</div> : null}
+          {tip.note ? <div className="mt-1 text-muted-foreground">{tip.note}</div> : null}
         </div>
       ) : null}
     </div>

@@ -13,6 +13,7 @@ import { Card, DivergingSplit, Empty, SectionTitle, StatTile, type StatDelta } f
 import { ExportLink, FilterBar, Pagination, ShownLine } from "./feed-controls";
 import { DirectionFilter, FeedList } from "./feed-list";
 import { ActionBadge, ResponsiveTable } from "./ui";
+import { AgentAlternates } from "./agent-alternates";
 
 export const dynamic = "force-dynamic";
 
@@ -127,6 +128,7 @@ export default async function FeedPage({
       {/* The wordmark and active tab name this page visually; the heading is
           for screen readers and crawlers and changes nothing on screen. */}
       <h1 className="sr-only">Stock trades by members of Congress and corporate insiders</h1>
+      <AgentAlternates markdown="/api/v1/feed.md" json="/api/v1/trades" />
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile
           label="Trades"
