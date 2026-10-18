@@ -57,6 +57,9 @@ NVDA         12      30      12/18          $3.5M   $1.2M–$5.8M
 - `python -m whale insider AAPL` — every stored insider trade in one issuer
 - `python -m whale insider-alerts [--show-message]` — which stored filings the
   configured alert rules match, without sending anything
+- `python -m whale classify-issuers [--budget-seconds 600]` — fetch EDGAR SIC
+  codes for every traded ticker and Form 4 issuer and fold them into industry
+  groups (the poll run does this on its own; see *Industry groups*)
 - `python -m whale digest [--dry-run] [--days 7]` — the week in one Telegram
   message; `--dry-run` prints it and records nothing
 - `python -m whale status` — ingestion and coverage
@@ -174,6 +177,29 @@ to stop a first run replaying a year of everyone's history, and a member named
 here is the case it is not protecting against. An unknown key or a malformed
 `bioguide_id` is an error at startup, not an entry that silently watches
 nobody. An empty (or absent) `watchlist` turns the feature off.
+
+**Late filing** — a filing whose every trade was disclosed more than
+`alerts.late_filing_days` (default 45, the STOCK Act's deadline; 0 = off) after
+it was made leads its own message with how late it was. No extra message: the
+filing is reported once, as itself.
+
+```
+⚠️ late by 66 days
+🏛 New filing — Rep. Kevin Hern (R-OK1)
+Filed 2026-06-20 · 2 transactions
+🟢 BUY  TK0  $1,001–$15k
+     traded 03/01 (111d delay)
+```
+
+The figure is the filing's: it was due 45 days after its earliest trade, and
+that is how far past the due date it arrived. Each row still shows its own
+delay. The filing is recorded once as a `late_filing` row in `alerts`, keyed on
+the filing (document id and chamber), and the weekly audit lists the week's
+filings with late trades. A filing with one timely trade among late ones gets
+no prefix — the per-row delays say which were late. The delay is always trade
+date → filing date, never the report's "Notification Date" column (see
+[Coverage and its limits](#coverage-and-its-limits)). The dashboard ranks
+members by late trades and worst delay at `/politicians?view=late`.
 
 **Insider alerts** — Form 4 filings are far too numerous to announce wholesale,
 so they alert only against rules you write. Each new filing is tested in order
@@ -354,6 +380,29 @@ separate `insider_*` tables — never mixed into the congressional data.
   owners only. Related parties filing *separately* still count twice.
 - SEC asks for a contact e-mail in the User-Agent and refuses undeclared
   clients with an HTML page; `EDGAR_USER_AGENT` supplies it.
+
+### Industry groups (SIC sectors)
+
+The dashboard's sector views — a member's trades by sector, the sector
+leaderboard on the tickers page, insider value bought and sold by sector —
+come from EDGAR's Standard Industrial Classification code for each issuer.
+Every ticker in the congressional tables is resolved to a CIK through EDGAR's
+company list, every CIK (those plus every Form 4 issuer) has its submissions
+record fetched, and the four-digit code is folded into one of twelve groups;
+the table is the docstring of `src/whale/issuers.py`.
+
+- **The fill runs inside the poll run**, after the insider sync, through the
+  same throttled EDGAR client and under `issuers.budget_seconds`; a run that
+  stops on the budget continues next time, and every classification is
+  refreshed after `issuers.refresh_days`. `whale classify-issuers` is the
+  manual form.
+- **Unknown stays unknown.** ETF trusts and many funds carry no SIC at all;
+  they, symbols EDGAR does not list, and issuers the fill has not reached yet
+  are shown as *unclassified* and counted, never guessed at from a name. The
+  weekly audit reports the share of equity rows that carry a group.
+- A sector is a label on a row. It changes no total: the groups on a member's
+  page add up to that member's trades, with the unclassified remainder as a
+  row of its own.
 
 ### Other limits
 

@@ -506,8 +506,9 @@ def test_pipeline_run_calls_the_hook_after_insider_alerts(monkeypatch, tmp_path)
     order = []
     for step in ("sync", "retry_scanned", "parse_pending", "notify_pending",
                  "notify_clusters", "_sync_insiders", "notify_insiders"):
+        # The real steps return a count for the run log (#63); the stubs must too.
         monkeypatch.setattr(pipeline, step,
-                            lambda conn, config, _s=step, **kw: order.append(_s))
+                            lambda conn, config, _s=step, **kw: order.append(_s) or 0)
     monkeypatch.setattr(pipeline.digest, "scheduled",
                         lambda conn, config, dry_run=False: order.append(("digest", dry_run)))
     pipeline.run(Config(db_path=tmp_path / "t.sqlite3"), dry_run=True)

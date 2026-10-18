@@ -319,3 +319,76 @@ export function Card({ className, children }: { className?: string; children: Re
     </div>
   );
 }
+
+/* ------------------------------------------------------------ column series */
+
+export type ColumnDatum = {
+  key: string;
+  label: string;
+  value: number;
+  valueLabel: string;
+  /** Hover detail — the counts behind a share, say. */
+  detail?: string;
+};
+
+/**
+ * One measure over time as columns from a shared baseline — the form for a
+ * monthly share. A single sequential hue, so no legend: the section title
+ * names the series. Labels are selective (the peak and the latest column);
+ * every column carries its value in its hover title, and the caller keeps a
+ * table beside the chart so nothing is colour- or hover-gated.
+ */
+export function ColumnSeries({ data, height = 128 }: { data: ColumnDatum[]; height?: number }) {
+  if (!data.length) return <Empty />;
+  const max = Math.max(...data.map((d) => d.value), Number.EPSILON);
+  const peak = data.reduce((best, d) => (d.value > best.value ? d : best), data[0]);
+  const latest = data[data.length - 1];
+
+  return (
+    <div>
+      <div className="flex items-end gap-1.5" style={{ height }}>
+        {data.map((d) => {
+          const labelled = d === peak || d === latest;
+          // 15% of the plot is kept for the cap label, so the tallest column
+          // never pushes its own label out of the box.
+          const pct = (d.value / max) * 85;
+          return (
+            <div
+              key={d.key}
+              className="flex h-full flex-1 flex-col items-center justify-end"
+              title={`${d.label}: ${d.valueLabel}${d.detail ? ` — ${d.detail}` : ""}`}
+            >
+              {labelled ? (
+                <span className="tabular mb-1 text-[11px] text-muted-foreground">{d.valueLabel}</span>
+              ) : null}
+              {/* ≤24px wide; 4px rounded cap, square at the baseline. */}
+              <div
+                role="img"
+                aria-label={`${d.label}: ${d.valueLabel}`}
+                className="w-full max-w-6"
+                style={{
+                  height: `${pct}%`,
+                  minHeight: d.value > 0 ? 2 : 0,
+                  background: "var(--viz-seq)",
+                  borderRadius: "4px 4px 2px 2px",
+                }}
+              />
+            </div>
+          );
+        })}
+      </div>
+      {/* Hairline baseline, recessive. */}
+      <div className="h-px w-full" style={{ background: "var(--viz-grid)" }} />
+      <div className="mt-1.5 flex gap-1.5">
+        {data.map((d) => (
+          <div
+            key={d.key}
+            className="flex-1 truncate text-center text-[10px] text-muted-foreground"
+          >
+            {d.label}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
