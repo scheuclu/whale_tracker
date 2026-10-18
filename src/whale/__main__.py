@@ -37,6 +37,14 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--dry-run", action="store_true",
                        help="print Telegram messages instead of sending them")
 
+    p_digest = sub.add_parser(
+        "digest", help="the week in one Telegram message (the poll run sends it on Mondays "
+                       "when telegram.digest is on)")
+    p_digest.add_argument("--dry-run", action="store_true",
+                          help="print the digest instead of sending it; records nothing")
+    p_digest.add_argument("--days", type=int, default=7,
+                          help="window on filing date, in days (default 7)")
+
     p_backfill = sub.add_parser(
         "backfill", help="parse already-seen filings into the DB without notifying")
     p_backfill.add_argument("--year", type=int, help="limit to one filing year")
@@ -162,6 +170,23 @@ def main(argv: list[str] | None = None) -> int:
         from . import pipeline
 
         pipeline.run(config, dry_run=args.dry_run)
+        return 0
+
+    if args.command == "digest":
+        from . import digest
+
+        if args.days < 1:
+            parser.error("--days must be at least 1")
+        if not (args.dry_run or config.telegram_configured):
+            parser.error("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are not set; "
+                         "use --dry-run to preview the digest")
+        conn = db.connect(config.db_path)
+        try:
+            digest.send(conn, config, days=args.days, dry_run=args.dry_run)
+        finally:
+            conn.close()
+        if not args.dry_run:
+            print("weekly digest sent")
         return 0
 
     if args.command == "backfill":
