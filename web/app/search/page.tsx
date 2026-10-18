@@ -4,6 +4,7 @@ import { searchInsiderIssuers } from "@/lib/insider-queries";
 import { searchMembers, searchRoster, searchTickers } from "@/lib/queries";
 import { Card, Empty, SectionTitle } from "../charts";
 import { PartyBadge } from "../ui";
+import { MemberAvatar } from "../avatar";
 
 export const dynamic = "force-dynamic";
 
@@ -104,8 +105,9 @@ async function Results({ q }: { q: string }) {
                 href={memberHref(m.member_name)}
                 className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-[13px] hover:bg-muted/50"
               >
-                <PartyBadge party={m.party} />
+                <MemberAvatar name={m.member_name} bioguideId={m.bioguide_id} size="md" />
                 <span className="font-medium">{m.member_name}</span>
+                <PartyBadge party={m.party} />
                 <span className="text-muted-foreground">{seat(m) || "not matched to the roster"}</span>
                 <span className="ml-auto tabular text-xs text-muted-foreground">
                   {m.trades.toLocaleString()} trade{m.trades === 1 ? "" : "s"} · {m.tickers} ticker
@@ -118,8 +120,9 @@ async function Results({ q }: { q: string }) {
                 key={`roster-${r.full_name}`}
                 className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-[13px] text-muted-foreground"
               >
-                <PartyBadge party={r.party} />
+                <MemberAvatar name={r.full_name} bioguideId={r.bioguide_id} size="md" className="opacity-80" />
                 <span>{r.full_name}</span>
+                <PartyBadge party={r.party} />
                 <span>{seat(r)}</span>
                 <span className="ml-auto text-xs">in the roster · no disclosed trades in this database</span>
               </div>

@@ -9,6 +9,7 @@ import {
   optionLabel,
   range,
 } from "@/lib/format";
+import { PARTY_LABEL } from "@/lib/members";
 import { Card } from "./charts";
 import { ScrollX } from "./scroll-area";
 
@@ -170,16 +171,21 @@ export function StatusBadge({ value }: { value: string }) {
   );
 }
 
-export function PartyBadge({ party }: { party: string | null }) {
+/**
+ * Party as a neutral letter (or, with `full`, the word). Deliberately not
+ * blue/red: that pair is the buy/sell encoding on every chart and pill, and
+ * a Democrat tinted like a purchase would read as one.
+ */
+export function PartyBadge({ party, full = false }: { party: string | null; full?: boolean }) {
   if (!party) return null;
-  const cls =
-    party === "D"
-      ? "text-[#1c5cab] dark:text-[#86b6ef] border-[#2a78d6]/30"
-      : party === "R"
-        ? "text-[#a32c2c] dark:text-[#e89f9f] border-[#d03b3b]/30"
-        : "text-muted-foreground border-border";
+  const label = PARTY_LABEL[party] ?? party;
   return (
-    <span className={cn("rounded border px-1.5 py-px text-[10px] font-bold", cls)}>{party}</span>
+    <span
+      className="rounded border border-border bg-muted px-1.5 py-px text-[10px] font-semibold tracking-wide text-foreground/75"
+      title={label}
+    >
+      {full ? label : party}
+    </span>
   );
 }
 

@@ -31,6 +31,9 @@ import {
 } from "../charts";
 import { ExportLink } from "../feed-controls";
 import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, ResponsiveTable, ScanTag, SectorTag, TickerChip } from "../ui";
+import { MemberAvatar } from "../avatar";
+import { MemberBars } from "./member-bars";
+import { MemberHero } from "./member-hero";
 import { POLITICIAN_SORT, isDefaultSort, parseSort, type PoliticianSortKey } from "@/lib/table-sort";
 import { BODY_ROW, BarCell, DATA_TABLE, HEAD_ROW, LateCell, SortHeader, SplitCell, sortHref } from "../sortable-table";
 import { RowLinkBody, StickyThead } from "../table-client";
@@ -125,12 +128,12 @@ export default async function PoliticiansPage({
         <div>
           <SectionTitle>By estimated volume</SectionTitle>
           <Card>
-            <MagnitudeBars
-              variant="name"
+            <MemberBars
               data={rows.slice(0, 12).map((r) => ({
                 key: r.member_name,
-                label: r.member_name,
-                sublabel: `${r.party ?? "?"}-${r.state ?? "?"} · ${r.trades} trades`,
+                name: r.member_name,
+                bioguideId: r.bioguide_id,
+                sublabel: `${r.party ?? "?"}-${r.state ?? "?"} · ${r.trades} trade${r.trades === 1 ? "" : "s"}`,
                 value: r.volume_mid,
                 valueLabel: usd(r.volume_mid),
                 detail:
@@ -146,11 +149,11 @@ export default async function PoliticiansPage({
         <div>
           <SectionTitle>By number of trades</SectionTitle>
           <Card>
-            <MagnitudeBars
-              variant="name"
+            <MemberBars
               data={byTrades.slice(0, 12).map((r) => ({
                 key: r.member_name,
-                label: r.member_name,
+                name: r.member_name,
+                bioguideId: r.bioguide_id,
                 sublabel: `${r.tickers} distinct tickers`,
                 value: r.trades,
                 valueLabel: String(r.trades),
@@ -190,10 +193,11 @@ export default async function PoliticiansPage({
                 <tr key={r.member_name} className={BODY_ROW} data-href={memberHref(r.member_name)}>
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2">
-                      <PartyBadge party={r.party} />
+                      <MemberAvatar name={r.member_name} bioguideId={r.bioguide_id} size="sm" />
                       <a href={memberHref(r.member_name)} className="row-name font-medium hover:text-primary">
                         {r.member_name}
                       </a>
+                      <PartyBadge party={r.party} />
                       <span className="text-[11px] text-muted-foreground">
                         {r.state}
                         {r.district && r.district !== "0" ? r.district : ""}
@@ -279,54 +283,19 @@ async function MemberDetail({ member, action }: { member: string; action?: strin
   // Count of trades the active filter covers — from the aggregate, not the
   // rendered slice, so "showing 300 of 883" is honest.
   const matching = action === "buy" ? detail.buys : action === "sell" ? detail.sells : detail.trades;
-  const chamber =
-    detail.chamber === "senate" ? "Senate" : detail.chamber === "house" ? "House" : null;
-  const seat = detail.state
-    ? `${detail.state}${detail.district && detail.district !== "0" ? `-${detail.district}` : ""}`
-    : null;
 
   return (
     <div className="space-y-8">
-      <div>
+      <div className="space-y-3">
         <a href="/politicians" className="text-xs text-muted-foreground hover:text-primary">
           ← all members
         </a>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight">{detail.member_name}</h1>
-        <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
-          <PartyBadge party={detail.party} />
-          {chamber ? (
-            <span>
-              {chamber}
-              {seat ? ` · ${seat}` : ""}
-            </span>
-          ) : (
-            <span title="The filer's name as printed on the filing; it did not match the congressional roster">
-              not matched to the roster
-            </span>
-          )}
-          <span>
-            · trades from {shortDate(detail.first_tx_date)} to {shortDate(detail.last_tx_date)}
-          </span>
-          {detail.bioguide_id ? (
-            <a
-              href={`https://bioguide.congress.gov/search/bio/${detail.bioguide_id}`}
-              target="_blank"
-              rel="noreferrer"
-              className="underline-offset-2 hover:text-primary hover:underline"
-            >
-              · bioguide
-            </a>
-          ) : null}
-          {scans.length ? (
-            <a
-              href={`/scans?m=${encodeURIComponent(member)}`}
-              className="underline-offset-2 hover:text-primary hover:underline"
-              title="Paper filings scanned without a text layer; inspect what the grid reader saw"
-            >
-              · {scans.length} scanned filing{scans.length === 1 ? "" : "s"}
-            </a>
-          ) : null}
-        </p>
+        <MemberHero
+          detail={detail}
+          tickers={tickers}
+          scanCount={scans.length}
+          scansHref={`/scans?m=${encodeURIComponent(member)}`}
+        />
       </div>
 
       {committees.length ? <MemberCommittees seats={committees} /> : null}
@@ -795,7 +764,7 @@ async function CommitteeView({ id }: { id: string }) {
                   >
                     <td className="px-4 py-2">
                       <div className="flex items-center gap-2">
-                        <PartyBadge party={r.party} />
+                        <MemberAvatar name={r.member_name} bioguideId={r.bioguide_id} size="sm" />
                         {r.trades > 0 ? (
                           <a href={memberHref(r.member_name)} className="font-medium hover:text-primary">
                             {r.member_name}
@@ -803,6 +772,7 @@ async function CommitteeView({ id }: { id: string }) {
                         ) : (
                           <span className="font-medium">{r.member_name}</span>
                         )}
+                        <PartyBadge party={r.party} />
                         <span className="text-[11px] text-muted-foreground">
                           {r.state}
                           {r.district && r.district !== "0" ? r.district : ""}
@@ -949,11 +919,11 @@ async function LateView() {
         <div>
           <SectionTitle>By late trades</SectionTitle>
           <Card>
-            <MagnitudeBars
-              variant="name"
+            <MemberBars
               data={members.slice(0, 12).map((r) => ({
                 key: r.member_name,
-                label: r.member_name,
+                name: r.member_name,
+                bioguideId: r.bioguide_id,
                 sublabel: `${r.late_count} of ${r.trades} trades · ${r.late_filings} filing${
                   r.late_filings === 1 ? "" : "s"
                 }`,
@@ -967,11 +937,11 @@ async function LateView() {
         <div>
           <SectionTitle>By worst delay</SectionTitle>
           <Card>
-            <MagnitudeBars
-              variant="name"
+            <MemberBars
               data={byWorst.slice(0, 12).map((r) => ({
                 key: r.member_name,
-                label: r.member_name,
+                name: r.member_name,
+                bioguideId: r.bioguide_id,
                 sublabel: `${r.late_count} late · mean ${Math.round(r.avg_late_delay)}d`,
                 value: r.worst_delay,
                 valueLabel: `${r.worst_delay}d`,
@@ -1073,10 +1043,11 @@ async function LateView() {
                 <tr key={r.member_name} className="border-b border-border/50 last:border-0 hover:bg-muted/50">
                   <td className="px-4 py-2">
                     <div className="flex items-center gap-2">
-                      <PartyBadge party={r.party} />
+                      <MemberAvatar name={r.member_name} bioguideId={r.bioguide_id} size="sm" />
                       <a href={memberHref(r.member_name)} className="font-medium hover:text-primary">
                         {r.member_name}
                       </a>
+                      <PartyBadge party={r.party} />
                       <span className="text-[11px] text-muted-foreground">
                         {r.state}
                         {r.district && r.district !== "0" ? r.district : ""}
