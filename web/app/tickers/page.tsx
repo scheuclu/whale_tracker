@@ -20,8 +20,40 @@ import { ExportLink } from "../feed-controls";
 import { ActionBadge, Amount, DelayTag, OptionBadge, OwnerTag, PartyBadge, ResponsiveTable, RoleTag, ScanTag, SectorTag } from "../ui";
 import { MemberAvatar } from "../avatar";
 import { TickerMembers } from "./ticker-members";
+import {
+  ROW_LIMITS,
+  TICKER_SORT,
+  isDefaultSort,
+  parseLimit,
+  parseSort,
+  query,
+  sortParams,
+  type TickerSortKey,
+} from "@/lib/table-sort";
+import {
+  BODY_ROW,
+  BarCell,
+  DATA_TABLE,
+  HEAD_ROW,
+  SortHeader,
+  SplitCell,
+  TableFooter,
+  describeSort,
+  sortHref,
+} from "../sortable-table";
+import { RowLinkBody, StickyThead } from "../table-client";
 
 export const dynamic = "force-dynamic";
+
+const TICKER_ORDER_NAMES: Record<TickerSortKey, string> = {
+  ticker: "ticker",
+  asset: "asset name",
+  members: "members trading",
+  trades: "trades",
+  buysell: "share of purchases",
+  volume: "estimated volume",
+  range: "disclosed floor",
+};
 
 const WINDOWS = [
   { days: 30, label: "30d" },
@@ -33,22 +65,51 @@ const WINDOWS = [
 export default async function TickersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ t?: string; w?: string }>;
+  searchParams: Promise<{ t?: string; w?: string; sort?: string; dir?: string; n?: string }>;
 }) {
   const params = await searchParams;
   const days = params.w === "all" ? undefined : Number(params.w) || 90;
 
   if (params.t) return <TickerDetail ticker={params.t.toUpperCase()} />;
 
-  let rows, sectors;
+  const sort = parseSort(TICKER_SORT, params);
+  const { n, limit } = parseLimit(params.n);
+  const isDefaultTable = !n && isDefaultSort(TICKER_SORT, sort);
+  let rows, sectors, table;
   try {
-    [rows, sectors] = await Promise.all([getTickers(days, 40), getSectorLeaderboard(days)]);
+    // The charts rank by their own measure; the table follows the URL's
+    // sort, applied in SQL to every ticker in the window before the limit.
+    [rows, sectors, table] = await Promise.all([
+      getTickers(days, 40),
+      getSectorLeaderboard(days),
+      isDefaultTable ? null : getTickers(days, limit, sort),
+    ]);
   } catch (err) {
     return <Empty>{(err as Error).message}</Empty>;
   }
   if (!rows.length) return <Empty>No transactions in this window.</Empty>;
+  table ??= rows;
 
   const byPeople = [...rows].sort((a, b) => b.politicians - a.politicians || b.volume_mid - a.volume_mid);
+  // The default order is volume, so the charts' first row is the window's largest.
+  const maxVolume = rows[0]?.volume_mid ?? 0;
+  const total = table[0]?.total_rows ?? table.length;
+  const rowsParam = n === "more" ? "200" : n;
+  const keep = { w: params.w, n: rowsParam };
+  const keepSort = sortParams(TICKER_SORT, sort);
+  const header = (column: TickerSortKey, label: string, opts: { align?: "left" | "right"; hint?: string } = {}) => (
+    <SortHeader
+      spec={TICKER_SORT}
+      sort={sort}
+      column={column}
+      href={sortHref(TICKER_SORT, sort, column, { path: "/tickers", keep, hash: "all-tickers" })}
+      align={opts.align}
+      hint={opts.hint}
+    >
+      {label}
+    </SortHeader>
+  );
+  const withRows = (count: string) => `/tickers${query({ w: params.w, ...keepSort, n: count })}#all-tickers`;
 
   return (
     <div className="space-y-8">
@@ -59,7 +120,7 @@ export default async function TickersPage({
           return (
             <a
               key={w.label}
-              href={`/tickers?w=${key}`}
+              href={`/tickers${query({ w: key, ...keepSort })}`}
               className={`rounded-full border px-2.5 py-1 transition-colors ${
                 active
                   ? "border-primary/40 bg-primary/10 text-foreground"
@@ -114,49 +175,63 @@ export default async function TickersPage({
         </div>
       </section>
 
-      <section>
+      <section id="all-tickers" className="table-anchor">
         <SectionTitle>All tickers</SectionTitle>
         <ResponsiveTable>
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.06em] text-muted-foreground">
-                <th className="px-4 py-2.5 font-medium">Ticker</th>
-                <th className="px-4 py-2.5 font-medium">Asset</th>
-                <th className="px-4 py-2.5 text-right font-medium">Members</th>
-                <th className="px-4 py-2.5 text-right font-medium">Trades</th>
-                <th className="px-4 py-2.5 text-right font-medium">Buy / Sell</th>
-                <th className="px-4 py-2.5 text-right font-medium">Volume (est.)</th>
-                <th className="px-4 py-2.5 text-right font-medium">Disclosed range</th>
+          <table className={DATA_TABLE}>
+            <StickyThead>
+              <tr className={HEAD_ROW}>
+                {header("ticker", "Ticker", { align: "left" })}
+                {header("asset", "Asset", { align: "left" })}
+                {header("members", "Members", { hint: "Distinct members who traded the ticker in the window." })}
+                {header("trades", "Trades")}
+                {header("buysell", "Buy / Sell", {
+                  hint: "Purchases / sales. Sorts by the share that are purchases; exchanges count as neither.",
+                })}
+                {header("volume", "Volume (est.)", {
+                  hint: "Sum of disclosed bracket midpoints — an estimate, not a reported figure. An open-ended top bracket counts at its floor.",
+                })}
+                {header("range", "Disclosed range", {
+                  hint: "The full range the disclosed brackets permit. Sorts by the floor; ≥ marks an open-ended top bracket, which has no ceiling.",
+                })}
               </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.ticker} className="border-b border-border/50 last:border-0 hover:bg-muted/50">
-                  <td className="px-4 py-2">
+            </StickyThead>
+            <RowLinkBody>
+              {table.map((r) => (
+                <tr key={r.ticker} className={BODY_ROW} data-href={`/tickers?t=${encodeURIComponent(r.ticker)}`}>
+                  <td className="px-3 py-2">
                     <a
                       href={`/tickers?t=${encodeURIComponent(r.ticker)}`}
-                      className="font-mono font-semibold hover:text-primary"
+                      className="row-name font-mono font-semibold hover:text-primary"
                     >
                       {r.ticker}
                     </a>
                   </td>
-                  <td className="max-w-[18rem] truncate px-4 py-2 text-muted-foreground">
+                  <td className="max-w-[10rem] truncate px-3 py-2 text-muted-foreground sm:max-w-[18rem]" title={r.asset_name ?? undefined}>
                     {r.asset_name}
                   </td>
-                  <td className="tabular px-4 py-2 text-right font-medium">{r.politicians}</td>
-                  <td className="tabular px-4 py-2 text-right text-muted-foreground">{r.trades}</td>
-                  <td className="tabular px-4 py-2 text-right text-muted-foreground">
-                    {r.buys} / {r.sells}
-                  </td>
-                  <td className="tabular px-4 py-2 text-right">{usd(r.volume_mid)}</td>
-                  <td className="tabular px-4 py-2 text-right text-muted-foreground">
+                  <td className="tabular px-3 py-2 text-right font-medium">{r.politicians}</td>
+                  <td className="tabular px-3 py-2 text-right text-muted-foreground">{r.trades}</td>
+                  <SplitCell buys={r.buys} sells={r.sells} />
+                  <BarCell value={r.volume_mid} max={maxVolume}>
+                    {usd(r.volume_mid)}
+                  </BarCell>
+                  <td className="tabular px-3 py-2 text-right text-muted-foreground">
                     {r.volume_max == null ? `≥${usd(r.volume_min)}` : `${usd(r.volume_min)}–${usd(r.volume_max)}`}
                   </td>
                 </tr>
               ))}
-            </tbody>
+            </RowLinkBody>
           </table>
         </ResponsiveTable>
+        <TableFooter
+          shown={table.length}
+          total={total}
+          noun="tickers in this window"
+          orderLabel={describeSort(TICKER_SORT, sort, TICKER_ORDER_NAMES)}
+          moreHref={table.length < ROW_LIMITS.more ? withRows("200") : undefined}
+          allHref={withRows("all")}
+        />
       </section>
 
       <SectorLeaderboard sectors={sectors} />

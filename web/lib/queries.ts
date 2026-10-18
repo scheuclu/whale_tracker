@@ -1,6 +1,7 @@
 import type Database from "better-sqlite3";
 
 import { getDb } from "./db";
+import { POLITICIAN_SORT, TICKER_SORT, orderBy, type PoliticianSortKey, type Sort, type TickerSortKey } from "./table-sort";
 import type { TransactionFilters } from "./feed-filters";
 
 /**
@@ -30,6 +31,8 @@ export type TickerRow = {
   /** Rows transcribed from scans: in `trades`, not in any volume. */
   transcribed: number;
   last_tx_date: string | null;
+  /** Tickers in the whole result before LIMIT — set by `getTickers` only. */
+  total_rows?: number;
 };
 
 export type TransactionRow = {
@@ -233,11 +236,23 @@ export const MID = `CASE WHEN ${TRANSCRIBED} THEN NULL ELSE COALESCE(t.amount_ex
   CASE WHEN t.amount_max_cents IS NULL THEN t.amount_min_cents
        ELSE (t.amount_min_cents + t.amount_max_cents) / 2 END) END`;
 
-export async function getTickers(days?: number, limit = 40): Promise<TickerRow[]> {
+/**
+ * Tickers in the window by `sort` (default: estimated volume), ordered over
+ * the whole result before the LIMIT, with the result's size on every row.
+ * The subquery makes every sort expression name the aggregate, never a
+ * same-named table column.
+ */
+export async function getTickers(
+  days?: number,
+  limit = 40,
+  sort?: Sort<TickerSortKey>
+): Promise<TickerRow[]> {
   const db = await getDb();
+  const order = orderBy(TICKER_SORT, sort ?? { key: TICKER_SORT.default, dir: "desc" });
   return db
     .prepare(
-      `SELECT t.ticker,
+      `SELECT *, COUNT(*) OVER () AS total_rows FROM (
+       SELECT t.ticker,
               MIN(t.asset_name) AS asset_name,
               COUNT(DISTINCT t.politician_id) AS politicians,
               COUNT(DISTINCT CASE WHEN t.action='purchase' THEN t.politician_id END) AS buy_politicians,
@@ -254,8 +269,8 @@ export async function getTickers(days?: number, limit = 40): Promise<TickerRow[]
        JOIN filings f ON f.id = t.filing_id
        WHERE f.status IN ${COUNTED} AND t.ticker IS NOT NULL AND t.ticker != ''
        ${sinceClause(days)}
-       GROUP BY t.ticker
-       ORDER BY volume_mid DESC
+       GROUP BY t.ticker)
+       ${order}
        LIMIT ?`
     )
     .all(limit) as TickerRow[];
@@ -537,11 +552,22 @@ export async function searchTickers(q: string, limit = 20): Promise<TickerSearch
     .all(pattern, pattern, q.toUpperCase(), limit) as TickerSearchRow[];
 }
 
-export async function getPoliticians(days?: number, limit = 60): Promise<PoliticianRow[]> {
+/**
+ * Members by `sort` (default: estimated volume), ordered over every member
+ * before the LIMIT. The subquery makes every sort expression name the
+ * aggregate, never a same-named table column.
+ */
+export async function getPoliticians(
+  days?: number,
+  limit = 60,
+  sort?: Sort<PoliticianSortKey>
+): Promise<PoliticianRow[]> {
   const db = await getDb();
+  const order = orderBy(POLITICIAN_SORT, sort ?? { key: POLITICIAN_SORT.default, dir: "desc" });
   return db
     .prepare(
-      `SELECT COALESCE(p.full_name, f.filer_name) AS member_name,
+      `SELECT * FROM (
+       SELECT COALESCE(p.full_name, f.filer_name) AS member_name,
               p.party, p.state, p.district, p.chamber,
               MAX(p.bioguide_id) AS bioguide_id,
               COUNT(*) AS trades,
@@ -559,8 +585,8 @@ export async function getPoliticians(days?: number, limit = 60): Promise<Politic
        JOIN filings f ON f.id = t.filing_id
        LEFT JOIN politicians p ON p.id = t.politician_id
        WHERE f.status IN ${COUNTED} ${sinceClause(days)}
-       GROUP BY member_name
-       ORDER BY volume_mid DESC
+       GROUP BY member_name)
+       ${order}
        LIMIT ?`
     )
     .all(limit) as PoliticianRow[];
