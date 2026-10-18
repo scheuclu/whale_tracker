@@ -1,3 +1,4 @@
+import { assetLabel } from "@/lib/asset-label";
 import { redirect } from "next/navigation";
 import { getConsensusTickers, getPipeline, getTransactionTotals, getTransactions, getWeeklyActivity } from "@/lib/queries";
 import { getBothSides, getSharedTickers, type BothSidesRow, type SharedTickers } from "@/lib/crossover-queries";
@@ -124,7 +125,7 @@ export default async function FeedPage({
               data={consensus.map((c) => ({
                 key: c.ticker,
                 label: c.ticker,
-                sublabel: c.asset_name ?? undefined,
+                sublabel: assetLabel(c.asset_name, { ticker: c.ticker }) || undefined,
                 buy: c.buy_politicians,
                 sell: c.sell_politicians,
                 href: `/tickers?t=${encodeURIComponent(c.ticker)}`,
@@ -250,8 +251,8 @@ async function BothSides() {
                   </a>
                   <span className="text-muted-foreground"> · {plural(r.insider_filings, "filing")}</span>
                 </td>
-                <td className="max-w-[18rem] truncate px-4 py-2 text-muted-foreground">
-                  {r.issuer_name ?? r.asset_name}
+                <td className="max-w-[18rem] truncate px-4 py-2 text-muted-foreground" title={r.issuer_name ?? r.asset_name ?? undefined}>
+                  {assetLabel(r.issuer_name ?? r.asset_name, { ticker: r.ticker })}
                 </td>
               </tr>
             ))}

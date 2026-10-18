@@ -1,3 +1,4 @@
+import { assetLabel } from "@/lib/asset-label";
 import {
   getInsiderClusters,
   getInsiderIssuer,
@@ -256,7 +257,7 @@ export default async function InsidersPage({
               data={mostBought.slice(0, 12).map((r) => ({
                 key: r.issuer_cik,
                 label: r.ticker ?? "—",
-                sublabel: `${r.issuer_name?.slice(0, 22) ?? ""} · ${r.buy_insiders} insider${r.buy_insiders === 1 ? "" : "s"}`,
+                sublabel: `${assetLabel(r.issuer_name).slice(0, 22)} · ${r.buy_insiders} insider${r.buy_insiders === 1 ? "" : "s"}`,
                 value: r.buy_value,
                 valueLabel: usd(r.buy_value),
                 title: r.issuer_name ?? undefined,
@@ -274,7 +275,7 @@ export default async function InsidersPage({
               data={mostSold.slice(0, 12).map((r) => ({
                 key: r.issuer_cik,
                 label: r.ticker ?? "—",
-                sublabel: `${r.issuer_name?.slice(0, 22) ?? ""} · ${r.sell_insiders} insider${r.sell_insiders === 1 ? "" : "s"}`,
+                sublabel: `${assetLabel(r.issuer_name).slice(0, 22)} · ${r.sell_insiders} insider${r.sell_insiders === 1 ? "" : "s"}`,
                 value: r.sell_value,
                 valueLabel: usd(r.sell_value),
                 title: r.issuer_name ?? undefined,

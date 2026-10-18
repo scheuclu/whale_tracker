@@ -1,3 +1,4 @@
+import { assetLabel } from "@/lib/asset-label";
 import { getInsiderMonthly } from "@/lib/insider-queries";
 import { getMonthlyDelay, getMonthlyScans, getMonthlyTrades, getRisingTickers } from "@/lib/trend-queries";
 import { MONTH_KEY, axisLabel, monthKeys, monthLabel, previousMonth } from "@/lib/months";
@@ -382,7 +383,7 @@ export default async function TrendsPage({
               columns={["Ticker", "Asset", "Members", "Previous", "Gain", "Bought", "Sold", "Trades"]}
               rows={rising.map((r) => [
                 r.ticker,
-                r.asset_name?.slice(0, 28) ?? "—",
+                assetLabel(r.asset_name, { ticker: r.ticker }).slice(0, 28) || "—",
                 r.members,
                 r.prev_members,
                 `+${r.gain}`,

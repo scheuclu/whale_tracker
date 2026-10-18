@@ -146,7 +146,7 @@ export default async function TickersPage({
               data={rows.slice(0, 12).map((r) => ({
                 key: r.ticker,
                 label: r.ticker,
-                sublabel: r.asset_name?.slice(0, 28) ?? undefined,
+                sublabel: assetLabel(r.asset_name, { ticker: r.ticker }).slice(0, 28) || undefined,
                 title: r.asset_name ?? undefined,
                 value: r.volume_mid,
                 valueLabel: usd(r.volume_mid),
