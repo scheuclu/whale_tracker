@@ -118,7 +118,7 @@ export const NO_SECTOR_COLS = `NULL AS industry_group, NULL AS sic, NULL AS sic_
  */
 const optionColumnsKnown = new WeakMap<Database.Database, boolean>();
 
-function hasOptionColumns(db: Database.Database): boolean {
+export function hasOptionColumns(db: Database.Database): boolean {
   let has = optionColumnsKnown.get(db);
   if (has === undefined) {
     const cols = db.prepare("PRAGMA table_info(transactions)").all() as { name: string }[];

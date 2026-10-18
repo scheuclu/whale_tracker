@@ -17,6 +17,7 @@ import {
   type CommitteeSeatRow,
 } from "@/lib/queries";
 import { getScanFilings } from "@/lib/scan-queries";
+import { MemberTimeline } from "../timeline";
 import { committeeHref, memberHref, range, shortDate, usd } from "@/lib/format";
 import {
   Card,
@@ -345,6 +346,8 @@ async function MemberDetail({ member, action }: { member: string; action?: strin
           </p>
         </Card>
       </section>
+
+      <MemberTimeline member={member} />
 
       <section className="grid gap-6 lg:grid-cols-2">
         <div>

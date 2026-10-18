@@ -806,3 +806,93 @@ body::before {
 .dark .member-avatar::after {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
 }
+
+/* ------------------------------------------------------------------
+   Trade timeline (app/timeline.tsx). Axis text wears text tokens, never
+   the series colour; a mark's 2px surface ring turns into the focus
+   outline, so keyboard focus is visible without a box around the SVG.
+   ------------------------------------------------------------------ */
+.tl-tick {
+  font-size: 11px;
+  fill: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+.tl-tick-sub {
+  font-size: 10px;
+  opacity: 0.75;
+}
+.tl-side {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  fill: var(--muted-foreground);
+  paint-order: stroke;
+  stroke: var(--card-solid);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+.tl-more {
+  font-size: 10px;
+  font-weight: 600;
+  fill: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+.tl-mark {
+  cursor: pointer;
+  outline: none;
+}
+.tl-hit {
+  fill: transparent;
+}
+/* The stroke sits under the fill (paint-order), so 2px of it shows outside
+   the mark as a surface ring — and becomes the hover / focus outline. */
+.tl-dot {
+  stroke: var(--card-solid);
+  stroke-width: 4px;
+  paint-order: stroke;
+  transition: stroke 120ms ease;
+}
+.tl-dot.tl-buy {
+  fill: var(--viz-buy);
+}
+.tl-dot.tl-sell {
+  fill: var(--viz-sell);
+}
+.tl-dot.tl-other {
+  fill: var(--viz-axis);
+}
+.tl-dot.tl-blank {
+  fill: var(--card-solid);
+}
+/* Transcribed from a scan: hollow and dashed, the direction in the stroke. */
+.tl-hollow {
+  fill: none;
+  stroke-width: 1.6px;
+  stroke-dasharray: 2.4 1.8;
+}
+.tl-hollow.tl-buy {
+  stroke: var(--viz-buy);
+}
+.tl-hollow.tl-sell {
+  stroke: var(--viz-sell);
+}
+.tl-hollow.tl-other {
+  stroke: var(--viz-axis);
+}
+/* Trade date after the filing's own date: an outer hairline, as filed. */
+.tl-flag {
+  fill: none;
+  stroke: var(--foreground);
+  stroke-opacity: 0.55;
+  stroke-width: 1px;
+}
+.tl-mark:hover .tl-dot {
+  stroke: color-mix(in srgb, var(--foreground) 45%, var(--card-solid));
+}
+.tl-mark:focus-visible .tl-dot {
+  stroke: var(--foreground);
+}
+.tl-tip {
+  background: var(--card-solid);
+}

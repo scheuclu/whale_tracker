@@ -18,6 +18,9 @@ import {
 } from "../charts";
 import { ExportLink } from "../feed-controls";
 import { ActionBadge, Amount, DelayTag, OptionBadge, OwnerTag, PartyBadge, ResponsiveTable, RoleTag, ScanTag, SectorTag } from "../ui";
+import { ASSET_TYPE_LABEL } from "@/lib/format";
+import { getTimelineTrades, type TimelineTrade } from "@/lib/timeline-queries";
+import { TradeTimeline } from "../timeline";
 import { MemberAvatar } from "../avatar";
 import { TickerMembers } from "./ticker-members";
 import {
@@ -315,10 +318,11 @@ function SectorLeaderboard({ sectors }: { sectors: SectorRow[] }) {
 }
 
 async function TickerDetail({ ticker }: { ticker: string }) {
-  const [all, trades, optionTrades, members] = await Promise.all([
+  const [all, trades, optionTrades, timeline, members] = await Promise.all([
     getTickers(undefined, 5000),
     getTransactions({ ticker, limit: 200 }),
     getTransactions({ ticker, options: true, limit: 500 }),
+    getTimelineTrades({ ticker }),
     getTickerMembers(ticker, undefined, 1000),
   ]);
   const stat = all.find((r) => r.ticker === ticker);
@@ -327,6 +331,9 @@ async function TickerDetail({ ticker }: { ticker: string }) {
   const scaleMax = stat.volume_max ?? stat.volume_min * 2;
   const calls = optionTrades.filter((r) => r.option_kind === "call").length;
   const puts = optionTrades.filter((r) => r.option_kind === "put").length;
+  const assetTypes = assetTypeMix(timeline);
+  const disclosed = range(stat.volume_min, stat.volume_max);
+  const other = stat.trades - stat.buys - stat.sells;
 
   return (
     <div className="space-y-8">
@@ -334,22 +341,57 @@ async function TickerDetail({ ticker }: { ticker: string }) {
         <a href="/tickers" className="text-xs text-muted-foreground hover:text-primary">
           ← all tickers
         </a>
-        <h1 className="mt-2 font-mono text-3xl font-semibold tracking-tight">{stat.ticker}</h1>
-        <p className="flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
-          <span>{stat.asset_name}</span>
-          <SectorTag
-            group={trades[0]?.industry_group}
-            sic={trades[0]?.sic}
-            description={trades[0]?.sic_description}
+        <div className="mt-3 flex flex-wrap items-end justify-between gap-x-10 gap-y-5">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+              <h1 className="font-mono text-4xl font-semibold tracking-tight sm:text-5xl">{stat.ticker}</h1>
+              {assetTypes.map((a) => (
+                <span
+                  key={a.code}
+                  className="rounded-md border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
+                  title={`${a.count} of ${timeline.length} trades filed with asset type ${a.code}`}
+                >
+                  {a.label}
+                </span>
+              ))}
+              <SectorTag
+                group={trades[0]?.industry_group}
+                sic={trades[0]?.sic}
+                description={trades[0]?.sic_description}
+              />
+            </div>
+            <p className="mt-1.5 text-base text-foreground/80">{stat.asset_name}</p>
+          </div>
+          <FlowSplit
+            buys={stat.buys}
+            sells={stat.sells}
+            other={other}
+            buyers={stat.buy_politicians}
+            sellers={stat.sell_politicians}
           />
-        </p>
+        </div>
       </div>
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile label="Members" value={String(stat.politicians)} hint="distinct filers" />
         <StatTile label="Trades" value={String(stat.trades)} hint={`${stat.buys} buy / ${stat.sells} sell`} />
-        <StatTile label="Volume (est.)" value={usd(stat.volume_mid)} hint="bracket midpoints" />
+        <StatTile
+          label="Volume (est.)"
+          value={usd(stat.volume_mid)}
+          hint={
+            stat.transcribed
+              ? `disclosed ${disclosed} · ${stat.transcribed} transcribed not counted`
+              : `disclosed ${disclosed}`
+          }
+        />
         <StatTile label="Last trade" value={shortDate(stat.last_tx_date)} />
+      </section>
+
+      <section>
+        <SectionTitle right={<span className="text-[11px] text-muted-foreground">by trade date</span>}>
+          Trades over time
+        </SectionTitle>
+        <TradeTimeline trades={timeline} mode="ticker" />
       </section>
 
       <section>
@@ -478,6 +520,85 @@ async function TickerDetail({ ticker }: { ticker: string }) {
           </p>
         </section>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * The asset types this symbol was filed under, most common first — "Stock",
+ * then "Options" when members also traded contracts on it. A code the
+ * Clerk's list does not name is shown as filed.
+ */
+function assetTypeMix(rows: TimelineTrade[]): { code: string; label: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const r of rows) if (r.asset_type) counts.set(r.asset_type, (counts.get(r.asset_type) ?? 0) + 1);
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([code, count]) => ({ code, label: ASSET_TYPE_LABEL[code] ?? code, count }));
+}
+
+/**
+ * Buys against sells as one split bar — trade counts, not money, so it is
+ * exact. Two fills with a 2px surface gap; both counts and directions are
+ * spelled out beside it, so the colour pair never carries the meaning
+ * alone. Exchanges and other actions are named, not drawn.
+ */
+function FlowSplit({
+  buys,
+  sells,
+  other,
+  buyers,
+  sellers,
+}: {
+  buys: number;
+  sells: number;
+  other: number;
+  buyers: number;
+  sellers: number;
+}) {
+  const total = buys + sells;
+  if (!total) return null;
+  return (
+    <div
+      className="w-full sm:w-72"
+      role="img"
+      aria-label={`${buys} buys by ${buyers} members, ${sells} sells by ${sellers} members`}
+    >
+      <div className="mb-1.5 flex items-baseline justify-between text-[11px] text-muted-foreground">
+        <span>
+          <span className="text-sm font-semibold text-foreground">{buys}</span> bought
+        </span>
+        <span>
+          sold <span className="text-sm font-semibold text-foreground">{sells}</span>
+        </span>
+      </div>
+      <div className="flex h-2.5 gap-0.5">
+        {buys ? (
+          <div
+            className="h-full"
+            style={{
+              width: `${(buys / total) * 100}%`,
+              background: "var(--viz-buy)",
+              borderRadius: sells ? "4px 2px 2px 4px" : "4px",
+            }}
+          />
+        ) : null}
+        {sells ? (
+          <div
+            className="h-full flex-1"
+            style={{ background: "var(--viz-sell)", borderRadius: buys ? "2px 4px 4px 2px" : "4px" }}
+          />
+        ) : null}
+      </div>
+      <div className="mt-1.5 flex justify-between text-[11px] text-muted-foreground">
+        <span>
+          by {buyers} member{buyers === 1 ? "" : "s"}
+        </span>
+        <span>
+          {other ? `${other} other · ` : ""}by {sellers} member{sellers === 1 ? "" : "s"}
+        </span>
+      </div>
     </div>
   );
 }
