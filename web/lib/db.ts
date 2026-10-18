@@ -21,6 +21,9 @@ const DB_PATH_IN_REPO = process.env.TRADES_DB_PATH ?? "data/trades.sqlite3";
 // is accepted too, but it is a generic name that collides with other tooling's
 // conventions, so it is the fallback rather than the documented one.
 const DB_TOKEN = process.env.TRADES_DB_TOKEN ?? process.env.GITHUB_TOKEN;
+// TRADES_DB_FILE opens a specific local file instead of the working copy (a
+// migrated /tmp copy for a render or a test); it is read in `refresh`, not
+// folded in here — see the note there about Turbopack's tracing.
 const LOCAL_DB = path.join(process.cwd(), "..", "data", "trades.sqlite3");
 const TTL_MS = 120_000;
 /** Grace period before closing a superseded handle in-flight queries may hold. */
@@ -69,7 +72,13 @@ function remoteSource(): { url: string; headers: Record<string, string> } | null
 async function refresh(): Promise<Database.Database> {
   const source = remoteSource();
   if (!source) {
-    if (!fs.existsSync(LOCAL_DB)) {
+    // TRADES_DB_FILE points a local run at another copy — a test migrating
+    // a scratch copy to a newer schema than the committed file. Read here,
+    // not folded into LOCAL_DB: Turbopack traces `fs.existsSync` on a path
+    // it cannot resolve statically and then bundles the whole repository
+    // into the server output.
+    const override = process.env.TRADES_DB_FILE;
+    if (!override && !fs.existsSync(LOCAL_DB)) {
       const onVercel = Boolean(process.env.VERCEL);
       throw new Error(
         onVercel
@@ -81,7 +90,7 @@ async function refresh(): Promise<Database.Database> {
             `or set TRADES_DB_REPO + TRADES_DB_TOKEN`
       );
     }
-    const db = new Database(LOCAL_DB, { readonly: true, fileMustExist: true });
+    const db = new Database(override ?? LOCAL_DB, { readonly: true, fileMustExist: true });
     const previous = cached;
     cached = { db, file: null, fetchedAt: Date.now() };
     if (previous) retire(previous);

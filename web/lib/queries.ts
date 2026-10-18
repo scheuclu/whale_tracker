@@ -1,3 +1,5 @@
+import type Database from "better-sqlite3";
+
 import { getDb } from "./db";
 
 /**
@@ -58,7 +60,73 @@ export type TransactionRow = {
   transcribed: number;
   /** The Clerk's document id — the key of the /scans inspection page. */
   doc_id: string;
+  /** The option contract as the filing's own text named it (src/whale/options.py):
+   *  'call' | 'put', the strike, an ISO expiry. All NULL when the text does
+   *  not say — a strike is never guessed from a premium. */
+  option_kind: string | null;
+  strike_cents: number | null;
+  expiry: string | null;
+} & SectorFields;
+
+/**
+ * The issuer's industry group, from its EDGAR SIC code
+ * (src/whale/issuers.py, schema 9). All three NULL when the symbol is not
+ * classified: EDGAR lists no SIC for it (ETF trusts, funds), does not list
+ * the symbol, or the fill has not reached it yet. Unknown stays unknown.
+ */
+export type SectorFields = {
+  industry_group: string | null;
+  sic: string | null;
+  sic_description: string | null;
 };
+
+/**
+ * Whether the database carries the issuer tables. The dashboard reads
+ * whatever the pipeline last committed, and a database from before the
+ * schema-9 migration has none; every sector view then reports nothing
+ * rather than take its page down with "no such table".
+ */
+export function hasIssuerTables(db: Database.Database): boolean {
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM sqlite_master
+       WHERE type = 'table' AND name IN ('issuers', 'issuer_tickers')`
+    )
+    .get() as { n: number };
+  return row.n === 2;
+}
+
+/** A congressional row's issuer, one-to-one by symbol: `issuer_tickers`
+ *  resolves the printed ticker to a CIK, `issuers` carries that CIK's group. */
+export const SECTOR_JOIN = `LEFT JOIN issuer_tickers it ON it.ticker = t.ticker
+       LEFT JOIN issuers s ON s.cik = it.cik`;
+export const SECTOR_COLS = `s.industry_group, s.sic, s.sic_description`;
+export const NO_SECTOR_COLS = `NULL AS industry_group, NULL AS sic, NULL AS sic_description`;
+
+/**
+ * The option-contract columns arrived with schema 11. The committed database
+ * can predate them — the pipeline migrates it on its next run, not this code —
+ * and a query naming a column the file lacks renders as an error page. So
+ * they are selected only when the file has them and read as NULL otherwise;
+ * the badges simply stay off until the next pipeline commit.
+ */
+const optionColumnsKnown = new WeakMap<Database.Database, boolean>();
+
+function hasOptionColumns(db: Database.Database): boolean {
+  let has = optionColumnsKnown.get(db);
+  if (has === undefined) {
+    const cols = db.prepare("PRAGMA table_info(transactions)").all() as { name: string }[];
+    has = cols.some((c) => c.name === "option_kind");
+    optionColumnsKnown.set(db, has);
+  }
+  return has;
+}
+
+function optionColumns(db: Database.Database): string {
+  return hasOptionColumns(db)
+    ? "t.option_kind, t.strike_cents, t.expiry"
+    : "NULL AS option_kind, NULL AS strike_cents, NULL AS expiry";
+}
 
 export type PoliticianRow = {
   member_name: string;
@@ -101,6 +169,20 @@ export function sinceClause(days?: number): string {
  */
 export const DELAY = `CASE WHEN julianday(f.filing_date) >= julianday(t.tx_date)
      THEN CAST(julianday(f.filing_date) - julianday(t.tx_date) AS INTEGER) END`;
+
+/**
+ * The STOCK Act's deadline, in days from the trade: a trade disclosed more
+ * than this many days after it was made is late. Mirrors
+ * `STOCK_ACT_DEADLINE_DAYS` in src/whale/stats.py.
+ */
+export const STOCK_ACT_DEADLINE_DAYS = 45;
+
+/**
+ * A row disclosed past the deadline. A NULL delay — contradictory dates —
+ * compares as NULL, so it is never late; the same rows the politicians
+ * tiles count with their inline `> 45`.
+ */
+export const LATE = `(${DELAY}) > ${STOCK_ACT_DEADLINE_DAYS}`;
 
 /** Days until the member learned of the trade. Not a compliance measure. */
 const LAG = `CASE WHEN julianday(t.notification_date) >= julianday(t.tx_date)
@@ -204,6 +286,8 @@ export async function getTransactions(opts: {
   ticker?: string;
   member?: string;
   action?: string;
+  /** Only rows whose text named an option contract (the ticker page's Options section). */
+  options?: boolean;
   limit?: number;
 } = {}): Promise<TransactionRow[]> {
   const db = await getDb();
@@ -219,7 +303,13 @@ export async function getTransactions(opts: {
   }
   if (opts.action === "buy") where.push("t.action = 'purchase'");
   if (opts.action === "sell") where.push("t.action IN ('sale','sale_partial')");
+  if (opts.options) {
+    // Before the migration no row can qualify, and the column cannot be named.
+    if (!hasOptionColumns(db)) return [];
+    where.push("t.option_kind IS NOT NULL");
+  }
   params.push(opts.limit ?? 100);
+  const sectors = hasIssuerTables(db);
 
   return db
     .prepare(
@@ -234,10 +324,13 @@ export async function getTransactions(opts: {
               CASE WHEN julianday(t.notification_date) < julianday(t.tx_date)
                    THEN 1 ELSE 0 END AS dates_inconsistent,
               ${TRANSCRIBED} AS transcribed,
-              f.doc_id
+              f.doc_id,
+              ${sectors ? SECTOR_COLS : NO_SECTOR_COLS},
+              ${optionColumns(db)}
        FROM transactions t
        JOIN filings f ON f.id = t.filing_id
        LEFT JOIN politicians p ON p.id = t.politician_id
+       ${sectors ? SECTOR_JOIN : ""}
        WHERE ${where.join(" AND ")}
        ORDER BY t.tx_date DESC, t.id DESC
        LIMIT ?`
@@ -398,6 +491,75 @@ export async function getTickerDetail(ticker: string, days?: number) {
   return rows.find((r) => r.ticker === ticker.toUpperCase()) ?? null;
 }
 
+/**
+ * One industry group's slice of the congressional trades (#55). A NULL
+ * `industry_group` is the unclassified remainder — assets with no ticker
+ * (Treasuries, funds), symbols EDGAR lists no SIC for (ETF trusts), and
+ * issuers the fill has not reached — reported as a row of its own so the
+ * groups never sum to more than they describe. Volume is the usual bracket
+ * arithmetic: a floor, a ceiling that is NULL once any row is open-ended,
+ * and a midpoint estimate.
+ */
+export type SectorRow = {
+  industry_group: string | null;
+  politicians: number;
+  trades: number;
+  tickers: number;
+  buys: number;
+  sells: number;
+  volume_min: number;
+  volume_max: number | null;
+  volume_mid: number;
+  /** Rows transcribed from scans: in `trades`, not in any volume. */
+  transcribed: number;
+};
+
+const SECTOR_SELECT = `SELECT s.industry_group,
+              COUNT(DISTINCT t.politician_id) AS politicians,
+              COUNT(*) AS trades,
+              COUNT(DISTINCT t.ticker) AS tickers,
+              SUM(t.action='purchase') AS buys,
+              SUM(t.action IN ('sale','sale_partial')) AS sells,
+              SUM(COALESCE(${VOL_MIN},0)) AS volume_min,
+              ${VOLUME_MAX} AS volume_max,
+              SUM(COALESCE(${MID},0)) AS volume_mid,
+              SUM(${TRANSCRIBED}) AS transcribed
+       FROM transactions t
+       JOIN filings f ON f.id = t.filing_id
+       LEFT JOIN politicians p ON p.id = t.politician_id
+       ${SECTOR_JOIN}`;
+
+/** Every trade of one member, by industry group — the whole record, never a
+ *  page slice. Empty when the database predates the issuer tables. */
+export async function getPoliticianSectors(member: string): Promise<SectorRow[]> {
+  const db = await getDb();
+  if (!hasIssuerTables(db)) return [];
+  return db
+    .prepare(
+      `${SECTOR_SELECT}
+       WHERE f.status IN ${COUNTED} AND COALESCE(p.full_name, f.filer_name) = ?
+       GROUP BY s.industry_group
+       ORDER BY s.industry_group IS NULL, trades DESC, volume_mid DESC`
+    )
+    .all(member) as SectorRow[];
+}
+
+/** Members and trades per industry group inside the window, over rows that
+ *  carry a ticker — the same population as `getTickers`. */
+export async function getSectorLeaderboard(days?: number): Promise<SectorRow[]> {
+  const db = await getDb();
+  if (!hasIssuerTables(db)) return [];
+  return db
+    .prepare(
+      `${SECTOR_SELECT}
+       WHERE f.status IN ${COUNTED} AND t.ticker IS NOT NULL AND t.ticker != ''
+       ${sinceClause(days)}
+       GROUP BY s.industry_group
+       ORDER BY s.industry_group IS NULL, politicians DESC, trades DESC`
+    )
+    .all() as SectorRow[];
+}
+
 export type TickerMemberRow = {
   member_name: string;
   party: string | null;
@@ -459,7 +621,77 @@ export type Pipeline = {
   /** Filings and rows read by transcribing a scan: counted as trades, in no
    *  total. Zero of each while `vision.enabled` is off. */
   transcribed: { filings: number; rows: number };
+  /** The last pipeline runs, newest first — at most RUNS_SHOWN of the
+   *  twenty `pipeline.record_run` keeps in `sync_state.recent_runs`. */
+  runs: PipelineRun[];
 };
+
+/** One entry of the run log `pipeline.run` writes; mirrors `RunTally.entry`. */
+export type PipelineRun = {
+  started: string;
+  finished: string | null;
+  duration_s: number | null;
+  filings_parsed: number;
+  alerts_sent: number;
+  scans_transcribed: number;
+  insiders_stored: number;
+  outcome: "ok" | "failed";
+  error: string | null;
+};
+
+export const RUNS_SHOWN = 10;
+
+/**
+ * The run log, newest first. A value that is not a JSON list, or an entry
+ * without a start time, is dropped rather than rendered: the page must not
+ * fail on a log a newer pipeline wrote in a shape this build does not know.
+ */
+export function parseRecentRuns(raw: string | null): PipelineRun[] {
+  if (!raw) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  const runs: PipelineRun[] = [];
+  for (const r of parsed) {
+    if (!r || typeof r !== "object" || typeof (r as { started?: unknown }).started !== "string") continue;
+    const e = r as Record<string, unknown>;
+    runs.push({
+      started: e.started as string,
+      finished: typeof e.finished === "string" ? e.finished : null,
+      duration_s: typeof e.duration_s === "number" ? e.duration_s : null,
+      filings_parsed: count(e.filings_parsed),
+      alerts_sent: count(e.alerts_sent),
+      scans_transcribed: count(e.scans_transcribed),
+      insiders_stored: count(e.insiders_stored),
+      outcome: e.outcome === "ok" ? "ok" : "failed",
+      error: typeof e.error === "string" ? e.error : null,
+    });
+  }
+  return runs;
+}
+
+function count(v: unknown): number {
+  return typeof v === "number" && Number.isFinite(v) ? v : 0;
+}
+
+/**
+ * Median hours between consecutive logged runs, or null with fewer than two.
+ * The cron asks for a run every 90 minutes; this is what GitHub delivered.
+ */
+export function medianGapHours(runs: PipelineRun[]): number | null {
+  const times = runs
+    .map((r) => Date.parse(r.started))
+    .filter((t) => !Number.isNaN(t))
+    .sort((a, b) => a - b);
+  if (times.length < 2) return null;
+  const gaps = times.slice(1).map((t, i) => (t - times[i]) / 3_600_000).sort((a, b) => a - b);
+  const mid = Math.floor(gaps.length / 2);
+  return gaps.length % 2 ? gaps[mid] : (gaps[mid - 1] + gaps[mid]) / 2;
+}
 
 export async function getPipeline(): Promise<Pipeline> {
   const db = await getDb();
@@ -500,6 +732,9 @@ export async function getPipeline(): Promise<Pipeline> {
        WHERE f.status IN ${COUNTED} AND ${TRANSCRIBED}`
     )
     .get() as Pipeline["transcribed"];
+  const runLog = db.prepare("SELECT value FROM sync_state WHERE key = 'recent_runs'").get() as
+    | { value: string | null }
+    | undefined;
 
   return {
     byStatus,
@@ -510,5 +745,388 @@ export async function getPipeline(): Promise<Pipeline> {
     failures,
     coverage,
     transcribed,
+    runs: parseRecentRuns(runLog?.value ?? null).slice(0, RUNS_SHOWN),
   };
+}
+
+/* --------------------------------------------------------- late disclosures */
+//
+// `/politicians?view=late`. Everything here is a re-cut of the measure the
+// politicians tiles already report — trade date → filing date, more than 45
+// days — so each query must reconcile with `getPoliticianTotals` (see
+// late.test.ts). The report's "Notification Date" column is never used: it
+// reads 0 for a member trading their own account.
+
+export type LateMemberRow = {
+  member_name: string;
+  party: string | null;
+  state: string | null;
+  district: string | null;
+  chamber: string | null;
+  /** Every counted trade by the member, late or not. */
+  trades: number;
+  late_count: number;
+  /** Distinct filings that carried at least one late trade. */
+  late_filings: number;
+  /** Longest trade → filing delay among the late trades, in days. */
+  worst_delay: number;
+  /** Mean delay of the late trades only. */
+  avg_late_delay: number;
+  last_late_filing: string | null;
+};
+
+/**
+ * Members ranked by trades disclosed past the deadline, worst delay as the
+ * tie-break. Grouped on the display name like `getPoliticians`, so the sum
+ * of `late_count` over every row is exactly the tiles' `late_trades` and the
+ * row count their `members_late`: the ranking and the tiles are one measure.
+ */
+export async function getLateMembers(limit = 60): Promise<LateMemberRow[]> {
+  const db = await getDb();
+  return db
+    .prepare(
+      `SELECT COALESCE(p.full_name, f.filer_name) AS member_name,
+              p.party, p.state, p.district, p.chamber,
+              COUNT(*) AS trades,
+              SUM(CASE WHEN ${LATE} THEN 1 ELSE 0 END) AS late_count,
+              COUNT(DISTINCT CASE WHEN ${LATE} THEN f.id END) AS late_filings,
+              MAX(CASE WHEN ${LATE} THEN ${DELAY} END) AS worst_delay,
+              AVG(CASE WHEN ${LATE} THEN ${DELAY} END) AS avg_late_delay,
+              MAX(CASE WHEN ${LATE} THEN f.filing_date END) AS last_late_filing
+       FROM transactions t
+       JOIN filings f ON f.id = t.filing_id
+       LEFT JOIN politicians p ON p.id = t.politician_id
+       WHERE f.status IN ${COUNTED}
+       GROUP BY member_name
+       HAVING late_count > 0
+       ORDER BY late_count DESC, worst_delay DESC, member_name
+       LIMIT ?`
+    )
+    .all(limit) as LateMemberRow[];
+}
+
+export type LateMonthRow = {
+  /** YYYY-MM of the filing date. */
+  month: string;
+  filings: number;
+  trades: number;
+  late_trades: number;
+  late_filings: number;
+  members_late: number;
+};
+
+/**
+ * Late share by month of *filing*, not of trade. A trade made last month
+ * cannot be late yet, and the ones that will be are not in the database
+ * until they are filed, so a series on trade month would always show the
+ * recent months as cleaner than they are. A month's filings are complete
+ * once the month is over. Sums to the same `late_trades` as the tiles.
+ */
+export async function getLateMonthly(): Promise<LateMonthRow[]> {
+  const db = await getDb();
+  return db
+    .prepare(
+      `SELECT substr(f.filing_date, 1, 7) AS month,
+              COUNT(DISTINCT f.id) AS filings,
+              COUNT(*) AS trades,
+              SUM(CASE WHEN ${LATE} THEN 1 ELSE 0 END) AS late_trades,
+              COUNT(DISTINCT CASE WHEN ${LATE} THEN f.id END) AS late_filings,
+              COUNT(DISTINCT CASE WHEN ${LATE} THEN COALESCE(p.full_name, f.filer_name) END)
+                AS members_late
+       FROM transactions t
+       JOIN filings f ON f.id = t.filing_id
+       LEFT JOIN politicians p ON p.id = t.politician_id
+       WHERE f.status IN ${COUNTED} AND f.filing_date IS NOT NULL
+       GROUP BY month
+       ORDER BY month`
+    )
+    .all() as LateMonthRow[];
+}
+
+export type LateTotals = {
+  trades: number;
+  filings: number;
+  late_trades: number;
+  /** Filings with at least one late trade. */
+  late_filings: number;
+  /** Filings whose every trade was late — the ones the Telegram message
+   *  leads with "late by N days" for. */
+  all_late_filings: number;
+  worst_delay: number | null;
+};
+
+/** Headline figures for the late view, over the whole dataset. */
+export async function getLateTotals(): Promise<LateTotals> {
+  const db = await getDb();
+  return db
+    .prepare(
+      `WITH per_filing AS (
+         SELECT f.id,
+                COUNT(*) AS trades,
+                SUM(CASE WHEN ${LATE} THEN 1 ELSE 0 END) AS late,
+                MAX(${DELAY}) AS worst
+         FROM transactions t
+         JOIN filings f ON f.id = t.filing_id
+         WHERE f.status IN ${COUNTED}
+         GROUP BY f.id
+       )
+       SELECT COALESCE(SUM(trades), 0) AS trades,
+              COUNT(*) AS filings,
+              COALESCE(SUM(late), 0) AS late_trades,
+              COALESCE(SUM(late > 0), 0) AS late_filings,
+              COALESCE(SUM(late = trades), 0) AS all_late_filings,
+              MAX(worst) AS worst_delay
+       FROM per_filing`
+    )
+    .get() as LateTotals;
+}
+
+export type LateTradeRow = TransactionRow & {
+  filing_id: number;
+  /** Never NULL here: a row is only selected when its delay is past the deadline. */
+  delay_days: number;
+};
+
+export type LateFiling = {
+  filing_id: number;
+  doc_id: string;
+  chamber: string | null;
+  member_name: string;
+  party: string | null;
+  state: string | null;
+  district: string | null;
+  filing_date: string | null;
+  pdf_url: string;
+  /** Every row in the filing, late or not. */
+  trades: number;
+  /** The rows past the deadline, longest delay first. */
+  late: LateTradeRow[];
+};
+
+/**
+ * The newest filings that disclose a trade past the deadline, each with its
+ * late rows and each row's own delay — the evidence behind the counts.
+ * `limit` counts filings, not rows: a filing's late rows are never cut.
+ */
+export async function getLateFilings(limit = 25): Promise<LateFiling[]> {
+  const db = await getDb();
+  const rows = db
+    .prepare(
+      `WITH late_filings AS (
+         SELECT f.id
+         FROM transactions t
+         JOIN filings f ON f.id = t.filing_id
+         WHERE f.status IN ${COUNTED} AND ${LATE}
+         GROUP BY f.id
+         ORDER BY f.filing_date DESC, f.id DESC
+         LIMIT ?
+       )
+       SELECT t.id, t.tx_date, t.notification_date, t.action, t.ticker, t.asset_name,
+              t.asset_type, t.owner, t.amount_min_cents, t.amount_max_cents,
+              t.amount_exact_cents,
+              COALESCE(p.full_name, f.filer_name) AS member_name,
+              p.party, p.state, p.district,
+              COALESCE(p.chamber, f.chamber) AS chamber,
+              f.pdf_url, f.filing_date,
+              ${DELAY} AS delay_days,
+              ${LAG} AS lag_days,
+              CASE WHEN julianday(t.notification_date) < julianday(t.tx_date)
+                   THEN 1 ELSE 0 END AS dates_inconsistent,
+              ${TRANSCRIBED} AS transcribed,
+              f.doc_id,
+              f.id AS filing_id,
+              (SELECT COUNT(*) FROM transactions x WHERE x.filing_id = f.id) AS filing_trades
+       FROM transactions t
+       JOIN filings f ON f.id = t.filing_id
+       LEFT JOIN politicians p ON p.id = t.politician_id
+       WHERE f.id IN (SELECT id FROM late_filings) AND ${LATE}
+       ORDER BY f.filing_date DESC, f.id DESC, delay_days DESC, t.id`
+    )
+    .all(limit) as (LateTradeRow & { filing_trades: number })[];
+
+  const out: LateFiling[] = [];
+  for (const r of rows) {
+    const last = out[out.length - 1];
+    if (last && last.filing_id === r.filing_id) {
+      last.late.push(r);
+      continue;
+    }
+    out.push({
+      filing_id: r.filing_id,
+      doc_id: r.doc_id,
+      chamber: r.chamber,
+      member_name: r.member_name,
+      party: r.party,
+      state: r.state,
+      district: r.district,
+      filing_date: r.filing_date,
+      pdf_url: r.pdf_url,
+      trades: r.filing_trades,
+      late: [r],
+    });
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------- committees */
+
+/**
+ * Whether a table exists. The committee tables (#56) arrive with schema
+ * version 10, which the pipeline applies on its next run; until then the
+ * committed database the dashboard fetches has no such table, and a member
+ * page must render without committees rather than as an error.
+ */
+export function hasTable(db: import("better-sqlite3").Database, name: string): boolean {
+  return (
+    db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name) !==
+    undefined
+  );
+}
+
+export type CommitteeRow = {
+  thomas_id: string;
+  /** Set on a subcommittee; the full committee's id. */
+  parent_id: string | null;
+  parent_name: string | null;
+  chamber: "house" | "senate" | "joint";
+  name: string;
+  house_committee_id: string | null;
+  senate_committee_id: string | null;
+  url: string | null;
+  jurisdiction: string | null;
+  jurisdiction_source: string | null;
+};
+
+/** One member's seat on one committee or subcommittee. */
+export type CommitteeSeatRow = {
+  thomas_id: string;
+  name: string;
+  chamber: "house" | "senate" | "joint";
+  parent_id: string | null;
+  parent_name: string | null;
+  /** Seniority within the member's side; 1 is the chair or ranking member. */
+  rank: number | null;
+  /** 'majority' | 'minority' — the side, not D/R. */
+  side: string | null;
+  title: string | null;
+  /** Only joint committees say which chamber a seat is held for. */
+  seat_chamber: string | null;
+};
+
+/**
+ * The committees a member sits on, in the current Congress. Keyed on the
+ * display name like every other member query. Full committees come first,
+ * each followed by the subcommittees under it that the member also sits on.
+ */
+export async function getPoliticianCommittees(member: string): Promise<CommitteeSeatRow[]> {
+  const db = await getDb();
+  if (!hasTable(db, "committee_members")) return [];
+  return db
+    .prepare(
+      `SELECT c.thomas_id, c.name, c.chamber, c.parent_id, pc.name AS parent_name,
+              cm.rank, cm.party AS side, cm.title, cm.chamber AS seat_chamber
+       FROM committee_members cm
+       JOIN committees c ON c.thomas_id = cm.committee_id
+       LEFT JOIN committees pc ON pc.thomas_id = c.parent_id
+       JOIN politicians p ON p.id = cm.politician_id
+       WHERE p.full_name = ?
+       ORDER BY COALESCE(c.parent_id, c.thomas_id), c.parent_id IS NOT NULL, c.name`
+    )
+    .all(member) as CommitteeSeatRow[];
+}
+
+export async function getCommittee(id: string): Promise<CommitteeRow | null> {
+  const db = await getDb();
+  if (!hasTable(db, "committees")) return null;
+  const row = db
+    .prepare(
+      `SELECT c.thomas_id, c.parent_id, pc.name AS parent_name, c.chamber, c.name,
+              c.house_committee_id, c.senate_committee_id, c.url, c.jurisdiction,
+              c.jurisdiction_source
+       FROM committees c
+       LEFT JOIN committees pc ON pc.thomas_id = c.parent_id
+       WHERE c.thomas_id = ?`
+    )
+    .get(id.toUpperCase()) as CommitteeRow | undefined;
+  return row ?? null;
+}
+
+export type SubcommitteeRow = { thomas_id: string; name: string; members: number };
+
+export async function getSubcommittees(id: string): Promise<SubcommitteeRow[]> {
+  const db = await getDb();
+  if (!hasTable(db, "committees")) return [];
+  return db
+    .prepare(
+      `SELECT c.thomas_id, c.name, COUNT(cm.politician_id) AS members
+       FROM committees c
+       LEFT JOIN committee_members cm ON cm.committee_id = c.thomas_id
+       WHERE c.parent_id = ?
+       GROUP BY c.thomas_id
+       ORDER BY c.name`
+    )
+    .all(id.toUpperCase()) as SubcommitteeRow[];
+}
+
+export type CommitteeMemberRow = PoliticianRow & {
+  bioguide_id: string | null;
+  rank: number | null;
+  side: string | null;
+  title: string | null;
+  seat_chamber: string | null;
+};
+
+/**
+ * Every seat on one committee with the holder's trading totals — the whole
+ * record of each member, aggregated the way `getPoliticianDetail` does (by
+ * display name), so a member's figures agree between the two pages. Members
+ * with no disclosed trades are listed too, with zeros: an empty row is a
+ * fact about the committee, not something to hide. Traders first, then the
+ * rest in roster order (majority side, then rank).
+ */
+export async function getCommitteeMembers(id: string): Promise<CommitteeMemberRow[]> {
+  const db = await getDb();
+  if (!hasTable(db, "committee_members")) return [];
+  return db
+    .prepare(
+      `WITH seats AS (
+         SELECT cm.politician_id, cm.rank, cm.party AS side, cm.title, cm.chamber AS seat_chamber,
+                p.full_name AS member_name, p.bioguide_id, p.party, p.state, p.district, p.chamber
+         FROM committee_members cm
+         JOIN politicians p ON p.id = cm.politician_id
+         WHERE cm.committee_id = ?
+       ),
+       totals AS (
+         SELECT COALESCE(p.full_name, f.filer_name) AS member_name,
+                COUNT(*) AS trades,
+                COUNT(DISTINCT t.ticker) AS tickers,
+                SUM(t.action='purchase') AS buys,
+                SUM(t.action IN ('sale','sale_partial')) AS sells,
+                SUM(COALESCE(${MID},0)) AS volume_mid,
+                SUM(${TRANSCRIBED}) AS transcribed,
+                AVG(${DELAY}) AS avg_delay,
+                AVG(${LAG}) AS avg_lag,
+                SUM(CASE WHEN ${DELAY} > 45 THEN 1 ELSE 0 END) AS late_count
+         FROM transactions t
+         JOIN filings f ON f.id = t.filing_id
+         LEFT JOIN politicians p ON p.id = t.politician_id
+         WHERE f.status IN ${COUNTED}
+           AND COALESCE(p.full_name, f.filer_name) IN (SELECT member_name FROM seats)
+         GROUP BY member_name
+       )
+       SELECT s.member_name, s.bioguide_id, s.party, s.state, s.district, s.chamber,
+              s.rank, s.side, s.title, s.seat_chamber,
+              COALESCE(x.trades, 0) AS trades,
+              COALESCE(x.tickers, 0) AS tickers,
+              COALESCE(x.buys, 0) AS buys,
+              COALESCE(x.sells, 0) AS sells,
+              COALESCE(x.volume_mid, 0) AS volume_mid,
+              COALESCE(x.transcribed, 0) AS transcribed,
+              x.avg_delay, x.avg_lag,
+              COALESCE(x.late_count, 0) AS late_count
+       FROM seats s
+       LEFT JOIN totals x ON x.member_name = s.member_name
+       ORDER BY volume_mid DESC, trades DESC, s.side, s.rank, s.member_name`
+    )
+    .all(id.toUpperCase()) as CommitteeMemberRow[];
 }

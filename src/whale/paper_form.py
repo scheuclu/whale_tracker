@@ -23,12 +23,13 @@ type columns are Purchase/Sale/Partial Sale/Exchange, three are
 Purchase/Sale/Exchange.
 
 It decides nothing it cannot measure. A row with no mark, or two, in a grid
-is reported as unknown for that field, never a guess, and a page with a
-table that cannot be decomposed makes the whole filing unreadable — its rows
-would otherwise be missing from the join with the transcription. A page
-with no table at all (a scanner separator sheet, a blank side, a cover
-letter) contributes no rows; the join catches a transcription that found
-transactions there.
+is reported as unknown for that field, never a guess. A page with a table
+that cannot be decomposed is returned with the reason on it (`GridPage.error`)
+and no rows: the join (`vision.join`) matches the transcription page by
+page, so that page alone yields nothing and the rest of the filing is still
+read. A page with no table at all (a scanner separator sheet, a blank side,
+a cover letter) contributes no rows; the join catches a transcription that
+found transactions there.
 
 numpy is imported lazily so the package imports without it; it lives in the
 `vision` extra, which is what the scheduled workflow installs.
@@ -220,6 +221,9 @@ class GridPage:
     layout: Layout | None = None
     # No table on the page: blank, a separator sheet, a cover letter.
     no_table: bool = False
+    # Why the page's table could not be decomposed, when it could not. Such
+    # a page has no rows; the filing's other pages are read regardless.
+    error: str | None = None
     # Geometry of the oriented page, in pixels at RENDER_DPI: its size and
     # the column edges of the amount, type and flag blocks — what an overlay
     # needs to draw the reader's decisions on the page.
@@ -239,16 +243,35 @@ class GridReading:
         """Transaction rows across every page, in page order."""
         return [r for p in self.pages for r in p.rows if r.populated]
 
+    @property
+    def unread(self) -> list[GridPage]:
+        """Pages with a table the reader could not decompose."""
+        return [p for p in self.pages if p.error]
+
+    @property
+    def readable(self) -> bool:
+        """Whether any page's table was decomposed."""
+        return any(p.layout is not None for p in self.pages)
+
 
 def read_pdf(pdf_bytes: bytes) -> GridReading:
-    """Read every page's grids. Raises GridNotFound if any page with a table
-    cannot be decomposed."""
+    """Read every page's grids. A page with a table that cannot be
+    decomposed is returned with `error` set and no rows; nothing raises."""
     pages: list[GridPage] = []
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         for index, page in enumerate(pdf.pages):
             image = page.to_image(resolution=RENDER_DPI).original
-            pages.append(read_page(image, index))
+            pages.append(try_read_page(image, index))
     return GridReading(pages)
+
+
+def try_read_page(image, index: int = 0) -> GridPage:
+    """`read_page`, with a page that cannot be decomposed returned as a
+    rowless GridPage carrying the reason rather than raised."""
+    try:
+        return read_page(image, index)
+    except GridNotFound as exc:
+        return GridPage(index, 0, [], error=str(exc), width=image.width, height=image.height)
 
 
 def read_page(image, index: int = 0) -> GridPage:
