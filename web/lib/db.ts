@@ -21,11 +21,10 @@ const DB_PATH_IN_REPO = process.env.TRADES_DB_PATH ?? "data/trades.sqlite3";
 // is accepted too, but it is a generic name that collides with other tooling's
 // conventions, so it is the fallback rather than the documented one.
 const DB_TOKEN = process.env.TRADES_DB_TOKEN ?? process.env.GITHUB_TOKEN;
-// TRADES_DB_FILE opens a specific local file instead of the working copy —
-// a migrated /tmp copy of the production database for a local render or a
-// test, since the committed file is never modified in place.
-const LOCAL_DB =
-  process.env.TRADES_DB_FILE ?? path.join(process.cwd(), "..", "data", "trades.sqlite3");
+// TRADES_DB_FILE opens a specific local file instead of the working copy (a
+// migrated /tmp copy for a render or a test); it is read in `refresh`, not
+// folded in here — see the note there about Turbopack's tracing.
+const LOCAL_DB = path.join(process.cwd(), "..", "data", "trades.sqlite3");
 const TTL_MS = 120_000;
 /** Grace period before closing a superseded handle in-flight queries may hold. */
 const RETIRE_MS = 60_000;
