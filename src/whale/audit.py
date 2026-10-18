@@ -26,7 +26,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from .amounts import BRACKETS
-from .db import COUNTED_STATUSES, connect
+from .db import ALERTS_RECORDED_SINCE, COUNTED_STATUSES, connect
 from .stats import TRANSCRIBED_METHOD
 
 # Severity ordering, worst first.
@@ -473,18 +473,66 @@ def check_transaction_density(conn, today: date | None = None) -> list[Finding]:
 
 
 def check_alert_health(conn, today: date | None = None) -> list[Finding]:
-    """Whether cluster alerting is doing anything at all."""
-    n = conn.execute("SELECT COUNT(*) c FROM alerts").fetchone()["c"]
-    last = conn.execute("SELECT MAX(fired_at) t FROM alerts").fetchone()["t"]
-    if n == 0:
+    """Whether alerting is doing anything at all, and of which kinds."""
+    rows = _rows(conn, "SELECT kind, COUNT(*) n, MAX(fired_at) last FROM alerts "
+                       "GROUP BY kind ORDER BY kind")
+    if not rows:
         return [Finding(
-            INFO, "no_cluster_alerts",
-            "No cluster alert has ever fired",
+            INFO, "no_alerts",
+            "No alert has ever fired",
             "Expected on a young database. If it persists with months of data, "
             "the thresholds in config.yaml are set too high to ever trigger.",
         )]
-    return [Finding(INFO, "cluster_alerts", f"{n} cluster alert(s) fired, most recent {last}",
-                    "Cluster alerting is active.")]
+    total = sum(r["n"] for r in rows)
+    last = max(r["last"] for r in rows)
+    return [Finding(
+        INFO, "alerts_recorded", f"{total} alert(s) recorded, most recent {last}",
+        "Alerting is active. Every alert sent, with its message, is on the "
+        "dashboard's /alerts page.",
+        [f"{r['kind']:<16} {r['n']:>5}  last {r['last']}" for r in rows],
+    )]
+
+
+def check_alert_recording(conn, today: date | None = None) -> list[Finding]:
+    """Every alert delivered since the log began must have a row in `alerts`.
+
+    The /alerts page claims to be the complete history, so a delivery path
+    that forgot to log would read as a quiet week. Keyed on status
+    'notified', not `notified_at`: a backfill marks filings notified without
+    sending anything, and only the notify step sets the status itself.
+    Unreadable filings (status 'failed', reported by link) have no such
+    distinction and are not checked.
+    """
+    marker = conn.execute("SELECT value FROM sync_state WHERE key = ?",
+                          (ALERTS_RECORDED_SINCE,)).fetchone()
+    if marker is None or not marker["value"]:
+        return [Finding(
+            WARN, "alert_recording_unknown",
+            "Cannot tell whether alerts are being recorded",
+            "The `alerts_recorded_since` marker written by schema migration 13 is "
+            "missing, so there is no point before which an unlogged alert is "
+            "expected. Treat as unknown, not as a pass.",
+        )]
+    since = marker["value"]
+    missing = _rows(conn, """
+        SELECT doc_id AS ref, filer_name AS who, notified_at FROM filings f
+        WHERE f.status = 'notified' AND f.notified_at >= ?
+          AND NOT EXISTS (SELECT 1 FROM alerts a WHERE a.filing_id = f.id)""", (since,))
+    missing += _rows(conn, """
+        SELECT accession AS ref, issuer_name AS who, notified_at FROM insider_filings f
+        WHERE f.status = 'notified' AND f.notified_at >= ?
+          AND NOT EXISTS (SELECT 1 FROM alerts a WHERE a.insider_filing_id = f.id)""",
+                     (since,))
+    if not missing:
+        return []
+    return [Finding(
+        WARN, "alert_unrecorded",
+        f"{len(missing)} delivered alert(s) have no row in `alerts`",
+        f"These filings were marked notified after {since}, when every delivery "
+        "began logging its message, yet nothing was logged for them. The /alerts "
+        "page is missing them: a notify path is not calling `db.record_alert`.",
+        [f"{r['ref']}  {r['who']}  notified {r['notified_at']}" for r in missing],
+    )]
 
 
 def check_senate(conn, today: date | None = None) -> list[Finding]:
@@ -922,6 +970,7 @@ CHECKS = (
     check_vision_rows,
     check_transaction_density,
     check_alert_health,
+    check_alert_recording,
     check_senate,
     check_senate_parse_coverage,
     check_insider_empty_filings,

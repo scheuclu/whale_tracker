@@ -1,5 +1,6 @@
 import { getPipeline } from "@/lib/queries";
 import { getInsiderPipeline } from "@/lib/insider-queries";
+import { getAlertTotals, KIND_LABEL, type AlertKind } from "@/lib/alert-queries";
 import { relativeTime } from "@/lib/format";
 import { Card, Empty, SectionTitle, StatTile } from "../charts";
 import { StatusBadge } from "../ui";
@@ -7,9 +8,9 @@ import { StatusBadge } from "../ui";
 export const dynamic = "force-dynamic";
 
 export default async function PipelinePage() {
-  let p, ins;
+  let p, ins, alerts;
   try {
-    [p, ins] = await Promise.all([getPipeline(), getInsiderPipeline()]);
+    [p, ins, alerts] = await Promise.all([getPipeline(), getInsiderPipeline(), getAlertTotals()]);
   } catch (err) {
     return <Empty>{(err as Error).message}</Empty>;
   }
@@ -182,6 +183,45 @@ export default async function PipelinePage() {
             </p>
           </Card>
         </div>
+      </section>
+
+      <section>
+        <SectionTitle
+          right={
+            <a
+              href="/alerts"
+              className="text-[11px] text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
+            >
+              every alert, with its message
+            </a>
+          }
+        >
+          Alerts sent
+        </SectionTitle>
+        <Card className="space-y-1.5">
+          <p className="text-[13px]">
+            {alerts.total ? `${alerts.total.toLocaleString()} alerts logged` : "No alert has fired yet"}
+            {alerts.last_fired ? ` · last ${relativeTime(alerts.last_fired)}` : ""}
+          </p>
+          {alerts.byKind.length ? (
+            <p className="text-xs text-muted-foreground">
+              {alerts.byKind
+                .map((k) => `${k.total.toLocaleString()} ${(KIND_LABEL[k.kind as AlertKind] ?? k.kind).toLowerCase()}`)
+                .join(" · ")}
+            </p>
+          ) : null}
+          <p className="text-[11px] text-muted-foreground">
+            {alerts.recorded_since
+              ? `Every alert sent since ${alerts.recorded_since.slice(0, 10)} is logged with its participants, ` +
+                "disclosed range and message text; earlier rows kept only the cluster dedupe fields."
+              : "Only the cluster dedupe rows are logged until the pipeline next runs on schema 13; " +
+                "from then on every kind is, with its message text."}{" "}
+            <a href="/alerts" className="underline underline-offset-2 hover:text-primary">
+              Open the alert log
+            </a>
+            .
+          </p>
+        </Card>
       </section>
 
       {ins?.failures.length ? (

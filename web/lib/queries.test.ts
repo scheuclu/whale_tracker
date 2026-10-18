@@ -4,6 +4,7 @@ import { test } from "node:test";
 import * as q from "./queries.ts";
 import * as iq from "./insider-queries.ts";
 import * as sq from "./scan-queries.ts";
+import * as aq from "./alert-queries.ts";
 
 // Every query the dashboard runs, executed against the committed database.
 // A page renders its error inside a 200 response, so a broken query is
@@ -32,6 +33,10 @@ const calls: Array<[string, () => Promise<unknown>]> = [
   ["getScanFiling", () => sq.getScanFiling("9116308")],
   ["getScanTotals", () => sq.getScanTotals()],
   ["getScanPagePng", () => sq.getScanPagePng(1, 1)],
+  ["getAlerts", () => aq.getAlerts({ limit: 5 })],
+  ["getAlerts(cluster)", () => aq.getAlerts({ kind: "cluster", limit: 5 })],
+  ["getAlertTotals", () => aq.getAlertTotals()],
+  ["getAlertsPerWeek", () => aq.getAlertsPerWeek(8)],
 ];
 
 for (const [name, run] of calls) {

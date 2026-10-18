@@ -113,6 +113,20 @@ export function relativeTime(iso: string | null): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
+/**
+ * A Telegram message as plain text. The bot sends HTML parse mode — <b>,
+ * <i> and escaped &amp; &lt; &gt; — and the alert log keeps that text
+ * exactly as sent, so the page strips the tags and restores the entities
+ * rather than re-rendering anything.
+ */
+export function telegramPlainText(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, "")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+
 /** Share counts as filed; fractional shares keep up to two decimals. */
 export function shares(n: number | null | undefined): string {
   if (n == null) return "—";

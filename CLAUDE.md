@@ -246,6 +246,33 @@ parser stays faithful to the PDF and the UI flags the row rather than
   failed send is judged afresh next run. The congressional watchlist is a
   different mechanism and stays exempt from this and any other suppression.
 
+## Alert log (`/alerts`)
+
+- `alerts` is **one row per message sent**, of every kind (`stats.ALERT_KINDS`:
+  `cluster`, `insider_cluster`, `filing`, `watchlist`, `insider_filing`), and
+  still the dedupe store for the two cluster kinds. `db.last_alert` **must**
+  keep being called with a kind. `politician_count` holds whatever the kind
+  counts; a watched filing logs one row per transaction because each is its
+  own message.
+- Log **only on delivery, never on `--dry-run`**, in the same commit as
+  `mark_notified`. A failed send leaves no row; a replayed watchlist filing
+  logs its repeats, because the log describes what was sent, not what was
+  meant.
+- `ticker`/`direction` are NULL when the alert is not about one ticker in one
+  direction (a filing spanning several, a Treasury roll with none). Volume is
+  the disclosed range plus the midpoint estimate; insider values `min = max`;
+  all NULL when nothing was priced or read. `message` is the Telegram text
+  **as sent** — the dashboard strips its HTML and never re-renders one.
+- Schema 13 rebuilt the table (SQLite cannot relax NOT NULL in place); rows
+  before it carry only the dedupe fields and the page says so. The web
+  queries in `web/lib/alert-queries.ts` **tolerate the pre-13 shape**: the
+  dashboard reads the committed database, which migrates only when the
+  pipeline next runs, so a query assuming the new columns would take the page
+  down in between. `sync_state.alerts_recorded_since` marks the switch.
+- Audit `check_alert_recording` keys on `status = 'notified'`, not
+  `notified_at` — backfills set `notified_at` silently to mean "never
+  announce".
+
 ## Data-viz
 
 Charts are pure CSS/SVG in `web/app/charts.tsx`; no chart library. Colour roles

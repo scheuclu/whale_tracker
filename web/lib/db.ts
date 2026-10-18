@@ -69,7 +69,13 @@ function remoteSource(): { url: string; headers: Record<string, string> } | null
 async function refresh(): Promise<Database.Database> {
   const source = remoteSource();
   if (!source) {
-    if (!fs.existsSync(LOCAL_DB)) {
+    // TRADES_DB_FILE points a local run at another copy — a test migrating
+    // a scratch copy to a newer schema than the committed file. Read here,
+    // not folded into LOCAL_DB: Turbopack traces `fs.existsSync` on a path
+    // it cannot resolve statically and then bundles the whole repository
+    // into the server output.
+    const override = process.env.TRADES_DB_FILE;
+    if (!override && !fs.existsSync(LOCAL_DB)) {
       const onVercel = Boolean(process.env.VERCEL);
       throw new Error(
         onVercel
@@ -81,7 +87,7 @@ async function refresh(): Promise<Database.Database> {
             `or set TRADES_DB_REPO + TRADES_DB_TOKEN`
       );
     }
-    const db = new Database(LOCAL_DB, { readonly: true, fileMustExist: true });
+    const db = new Database(override ?? LOCAL_DB, { readonly: true, fileMustExist: true });
     const previous = cached;
     cached = { db, file: null, fetchedAt: Date.now() };
     if (previous) retire(previous);

@@ -276,8 +276,16 @@ def find_clusters(conn: sqlite3.Connection, settings: AlertSettings,
     return clusters
 
 
+# `alerts.kind`: what fired. The two cluster kinds are also dedupe keys, so
+# `db.last_alert` must always be asked for one of them by name. The other
+# three are logged per message so the /alerts page is the whole history.
 CLUSTER_KIND = "cluster"
 INSIDER_CLUSTER_KIND = "insider_cluster"
+FILING_KIND = "filing"
+WATCHLIST_KIND = "watchlist"
+INSIDER_FILING_KIND = "insider_filing"
+ALERT_KINDS = (CLUSTER_KIND, INSIDER_CLUSTER_KIND, FILING_KIND, WATCHLIST_KIND,
+               INSIDER_FILING_KIND)
 
 
 def is_new_cluster(conn: sqlite3.Connection, cluster: Cluster,
