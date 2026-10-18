@@ -166,7 +166,7 @@ export function BracketAmount({
         {range(min, max, exact)}
       </span>
       {exact != null ? (
-        <span className="rounded-sm border border-border px-1 text-[9.5px] font-medium uppercase tracking-wide text-muted-foreground">
+        <span className="rounded-[4px] border border-border px-1 text-[10px] font-medium uppercase leading-4 tracking-wide text-muted-foreground">
           exact
         </span>
       ) : null}
@@ -181,7 +181,7 @@ export function BracketAmount({
 export function BracketLegend({ className }: { className?: string }) {
   return (
     <span
-      className={cn("inline-flex items-center gap-1.5 text-[11px] text-muted-foreground", className)}
+      className={cn("inline-flex items-center gap-1.5 text-[12px] text-muted-foreground", className)}
       title={`STOCK Act value brackets, lowest to highest: ${BRACKETS.map((b) => b.label).join(", ")}`}
     >
       <span className="tabular">$1k</span>
