@@ -44,6 +44,7 @@ def steps(monkeypatch):
     # #55's issuer classification is a step of `run` too; its own status
     # write would otherwise reach the real `db.set_state`.
     monkeypatch.setattr(pipeline, "_classify_issuers", step("classify_issuers", None))
+    monkeypatch.setattr(pipeline, "_sync_prices", step("sync_prices", None))  # #53, likewise
     return calls
 
 
@@ -133,6 +134,8 @@ def test_a_failing_steps_uncommitted_work_is_not_committed_with_the_entry(
 
 
 def test_a_log_write_that_fails_does_not_fail_the_run(config, steps, monkeypatch, caplog):
+    db.connect(config.db_path).close()  # migrate first: schema 13 writes sync_state too
+
     def refuse(conn, key, value):
         raise RuntimeError("disk full")
     monkeypatch.setattr(db, "set_state", refuse)

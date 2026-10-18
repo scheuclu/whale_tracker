@@ -156,7 +156,10 @@ def _filing(conn, tx_dates, filing_date="2026-06-20", doc_id="20035491",
 
 
 def _alerts(conn):
-    return conn.execute("SELECT * FROM alerts ORDER BY id").fetchall()
+    # The late_filing rows only: since #52 the filing's own message is logged
+    # beside them as a `filing` row, which is that feature's concern.
+    return conn.execute("SELECT * FROM alerts WHERE kind = ? ORDER BY id",
+                        (LATE_FILING_KIND,)).fetchall()
 
 
 def test_late_filing_is_prefixed_and_recorded_once(conn, sent):

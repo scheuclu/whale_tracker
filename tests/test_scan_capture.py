@@ -44,7 +44,7 @@ def _scan_filing(conn, doc_id, method="scanned", status="failed"):
 # --- schema ------------------------------------------------------------------
 
 
-def test_schema_version_8_has_the_scan_tables(conn):
+def test_the_current_schema_has_the_scan_tables(conn):
     assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert {"scan_pages", "scan_rows"} <= tables

@@ -362,6 +362,32 @@ def _refresh_days(raw) -> int:
     return value
 
 
+# Where daily closes come from. Both are unofficial, key-less public series;
+# see prices.py for what each does and config.yaml for why the default is
+# what it is. Anything else is a typo that would silently price nothing.
+PRICE_SOURCES = ("yahoo", "stooq")
+
+
+def _price_source(raw) -> str:
+    value = str(raw or "").strip().lower()
+    if value not in PRICE_SOURCES:
+        raise ConfigError(
+            f"prices.source {raw!r} must be one of {list(PRICE_SOURCES)}")
+    return value
+
+
+@dataclass
+class PricesSettings:
+    """Daily closes for alerted tickers, and the alert-outcome measurement
+    built on them. See config.yaml."""
+
+    enabled: bool = True
+    source: str = "yahoo"
+    # Seconds one poll run may spend fetching; 0 = no limit. Tickers the
+    # budget leaves behind are refreshed on the next run.
+    budget_seconds: float = 60
+
+
 # What a watchlist entry may say. Same contract as the insider rules: an
 # unrecognised key is a typo, and a typo here would silently watch nobody.
 WATCH_KEYS = frozenset({"name", "bioguide_id", "every_trade"})
@@ -445,6 +471,7 @@ class Config:
     insiders: InsiderSettings = field(default_factory=InsiderSettings)
     issuers: IssuerSettings = field(default_factory=IssuerSettings)
     watchlist: WatchlistSettings = field(default_factory=WatchlistSettings)
+    prices: PricesSettings = field(default_factory=PricesSettings)
     senate_enabled: bool = True
     # Scanned-PDF transcription; see config.yaml for the measured accuracy
     # and the quarantine that lets it be on.
@@ -549,12 +576,20 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
 
     dashboard_url = str((raw.get("dashboard") or {}).get("url") or "").strip().rstrip("/") or None
 
+    p = raw.get("prices") or {}
+    prices = PricesSettings(
+        enabled=bool(p.get("enabled", True)),
+        source=_price_source(p.get("source", "yahoo")),
+        budget_seconds=_seconds(p.get("budget_seconds", 60), "prices.budget_seconds"),
+    )
+
     return Config(
         alerts=alerts,
         ingest=ingest,
         insiders=insiders,
         issuers=issuers,
         watchlist=watchlist,
+        prices=prices,
         senate_enabled=bool((raw.get("senate") or {}).get("enabled", True)),
         vision_enabled=bool((raw.get("vision") or {}).get("enabled", False)),
         vision_budget_seconds=_seconds((raw.get("vision") or {}).get("budget_seconds", 480),

@@ -26,6 +26,30 @@ exist; `failed` means the submission was fetched but its XML did not parse,
 kept so it is visible and re-parseable. The tables are deliberately separate
 from `filings`/`transactions`: every politician aggregate filters on status
 alone, so shared tables would fold insider volume into member leaderboards.
+
+`alerts` is the log of every Telegram message sent, one row per message, and
+the dedupe store for the cluster kinds. `kind` says what fired and
+`politician_count` holds whatever that kind counts:
+
+    cluster          members converging on one ticker      count = members
+    insider_cluster  insiders converging on one issuer     count = insiders
+    filing           one member's new disclosure           count = 1
+    watchlist        one transaction of a watched member   count = 1, a row per message
+    insider_filing   one Form 4 a rule claimed             count = 1 (a joint filing is one decision)
+
+`ticker` and `direction` are NULL when the alert is not about one ticker in
+one direction — a filing spanning several, or a Treasury roll with none — so
+the (ticker, direction, kind) key of the cluster dedupe is undisturbed.
+Volume is the disclosed range (insider values: min = max = exact), and
+`message` is the text exactly as sent; the dashboard never re-renders one.
+Rows from before schema 13 carry only the dedupe fields.
+
+`prices` holds daily closes for every ticker an alert has named, plus the
+benchmark, from an unofficial external series (`prices.py`); `price_fetches`
+is the per-ticker refresh record. `alert_outcomes` is derived from both once
+in Python (`stats.alert_outcomes`) and rebuilt after every price refresh:
+what the alerted ticker did at +5/+20/+60 trading days, minus the benchmark.
+SQL reads those columns and never re-derives them.
 """
 
 from __future__ import annotations
@@ -35,9 +59,30 @@ from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 14
 
-_DDL = """
+# The alerts table's columns, shared by the fresh-database DDL and the
+# version-13 rebuild so the two cannot drift.
+_ALERT_COLUMNS = """
+  id INTEGER PRIMARY KEY,
+  kind TEXT NOT NULL,
+  ticker TEXT,                         -- NULL when the alert is not about one ticker
+  direction TEXT,                      -- 'buy' | 'sell'; NULL when it spans both
+  window_days INTEGER NOT NULL DEFAULT 0,  -- 0 for a per-filing alert
+  politician_count INTEGER NOT NULL,   -- whatever the kind counts; see the module docstring
+  volume_min_cents INTEGER,            -- the disclosed range; insider values min = max = exact
+  volume_max_cents INTEGER,            -- NULL when a row is in the open-ended top bracket
+  volume_mid_cents INTEGER,            -- bracket midpoints: an estimate, labelled as one
+  fired_at TEXT NOT NULL,
+  participants TEXT,                   -- the names the message carried, comma-joined
+  rule_name TEXT,                      -- the config.yaml rule that claimed an insider alert
+  filing_id INTEGER REFERENCES filings(id) ON DELETE SET NULL,
+  transaction_id INTEGER REFERENCES transactions(id) ON DELETE SET NULL,
+  insider_filing_id INTEGER REFERENCES insider_filings(id) ON DELETE SET NULL,
+  message TEXT                         -- the Telegram text exactly as sent
+"""
+
+_DDL = f"""
 CREATE TABLE IF NOT EXISTS politicians (
   id INTEGER PRIMARY KEY,
   bioguide_id TEXT UNIQUE,
@@ -105,18 +150,11 @@ CREATE INDEX IF NOT EXISTS idx_tx_ticker ON transactions(ticker);
 CREATE INDEX IF NOT EXISTS idx_tx_date ON transactions(tx_date);
 CREATE INDEX IF NOT EXISTS idx_tx_filing ON transactions(filing_id);
 
--- Cluster-alert dedupe: one row per (ticker, direction) actually sent.
-CREATE TABLE IF NOT EXISTS alerts (
-  id INTEGER PRIMARY KEY,
-  kind TEXT NOT NULL,
-  ticker TEXT NOT NULL,
-  direction TEXT NOT NULL,
-  window_days INTEGER NOT NULL,
-  politician_count INTEGER NOT NULL,
-  volume_mid_cents INTEGER,
-  fired_at TEXT NOT NULL
-);
+-- Every alert sent, one row per message (see the module docstring), and the
+-- (ticker, direction, kind) dedupe for the cluster kinds.
+CREATE TABLE IF NOT EXISTS alerts ({_ALERT_COLUMNS});
 CREATE INDEX IF NOT EXISTS idx_alerts_key ON alerts(ticker, direction);
+CREATE INDEX IF NOT EXISTS idx_alerts_fired ON alerts(fired_at);
 
 CREATE TABLE IF NOT EXISTS sync_state (
   key TEXT PRIMARY KEY,
@@ -346,6 +384,50 @@ CREATE TABLE IF NOT EXISTS committee_members (
 CREATE INDEX IF NOT EXISTS idx_committee_members_politician ON committee_members(politician_id);
 """
 
+# Daily closes and what each alert's ticker did next (#53). `prices` is fed
+# from an unofficial external series by prices.py, for the alerted tickers
+# and the benchmark only, and only from shortly before the first alert: the
+# database is committed to git, so a full history per ticker has no place in
+# it. `alert_outcomes` is derived once in Python (stats.alert_outcomes) and
+# rebuilt after every refresh; SQL reads it and never re-derives a return.
+_PRICES_DDL = """
+CREATE TABLE IF NOT EXISTS prices (
+  ticker TEXT NOT NULL,
+  date TEXT NOT NULL,                  -- the session's date at the exchange, ISO
+  close REAL NOT NULL,                 -- split-adjusted close as the source serves it
+  source TEXT NOT NULL,                -- 'yahoo' | 'stooq'
+  fetched_at TEXT NOT NULL,
+  PRIMARY KEY (ticker, date)
+);
+
+-- One row per ticker: when it was last asked for and what came back, so the
+-- refresh is once a day per ticker and a symbol the source does not know is
+-- not asked about on every poll.
+CREATE TABLE IF NOT EXISTS price_fetches (
+  ticker TEXT PRIMARY KEY,
+  fetched_at TEXT NOT NULL,
+  status TEXT NOT NULL,                -- 'ok' | 'no_data' | 'error: ...'
+  bars INTEGER NOT NULL DEFAULT 0,     -- closes the last fetch returned
+  last_date TEXT                       -- newest close the last fetch returned
+);
+
+-- The alerted ticker's move after each alert, close to close, against the
+-- benchmark over the same trading days. Returns are fractions (0.012 = 1.2%)
+-- and NULL until the horizon exists in the price series. No row at all when
+-- the ticker has no close on or after the alert's date.
+CREATE TABLE IF NOT EXISTS alert_outcomes (
+  alert_id INTEGER PRIMARY KEY REFERENCES alerts(id) ON DELETE CASCADE,
+  ticker TEXT NOT NULL,
+  t0_date TEXT NOT NULL,               -- first trading day on/after the alert's US-Eastern date
+  t0_close REAL NOT NULL,
+  days_elapsed INTEGER NOT NULL,       -- trading days after t0 the benchmark series covers
+  ret_5 REAL,  bench_5 REAL,  excess_5 REAL,
+  ret_20 REAL, bench_20 REAL, excess_20 REAL,
+  ret_60 REAL, bench_60 REAL, excess_60 REAL,
+  computed_at TEXT NOT NULL
+);
+"""
+
 # Statuses whose transactions count toward statistics. A filing that failed to
 # parse contributes nothing, and one that is merely 'new' has no rows yet.
 COUNTED_STATUSES = ("parsed", "notified", "backfilled")
@@ -425,6 +507,21 @@ def _migrate(conn: sqlite3.Connection) -> None:
             from . import options
 
             options.backfill(conn)
+    if version < 13:
+        # Alerts page (#52): the table now logs every message sent, not only
+        # the cluster dedupe rows, so an alert is no longer always one ticker
+        # in one direction and the NOT NULL keys have to go. SQLite cannot
+        # relax a constraint in place, so the table is rebuilt; the existing
+        # rows keep their ids and dedupe fields. Numbered past the concurrent
+        # 9–12 migrations.
+        _widen_alerts(conn)
+        if get_state(conn, ALERTS_RECORDED_SINCE) is None:
+            set_state(conn, ALERTS_RECORDED_SINCE, now_iso())
+    if version < 14:
+        # Post-alert price outcomes (#53). Empty until the price step first
+        # runs; nothing to backfill at migration time. After the alerts
+        # rebuild above, so alert_outcomes can reference the rebuilt table.
+        conn.executescript(_PRICES_DDL)
     if version < SCHEMA_VERSION:
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         conn.commit()
@@ -442,6 +539,37 @@ def _add_column(conn: sqlite3.Connection, table: str, definition: str) -> bool:
     if name in present:
         return False
     conn.execute(f"ALTER TABLE {table} ADD COLUMN {definition}")
+    return True
+
+
+# sync_state key: when this database began logging every alert sent. Rows
+# fired before it carry only the dedupe fields, and the audit's recording
+# check looks only at filings notified after it.
+ALERTS_RECORDED_SINCE = "alerts_recorded_since"
+
+
+def _widen_alerts(conn: sqlite3.Connection) -> bool:
+    """Rebuild `alerts` from its cluster-only shape; returns whether it did.
+
+    A fresh database already has every column from the DDL and is left alone.
+    The rebuild copies the rows by id so nothing the cluster dedupe compares
+    against — kind, ticker, direction, window, count, time — moves.
+    """
+    present = {r[1] for r in conn.execute("PRAGMA table_info(alerts)")}
+    if "message" in present:
+        return False
+    conn.executescript(f"""
+        CREATE TABLE alerts_v13 ({_ALERT_COLUMNS});
+        INSERT INTO alerts_v13 (id, kind, ticker, direction, window_days,
+                                politician_count, volume_mid_cents, fired_at)
+          SELECT id, kind, ticker, direction, window_days,
+                 politician_count, volume_mid_cents, fired_at
+          FROM alerts ORDER BY id;
+        DROP TABLE alerts;
+        ALTER TABLE alerts_v13 RENAME TO alerts;
+        CREATE INDEX IF NOT EXISTS idx_alerts_key ON alerts(ticker, direction);
+        CREATE INDEX IF NOT EXISTS idx_alerts_fired ON alerts(fired_at);
+    """)
     return True
 
 
@@ -765,14 +893,106 @@ def last_alert(conn: sqlite3.Connection, ticker: str, direction: str,
     return conn.execute(sql + " ORDER BY fired_at DESC, id DESC LIMIT 1", params).fetchone()
 
 
-def record_alert(conn: sqlite3.Connection, kind: str, ticker: str, direction: str,
-                 window_days: int, politician_count: int,
-                 volume_mid_cents: int | None) -> None:
-    conn.execute(
+def record_alert(conn: sqlite3.Connection, kind: str, ticker: str | None,
+                 direction: str | None, window_days: int, politician_count: int,
+                 volume_mid_cents: int | None = None, *,
+                 volume_min_cents: int | None = None, volume_max_cents: int | None = None,
+                 participants: str | None = None, rule_name: str | None = None,
+                 filing_id: int | None = None, transaction_id: int | None = None,
+                 insider_filing_id: int | None = None, message: str | None = None) -> int:
+    """Log one message that was actually sent; returns the row id.
+
+    Called after delivery and never on a dry run: the log is the history of
+    what the user was told, so a row for a message that failed, or was only
+    previewed, would be a lie the dashboard then repeats. The volume is the
+    disclosed range — `volume_max_cents` NULL when a row sits in the
+    open-ended top bracket — and `volume_mid_cents` the bracket-midpoint
+    estimate the cluster thresholds compare against.
+    """
+    cur = conn.execute(
         "INSERT INTO alerts (kind, ticker, direction, window_days, politician_count,"
-        " volume_mid_cents, fired_at) VALUES (?,?,?,?,?,?,?)",
-        (kind, ticker, direction, window_days, politician_count, volume_mid_cents, now_iso()),
+        " volume_min_cents, volume_max_cents, volume_mid_cents, fired_at, participants,"
+        " rule_name, filing_id, transaction_id, insider_filing_id, message)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (kind, ticker, direction, window_days, politician_count, volume_min_cents,
+         volume_max_cents, volume_mid_cents, now_iso(), participants, rule_name,
+         filing_id, transaction_id, insider_filing_id, message),
     )
+    return cur.lastrowid
+
+
+# --- prices and outcomes ----------------------------------------------------
+
+
+def upsert_prices(conn: sqlite3.Connection, ticker: str, source: str,
+                  bars: Iterable[tuple[str, float]], fetched_at: str | None = None) -> int:
+    """Store (date, close) bars for a ticker, replacing any earlier close on
+    the same date; returns how many were written.
+
+    A refresh re-fetches the whole alert-era window, so a close the source
+    has since adjusted (a split) is corrected rather than left to disagree
+    with its neighbours. Rows from another source go first: two series for
+    one ticker would mix adjustment conventions in one return. Nothing is
+    deleted when the fetch returned nothing — an empty answer is not a
+    retraction.
+    """
+    rows = list(bars)
+    if not rows:
+        return 0
+    ts = fetched_at or now_iso()
+    conn.execute("DELETE FROM prices WHERE ticker = ? AND source != ?", (ticker, source))
+    conn.executemany(
+        "INSERT INTO prices (ticker, date, close, source, fetched_at) VALUES (?,?,?,?,?) "
+        "ON CONFLICT(ticker, date) DO UPDATE SET close=excluded.close, "
+        "source=excluded.source, fetched_at=excluded.fetched_at",
+        [(ticker, d, c, source, ts) for d, c in rows],
+    )
+    return len(rows)
+
+
+def record_price_fetch(conn: sqlite3.Connection, ticker: str, status: str,
+                       bars: int, last_date: str | None,
+                       fetched_at: str | None = None) -> None:
+    """Note a ticker's latest fetch. `fetched_at` is the run's own clock —
+    the once-a-day rule compares it with the run's date, so the two must
+    come from the same clock."""
+    conn.execute(
+        "INSERT INTO price_fetches (ticker, fetched_at, status, bars, last_date) "
+        "VALUES (?,?,?,?,?) ON CONFLICT(ticker) DO UPDATE SET fetched_at=excluded.fetched_at, "
+        "status=excluded.status, bars=excluded.bars, last_date=excluded.last_date",
+        (ticker, fetched_at or now_iso(), status, bars, last_date),
+    )
+
+
+def price_fetches(conn: sqlite3.Connection) -> dict[str, sqlite3.Row]:
+    return {r["ticker"]: r for r in conn.execute("SELECT * FROM price_fetches")}
+
+
+OUTCOME_COLUMNS = (
+    "alert_id", "ticker", "t0_date", "t0_close", "days_elapsed",
+    "ret_5", "bench_5", "excess_5", "ret_20", "bench_20", "excess_20",
+    "ret_60", "bench_60", "excess_60",
+)
+
+
+def replace_alert_outcomes(conn: sqlite3.Connection, rows: Iterable[dict]) -> int:
+    """Rebuild `alert_outcomes` from scratch; returns how many rows it holds.
+
+    A full rebuild rather than an upsert: an alert whose outcome can no longer
+    be computed (its ticker's series gone) must lose its row, not keep a stale
+    one, and the table is at most a few hundred rows.
+    """
+    conn.execute("DELETE FROM alert_outcomes")
+    ts = now_iso()
+    n = 0
+    for r in rows:
+        conn.execute(
+            f"INSERT INTO alert_outcomes ({', '.join(OUTCOME_COLUMNS)}, computed_at) "
+            f"VALUES ({', '.join('?' for _ in OUTCOME_COLUMNS)}, ?)",
+            [r[c] for c in OUTCOME_COLUMNS] + [ts],
+        )
+        n += 1
+    return n
 
 
 # --- sync state -------------------------------------------------------------
