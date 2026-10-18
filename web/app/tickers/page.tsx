@@ -7,6 +7,7 @@ import {
   MagnitudeBars,
   SectionTitle,
   StatTile,
+  VOLUME_NOTE,
   VolumeRange,
 } from "../charts";
 import { ActionBadge, Amount, DelayTag, OptionBadge, OwnerTag, PartyBadge, ResponsiveTable, ScanTag, SectorTag } from "../ui";
@@ -72,10 +73,13 @@ export default async function TickersPage({
                 key: r.ticker,
                 label: r.ticker,
                 sublabel: r.asset_name?.slice(0, 28) ?? undefined,
+                title: r.asset_name ?? undefined,
                 value: r.volume_mid,
                 valueLabel: usd(r.volume_mid),
+                detail: `disclosed ${range(r.volume_min, r.volume_max)}`,
                 href: `/tickers?t=${encodeURIComponent(r.ticker)}`,
               }))}
+              note={VOLUME_NOTE}
             />
             <p className="mt-3 text-[11px] text-muted-foreground">
               Estimated from disclosure brackets — see each ticker for the disclosed range.
@@ -199,7 +203,9 @@ function SectorLeaderboard({ sectors }: { sectors: SectorRow[] }) {
                 sublabel: `disclosed ${range(s.volume_min, s.volume_max)}`,
                 value: s.volume_mid,
                 valueLabel: usd(s.volume_mid),
+                detail: `disclosed ${range(s.volume_min, s.volume_max)}`,
               }))}
+              note={VOLUME_NOTE}
             />
             <p className="mt-3 text-[11px] text-muted-foreground">
               Bracket midpoints; the disclosed range is under each bar.

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
-import { getConsensusTickers, getPipeline, getTransactions } from "@/lib/queries";
+import { getConsensusTickers, getPipeline, getTransactions, getWeeklyActivity } from "@/lib/queries";
 import { memberHref, memberLabel, shortDate, usd } from "@/lib/format";
-import { Card, DivergingSplit, Empty, SectionTitle, StatTile } from "./charts";
+import { Card, DivergingSplit, Empty, SectionTitle, StatTile, type StatDelta } from "./charts";
 import {
   ActionBadge,
   Amount,
@@ -15,6 +15,32 @@ import {
 
 export const dynamic = "force-dynamic";
 
+/** The stat tiles' trend window: rolling 7-day buckets back from today. */
+const WEEKS = 12;
+
+/** "filed Oct 12–18" for each rolling week, oldest first — the sparkline's hover names. */
+function rollingWeekLabels(weeks: number): string[] {
+  const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  const now = Date.now();
+  const day = 86_400_000;
+  return Array.from({ length: weeks }, (_, i) => {
+    const ago = weeks - 1 - i;
+    return `filed ${fmt(new Date(now - (ago * 7 + 6) * day))}–${fmt(new Date(now - ago * 7 * day))}`;
+  });
+}
+
+/** Trades disclosed in the window against the equal window before it. No
+ *  delta when the corpus does not cover the earlier window. */
+function tradesDelta(current: number, prior: number | null): StatDelta | undefined {
+  if (prior == null || prior === 0) return undefined;
+  const pct = Math.round(((current - prior) / prior) * 100);
+  return {
+    direction: pct > 0 ? "up" : pct < 0 ? "down" : "flat",
+    text: `${pct > 0 ? "+" : pct < 0 ? "−" : ""}${Math.abs(pct)}% vs prior ${WEEKS} wk`,
+    title: `${current.toLocaleString()} trades disclosed in the last ${WEEKS} weeks, ${prior.toLocaleString()} in the ${WEEKS} before`,
+  };
+}
+
 export default async function FeedPage({
   searchParams,
 }: {
@@ -24,12 +50,13 @@ export default async function FeedPage({
   // The feed used to double as the member view; the member page replaced it.
   if (params.member) redirect(memberHref(params.member, params.action));
 
-  let rows, consensus, pipeline;
+  let rows, consensus, pipeline, weekly;
   try {
-    [rows, consensus, pipeline] = await Promise.all([
+    [rows, consensus, pipeline, weekly] = await Promise.all([
       getTransactions({ action: params.action, limit: 120 }),
       getConsensusTickers(90, 6),
       getPipeline(),
+      getWeeklyActivity(WEEKS),
     ]);
   } catch (err) {
     return <Empty>{(err as Error).message}</Empty>;
@@ -45,14 +72,40 @@ export default async function FeedPage({
     0
   );
   const transcribedShown = rows.filter((r) => r.transcribed).length;
+  const weekLabels = rollingWeekLabels(WEEKS);
 
   return (
     <div className="space-y-8">
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatTile label="Trades" value={pipeline.totals.transactions.toLocaleString()} hint="disclosed" />
-        <StatTile label="Tickers" value={pipeline.totals.tickers.toLocaleString()} />
-        <StatTile label="Members" value={pipeline.totals.members.toLocaleString()} hint="filing trades" />
-        <StatTile label="Filings" value={pipeline.coverage.parsed.toLocaleString()} hint="parsed" />
+        <StatTile
+          label="Trades"
+          value={pipeline.totals.transactions.toLocaleString()}
+          hint={`disclosed · ${weekly.window.trades.toLocaleString()} in last ${WEEKS} wk`}
+          trend={weekly.trades}
+          trendLabels={weekLabels}
+          trendCaption="per week"
+          trendLabel={`Trades disclosed per week, last ${WEEKS} weeks, by filing date`}
+          delta={tradesDelta(weekly.window.trades, weekly.priorTrades)}
+        />
+        <StatTile
+          label="Tickers"
+          value={pipeline.totals.tickers.toLocaleString()}
+          hint={`distinct symbols · ${weekly.window.tickers.toLocaleString()} in last ${WEEKS} wk`}
+        />
+        <StatTile
+          label="Members"
+          value={pipeline.totals.members.toLocaleString()}
+          hint={`filing trades · ${weekly.window.members.toLocaleString()} in last ${WEEKS} wk`}
+        />
+        <StatTile
+          label="Filings"
+          value={pipeline.coverage.parsed.toLocaleString()}
+          hint={`parsed · ${weekly.window.filings.toLocaleString()} in last ${WEEKS} wk`}
+          trend={weekly.filings}
+          trendLabels={weekLabels}
+          trendCaption="per week"
+          trendLabel={`Filings parsed per week, last ${WEEKS} weeks, by filing date`}
+        />
       </section>
 
       {consensus.length ? (
@@ -66,7 +119,7 @@ export default async function FeedPage({
               data={consensus.map((c) => ({
                 key: c.ticker,
                 label: c.ticker,
-                sublabel: c.asset_name?.slice(0, 26) ?? undefined,
+                sublabel: c.asset_name ?? undefined,
                 buy: c.buy_politicians,
                 sell: c.sell_politicians,
                 href: `/tickers?t=${encodeURIComponent(c.ticker)}`,

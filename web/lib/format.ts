@@ -9,12 +9,37 @@
  * labelled as such wherever they appear.
  */
 
+/**
+ * Compact dollars from cents: $950, $12,500 → $13k, $62.5M, $2.9B, $1.2T.
+ *
+ * The unit is chosen *after* rounding, so a figure never reads as 1,000 of a
+ * unit ("$1000M", "$1,000k") when it rounds up to the next one — and a
+ * value past a billion is never written as thousands of millions ("$2883M").
+ */
 export function usd(cents: number | null | undefined): string {
-  if (cents == null) return "—";
+  if (cents == null || !Number.isFinite(cents)) return "—";
   const d = cents / 100;
-  if (d >= 1_000_000) return `$${(d / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-  if (d >= 10_000) return `$${Math.round(d / 1_000).toLocaleString()}k`;
-  return `$${Math.round(d).toLocaleString()}`;
+  const sign = d < 0 ? "-" : "";
+  const a = Math.abs(d);
+  if (a >= 1e6) {
+    const units: [number, string][] = [
+      [1e6, "M"],
+      [1e9, "B"],
+      [1e12, "T"],
+    ];
+    let i = 0;
+    while (i < units.length - 1 && a >= units[i + 1][0]) i++;
+    let v = Number((a / units[i][0]).toFixed(1));
+    // $999.96M rounds to 1000.0M: that is $1B.
+    if (v >= 1000 && i < units.length - 1) v = Number((a / units[++i][0]).toFixed(1));
+    return `${sign}$${v.toFixed(1).replace(/\.0$/, "")}${units[i][1]}`;
+  }
+  if (a >= 10_000) {
+    const k = Math.round(a / 1_000);
+    // $999,600 rounds to 1,000k: that is $1M.
+    return k >= 1_000 ? `${sign}$1M` : `${sign}$${k.toLocaleString("en-US")}k`;
+  }
+  return `${sign}$${Math.round(a).toLocaleString("en-US")}`;
 }
 
 /** The disclosed interval. An open-ended top bracket renders as "≥$50M". */

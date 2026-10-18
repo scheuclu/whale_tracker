@@ -26,6 +26,7 @@ import {
   MagnitudeBars,
   SectionTitle,
   StatTile,
+  VOLUME_NOTE,
   VolumeRange,
 } from "../charts";
 import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, ResponsiveTable, ScanTag, SectorTag, TickerChip } from "../ui";
@@ -92,8 +93,13 @@ export default async function PoliticiansPage({
                 sublabel: `${r.party ?? "?"}-${r.state ?? "?"} · ${r.trades} trades`,
                 value: r.volume_mid,
                 valueLabel: usd(r.volume_mid),
+                detail:
+                  r.volume_min != null
+                    ? `disclosed ${range(r.volume_min, r.volume_max ?? null)}`
+                    : undefined,
                 href: memberHref(r.member_name),
               }))}
+              note={VOLUME_NOTE}
             />
           </Card>
         </div>
@@ -338,10 +344,13 @@ async function MemberDetail({ member, action }: { member: string; action?: strin
                 key: r.ticker,
                 label: r.ticker,
                 sublabel: r.asset_name?.slice(0, 28) ?? undefined,
+                title: r.asset_name ?? undefined,
                 value: r.volume_mid,
                 valueLabel: usd(r.volume_mid),
+                detail: `disclosed ${range(r.volume_min, r.volume_max)}`,
                 href: `/tickers?t=${encodeURIComponent(r.ticker)}`,
               }))}
+              note={VOLUME_NOTE}
             />
             <p className="mt-3 text-[11px] text-muted-foreground">
               Estimated from disclosure brackets. Assets without a ticker — Treasuries,
