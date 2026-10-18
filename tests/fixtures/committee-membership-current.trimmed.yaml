@@ -1,0 +1,123 @@
+# Trimmed from unitedstates/congress-legislators committee-membership-current.yaml
+HSIF:
+- name: Brett Guthrie
+  party: majority
+  rank: 1
+  title: Chair
+  bioguide: G000558
+- name: Robert E. Latta
+  party: majority
+  rank: 2
+  bioguide: L000566
+- name: H. Morgan Griffith
+  party: majority
+  rank: 3
+  bioguide: G000568
+- name: Frank Pallone, Jr.
+  party: minority
+  rank: 1
+  title: Ranking Member
+  bioguide: P000034
+- name: Diana DeGette
+  party: minority
+  rank: 2
+  bioguide: D000197
+HSIF17:
+- name: Gus M. Bilirakis
+  party: majority
+  rank: 1
+  title: Chair
+  bioguide: B001257
+- name: Russ Fulcher
+  party: majority
+  rank: 2
+  title: Vice Chair
+  bioguide: F000469
+- name: Janice D. Schakowsky
+  party: minority
+  rank: 1
+  title: Ranking Member
+  bioguide: S001145
+HSIF16:
+- name: Richard Hudson
+  party: majority
+  rank: 1
+  title: Chair
+  bioguide: H001067
+- name: Rick W. Allen
+  party: majority
+  rank: 2
+  title: Vice Chair
+  bioguide: A000372
+- name: Doris O. Matsui
+  party: minority
+  rank: 1
+  title: Ranking Member
+  bioguide: M001163
+JSEC:
+- name: Eric Schmitt
+  party: majority
+  rank: 1
+  title: Vice Chairman
+  bioguide: S001227
+  chamber: senate
+- name: David Schweikert
+  party: majority
+  rank: 1
+  title: Chairman
+  bioguide: S001183
+  chamber: house
+- name: Tom Cotton
+  party: majority
+  rank: 2
+  bioguide: C001095
+  chamber: senate
+- name: Margaret Wood Hassan
+  party: minority
+  rank: 1
+  title: Ranking Member
+  bioguide: H001076
+  chamber: senate
+- name: Amy Klobuchar
+  party: minority
+  rank: 2
+  bioguide: K000367
+  chamber: senate
+SSBK:
+- name: Tim Scott
+  party: majority
+  rank: 1
+  title: Chairman
+  bioguide: S001184
+- name: Mike Crapo
+  party: majority
+  rank: 2
+  bioguide: C000880
+- name: Mike Rounds
+  party: majority
+  rank: 3
+  bioguide: R000605
+- name: Elizabeth Warren
+  party: minority
+  rank: 1
+  title: Ranking Member
+  bioguide: W000817
+- name: Jack Reed
+  party: minority
+  rank: 2
+  bioguide: R000122
+SSBK12:
+- name: John Kennedy
+  party: majority
+  rank: 1
+  title: Chairman
+  bioguide: K000393
+- name: Mike Rounds
+  party: majority
+  rank: 2
+  bioguide: R000605
+- name: Raphael G. Warnock
+  party: minority
+  rank: 1
+  title: Ranking Member
+  bioguide: W000790

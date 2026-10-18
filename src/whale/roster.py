@@ -4,6 +4,10 @@ The Clerk's disclosure feed identifies a filer only by name and state/district
 — no party, no chamber, no stable ID. This module supplies those by joining
 against the community-maintained legislator dataset, so alerts can say
 "Rep. Debbie Wasserman Schultz (D-FL25)" rather than just a surname.
+
+The same dataset publishes the current committee rosters, refreshed here on
+the same cadence (`sync_committees`): what a member oversees is the context
+that makes a trade interesting.
 """
 
 from __future__ import annotations
@@ -12,8 +16,10 @@ import logging
 import re
 import sqlite3
 import unicodedata
+from dataclasses import dataclass
 
 import httpx
+import yaml
 
 from . import db
 
@@ -21,6 +27,10 @@ log = logging.getLogger(__name__)
 
 CURRENT_URL = "https://unitedstates.github.io/congress-legislators/legislators-current.json"
 HISTORICAL_URL = "https://unitedstates.github.io/congress-legislators/legislators-historical.json"
+COMMITTEES_URL = "https://unitedstates.github.io/congress-legislators/committees-current.yaml"
+MEMBERSHIP_URL = (
+    "https://unitedstates.github.io/congress-legislators/committee-membership-current.yaml"
+)
 
 PARTY_ABBREV = {"Democrat": "D", "Republican": "R", "Independent": "I", "Libertarian": "L"}
 
@@ -50,7 +60,8 @@ def parse_state_district(state_dst: str | None) -> tuple[str | None, int | None]
 
 
 def sync(conn: sqlite3.Connection, include_historical: bool = True) -> int:
-    """Refresh the politicians table. Returns the number of members stored."""
+    """Refresh the politicians table, then the committee tables keyed to it.
+    Returns the number of members stored."""
     count = 0
     for url, active in ((CURRENT_URL, 1), (HISTORICAL_URL, 0)):
         if not active and not include_historical:
@@ -89,7 +100,156 @@ def sync(conn: sqlite3.Connection, include_historical: bool = True) -> int:
             count += 1
     conn.commit()
     log.info("roster: %d members stored", count)
+    # Same source, same cadence, and seats resolve against the rows just
+    # stored. Never raises: a failure keeps the previous committee snapshot.
+    sync_committees(conn)
     return count
+
+
+# --- committees -------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CommitteeCounts:
+    committees: int
+    subcommittees: int
+    memberships: int
+    # Seats dropped: the bioguide id is not in `politicians` (roster fetch
+    # failed or lags the committee file), or the committee id is not in the
+    # committees file. Logged, because either means a member page is missing
+    # an assignment the source has.
+    unmatched: int
+    unknown: int
+
+
+def _fetch_yaml(url: str):
+    resp = httpx.get(url, timeout=60, follow_redirects=True)
+    resp.raise_for_status()
+    return yaml.safe_load(resp.text)
+
+
+def sync_committees(conn: sqlite3.Connection) -> CommitteeCounts | None:
+    """Refresh `committees` and `committee_members` from the current snapshot.
+
+    Never raises into the pipeline: a failed fetch, or a body that is not the
+    expected shape (GitHub Pages serves an HTML page with a 200 on some
+    outages), keeps the previous rows and returns None. Stale committee data
+    is a smaller harm than none, and the roster refresh behaves the same way.
+    """
+    try:
+        committees = _fetch_yaml(COMMITTEES_URL)
+        membership = _fetch_yaml(MEMBERSHIP_URL)
+    except Exception:
+        log.exception("committee fetch failed; keeping existing rows")
+        return None
+    try:
+        counts = load_committees(conn, committees, membership)
+    except Exception:
+        conn.rollback()
+        log.exception("committee files were not the expected shape; keeping existing rows")
+        return None
+    conn.commit()
+    log.info(
+        "committees: %d committees, %d subcommittees, %d seats stored; %d seats unmatched, %d on unknown committees",
+        counts.committees, counts.subcommittees, counts.memberships, counts.unmatched, counts.unknown,
+    )
+    if counts.unmatched:
+        log.warning("committees: %d seat(s) belong to bioguide ids missing from the roster", counts.unmatched)
+    return counts
+
+
+def committee_rows(committees: object) -> list[dict]:
+    """Flatten `committees-current.yaml` into `committees` rows, parents first.
+
+    A subcommittee's id is the parent's thomas_id plus its own two-digit code
+    — the key the membership file uses for it. Raises ValueError on anything
+    that is not that file's shape, so a wrong body cannot empty the table.
+    """
+    if not isinstance(committees, list):
+        raise ValueError("committees file is not a list")
+    rows: list[dict] = []
+    for c in committees:
+        if not isinstance(c, dict) or not all(c.get(k) for k in ("thomas_id", "name", "type")):
+            raise ValueError(f"malformed committee entry: {str(c)[:200]}")
+        tid = str(c["thomas_id"])
+        rows.append({
+            "thomas_id": tid,
+            "parent_id": None,
+            "chamber": str(c["type"]),
+            "name": str(c["name"]),
+            "house_committee_id": c.get("house_committee_id"),
+            "senate_committee_id": c.get("senate_committee_id"),
+            "url": c.get("url"),
+            "jurisdiction": c.get("jurisdiction"),
+            "jurisdiction_source": c.get("jurisdiction_source"),
+        })
+        for s in c.get("subcommittees") or []:
+            if not isinstance(s, dict) or not s.get("thomas_id") or not s.get("name"):
+                raise ValueError(f"malformed subcommittee entry under {tid}: {str(s)[:200]}")
+            rows.append({
+                "thomas_id": tid + str(s["thomas_id"]).zfill(2),
+                "parent_id": tid,
+                "chamber": str(c["type"]),
+                "name": str(s["name"]),
+                "house_committee_id": None,
+                "senate_committee_id": None,
+                "url": None,
+                "jurisdiction": None,
+                "jurisdiction_source": None,
+            })
+    return rows
+
+
+def load_committees(conn: sqlite3.Connection, committees: object,
+                    membership: object) -> CommitteeCounts:
+    """Replace the committee tables from the two parsed YAML documents.
+
+    Seats are keyed to `politicians` by bioguide id, so the roster must be
+    stored first. Does not commit; the caller commits, or rolls back on error
+    to keep the previous snapshot.
+    """
+    rows = committee_rows(committees)
+    if not isinstance(membership, dict):
+        raise ValueError("membership file is not a mapping of committee id to seats")
+    known = {r["thomas_id"] for r in rows}
+    ids = db.politician_ids_by_bioguide(conn)
+    seats: list[dict] = []
+    seen: set[tuple[str, int]] = set()
+    unmatched = unknown = 0
+    for cid, entries in membership.items():
+        cid = str(cid)
+        if not isinstance(entries, list):
+            raise ValueError(f"seats for {cid} are not a list")
+        if cid not in known:
+            unknown += len(entries)
+            continue
+        for e in entries:
+            if not isinstance(e, dict) or not e.get("bioguide"):
+                raise ValueError(f"malformed seat on {cid}: {str(e)[:200]}")
+            pid = ids.get(str(e["bioguide"]))
+            if pid is None:
+                unmatched += 1
+                continue
+            if (cid, pid) in seen:
+                continue
+            seen.add((cid, pid))
+            rank = e.get("rank")
+            seats.append({
+                "committee_id": cid,
+                "politician_id": pid,
+                "rank": int(rank) if rank is not None else None,
+                "party": e.get("party"),
+                "title": e.get("title"),
+                "chamber": e.get("chamber"),
+            })
+    _, n_seats = db.replace_committees(conn, rows, seats)
+    return CommitteeCounts(
+        committees=sum(r["parent_id"] is None for r in rows),
+        subcommittees=sum(r["parent_id"] is not None for r in rows),
+        memberships=n_seats,
+        unmatched=unmatched,
+        unknown=unknown,
+    )
 
 
 class Matcher:

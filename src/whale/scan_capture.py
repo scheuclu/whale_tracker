@@ -7,7 +7,11 @@ as a 1-bit PNG, oriented the way the reader turned it, and each row it
 found with the column edges and the cells it read as ticked — so the
 dashboard's /scans view can draw the decision on the page. It needs no API
 key: the reader runs on its own, and rows are linked to transactions only
-if the hybrid path has produced them (by order; `db.link_scan_rows`).
+if the hybrid path has produced them (`db.link_scan_rows`). When it has,
+the join's own account (`vision.ScannedFiling`) is applied on top of the
+reader's: a row whose type the model disputed is marked `type_disputed`, a
+page the join refused carries the reason and its rows are `page_refused`,
+and each transaction is linked to the grid row it was made from.
 
 `capture_scans` is the catch-up over every scan in the database, budgeted
 and resumable like the insider backfill: it skips filings already captured,
@@ -40,10 +44,19 @@ CAPTURE_DPI = 110
 # Seconds between downloads: the Clerk's pace, as in `sync`.
 DOWNLOAD_PAUSE = 1.1
 
+# `scan_rows.status`. The first four are the reader's own verdict on the
+# row; the last two are the join's, applied over it when the hybrid path
+# has run (web/lib/scan-queries.ts lists the same vocabulary).
 STATUS_READ = "read"
 STATUS_UNKNOWN_AMOUNT = "unknown_amount"
 STATUS_UNKNOWN_TYPE = "unknown_type"
 STATUS_UNKNOWN = "unknown"
+# Joined, but the model's type reading contradicted the grid's; the grid's
+# type is the one stored on the transaction.
+STATUS_TYPE_DISPUTED = "type_disputed"
+# Read by the grid but not joined: the page's row count disagreed with the
+# model's, so the page was refused alone and has no transactions.
+STATUS_PAGE_REFUSED = "page_refused"
 
 
 @dataclass
@@ -77,13 +90,15 @@ def row_status(amount: str | None, action: str | None) -> str:
     return STATUS_UNKNOWN
 
 
-def capture_pdf(pdf_bytes: bytes) -> tuple[list[dict], list[dict]]:
+def capture_pdf(pdf_bytes: bytes, grid=None) -> tuple[list[dict], list[dict]]:
     """Render and read every page. Returns (pages, rows) ready for `db`.
 
     A page the reader cannot decompose is still stored, with the reason, so
     the view can show what it could not read; its rows are simply absent.
     Geometry is scaled from the reader's resolution to the capture's so the
-    overlay is in image pixels.
+    overlay is in image pixels. `grid`, a `paper_form.GridReading` already
+    taken of this PDF, saves reading it again — and keeps the row indexes
+    exactly those the join used.
     """
     scale = CAPTURE_DPI / paper_form.RENDER_DPI
     pages: list[dict] = []
@@ -91,14 +106,14 @@ def capture_pdf(pdf_bytes: bytes) -> tuple[list[dict], list[dict]]:
     row_index = 0
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         for index, page in enumerate(pdf.pages):
-            image = page.to_image(resolution=paper_form.RENDER_DPI).original
-            error = None
-            try:
-                grid = paper_form.read_page(image, index)
-            except paper_form.GridNotFound as exc:
-                grid, error = None, str(exc)
-            rotation = grid.rotation if grid else 0
-            if grid is not None and grid.no_table:
+            if grid is not None and index < len(grid.pages):
+                g = grid.pages[index]
+            else:
+                image = page.to_image(resolution=paper_form.RENDER_DPI).original
+                g = paper_form.try_read_page(image, index)
+            error = g.error
+            rotation = g.rotation
+            if g.no_table:
                 error = "no table on this page"
 
             small = page.to_image(resolution=CAPTURE_DPI).original.convert("L")
@@ -109,16 +124,16 @@ def capture_pdf(pdf_bytes: bytes) -> tuple[list[dict], list[dict]]:
                 "dpi": CAPTURE_DPI, "rotation": rotation, "png": _png_1bit(small),
                 "error": error,
             })
-            if grid is None:
+            if g.error:
                 continue
-            for r in grid.rows:
+            for r in g.rows:
                 if not r.populated:
                     continue
                 rows.append({
                     "page_no": index + 1, "row_index": row_index,
                     "y0": int(round(r.top * scale)), "y1": int(round(r.bottom * scale)),
-                    "amount_cols": json.dumps([int(round(x * scale)) for x in grid.amount_cols]),
-                    "type_cols": json.dumps([int(round(x * scale)) for x in grid.type_cols]),
+                    "amount_cols": json.dumps([int(round(x * scale)) for x in g.amount_cols]),
+                    "type_cols": json.dumps([int(round(x * scale)) for x in g.type_cols]),
                     "amount_marks": json.dumps(r.amount_marks),
                     "type_marks": json.dumps(r.type_marks),
                     "amount_letter": r.amount, "amount_margin": r.amount_margin,
@@ -136,18 +151,58 @@ def _png_1bit(image) -> bytes:
     return buf.getvalue()
 
 
-def capture_filing(conn: sqlite3.Connection, filing_id: int,
-                   pdf_bytes: bytes) -> tuple[int, int, int]:
+def capture_filing(conn: sqlite3.Connection, filing_id: int, pdf_bytes: bytes,
+                   scanned=None) -> tuple[int, int, int]:
     """Store one filing's pages and rows, replacing an earlier capture, and
     link the rows to its transactions if it has them. Returns (pages, rows,
-    unknown rows). Commits."""
-    pages, rows = capture_pdf(pdf_bytes)
+    unknown rows). Commits.
+
+    `scanned`, the `vision.ScannedFiling` the hybrid path just produced, is
+    applied over the reader's own verdicts: refused pages carry the join's
+    reason, their rows read `page_refused`, disputed rows `type_disputed`,
+    and each transaction is linked to the grid row it was made from. Without
+    it (a scan vision never read, or a capture after the fact) the rows are
+    linked by order when the counts agree.
+    """
+    grid = getattr(scanned, "grid", None)
+    pages, rows = capture_pdf(pdf_bytes, grid=grid)
+    row_indexes = None
+    if scanned is not None:
+        row_indexes = apply_join(pages, rows, scanned)
     db.replace_scan_pages(conn, filing_id, pages)
     db.replace_scan_rows(conn, filing_id, rows)
-    db.link_scan_rows(conn, filing_id)
+    db.link_scan_rows(conn, filing_id, row_indexes)
     conn.commit()
     unknown = sum(1 for r in rows if r["status"] != STATUS_READ)
     return len(pages), len(rows), unknown
+
+
+def apply_join(pages: list[dict], rows: list[dict], scanned) -> list[int] | None:
+    """Mark the captured pages and rows with what the join made of them.
+    Returns the grid row index of each transaction, for linking, or None
+    when the capture's rows are not the ones the join saw (the reader
+    disagreed with itself; nothing is then flagged or linked)."""
+    grid_rows = sum(p.grid_rows for p in scanned.pages)
+    if len(rows) != grid_rows:
+        log.warning("capture read %d row(s) but the join saw %d; rows left unlinked",
+                    len(rows), grid_rows)
+        return None
+    by_page = {p["page_no"]: p for p in pages}
+    for pj in scanned.pages:
+        page = by_page.get(pj.page_no)
+        if page is None or not pj.error:
+            continue
+        if not page["error"]:
+            page["error"] = pj.error
+        if pj.grid_rows:
+            for r in rows:
+                if r["page_no"] == pj.page_no:
+                    r["status"] = STATUS_PAGE_REFUSED
+    disputed = set(scanned.disputed_rows)
+    for r in rows:
+        if r["row_index"] in disputed:
+            r["status"] = STATUS_TYPE_DISPUTED
+    return list(scanned.row_indexes)
 
 
 def capture_scans(conn: sqlite3.Connection, limit: int | None = None,

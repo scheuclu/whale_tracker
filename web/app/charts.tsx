@@ -20,19 +20,69 @@ export function StatTile({
   label,
   value,
   hint,
+  trend,
+  trendLabel,
 }: {
   label: string;
   value: string;
   hint?: string;
+  /** Per-period counts, oldest → newest; the last entry is the period `value` reports. */
+  trend?: number[];
+  /** Accessible description of the trend, e.g. "cluster alerts per week, last 8 weeks". */
+  trendLabel?: string;
 }) {
   return (
     <div className="glass rounded-2xl border border-border bg-card px-4 py-3.5">
       <div className="text-[11px] font-medium uppercase tracking-[0.07em] text-muted-foreground">
         {label}
       </div>
-      <div className="mt-1 text-2xl font-semibold tracking-tight">{value}</div>
+      <div className="mt-1 flex items-end justify-between gap-3">
+        <div className="text-xl font-semibold tracking-tight sm:text-2xl">{value}</div>
+        {trend?.length ? <Sparkbars values={trend} label={trendLabel ?? label} /> : null}
+      </div>
       {hint ? <div className="mt-0.5 text-xs text-muted-foreground">{hint}</div> : null}
     </div>
+  );
+}
+
+/**
+ * The stat tile's trend: one thin column per period, the current period in
+ * the accent and the rest de-emphasised. Columns rather than a line because
+ * the series are small integer counts where most periods may be zero — a
+ * zero is drawn as a hairline at the baseline so "nothing" is visibly
+ * nothing, not missing. 2px surface gaps between fills; no per-mark labels
+ * (the tile's value carries the current figure).
+ */
+function Sparkbars({ values, label }: { values: number[]; label: string }) {
+  const max = Math.max(...values, 1);
+  const w = 4;
+  const gap = 2;
+  const h = 18;
+  return (
+    <svg
+      width={values.length * (w + gap) - gap}
+      height={h}
+      role="img"
+      aria-label={`${label}: ${values.join(", ")}`}
+      className="mb-1 shrink-0"
+    >
+      {values.map((v, i) => {
+        const bh = v > 0 ? Math.max((v / max) * h, 2) : 1;
+        const current = i === values.length - 1;
+        return (
+          <rect
+            key={i}
+            x={i * (w + gap)}
+            y={h - bh}
+            width={w}
+            height={bh}
+            rx={1}
+            fill={current ? "var(--viz-seq)" : "var(--viz-axis)"}
+            opacity={current ? 1 : v > 0 ? 0.45 : 0.25}
+          />
+        );
+      })}
+    </svg>
   );
 }
 
@@ -71,8 +121,13 @@ export function MagnitudeBars({
         const row = (
           <div
             className={cn(
+              // Narrower label column on a phone so the bar keeps enough
+              // width to compare; the label truncates with its full text in
+              // the title.
               "grid items-center gap-3",
-              isName ? "grid-cols-[11rem_1fr_auto]" : "grid-cols-[7rem_1fr_auto]"
+              isName
+                ? "grid-cols-[8rem_1fr_auto] sm:grid-cols-[11rem_1fr_auto]"
+                : "grid-cols-[5.5rem_1fr_auto] sm:grid-cols-[7rem_1fr_auto]"
             )}
           >
             <div className="min-w-0">
@@ -105,7 +160,7 @@ export function MagnitudeBars({
                 }}
               />
             </div>
-            <div className="tabular w-20 text-right text-[13px] text-muted-foreground">
+            <div className="tabular w-16 text-right text-[13px] text-muted-foreground sm:w-20">
               {d.valueLabel}
             </div>
           </div>
@@ -159,7 +214,7 @@ export function DivergingSplit({ data, unit }: { data: SplitDatum[]; unit: strin
       <ol className="mt-3 space-y-1.5">
         {data.map((d) => {
           const row = (
-            <div className="grid grid-cols-[7rem_1fr] items-center gap-3">
+            <div className="grid grid-cols-[5.5rem_1fr] items-center gap-3 sm:grid-cols-[7rem_1fr]">
               <div className="min-w-0">
                 <div className="truncate font-mono text-[13px] font-semibold tracking-tight">
                   {d.label}
@@ -274,7 +329,7 @@ export function Legend({
   note?: string;
 }) {
   return (
-    <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
       {items.map((i) => (
         <span key={i.label} className="inline-flex items-center gap-1.5">
           <span className="size-2 rounded-full" style={{ background: i.color }} />
@@ -316,6 +371,79 @@ export function Card({ className, children }: { className?: string; children: Re
   return (
     <div className={cn("glass rounded-2xl border border-border bg-card p-5", className)}>
       {children}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------ column series */
+
+export type ColumnSeriesDatum = {
+  key: string;
+  label: string;
+  value: number;
+  valueLabel: string;
+  /** Hover detail — the counts behind a share, say. */
+  detail?: string;
+};
+
+/**
+ * One measure over time as columns from a shared baseline — the form for a
+ * monthly share. A single sequential hue, so no legend: the section title
+ * names the series. Labels are selective (the peak and the latest column);
+ * every column carries its value in its hover title, and the caller keeps a
+ * table beside the chart so nothing is colour- or hover-gated.
+ */
+export function ColumnSeries({ data, height = 128 }: { data: ColumnSeriesDatum[]; height?: number }) {
+  if (!data.length) return <Empty />;
+  const max = Math.max(...data.map((d) => d.value), Number.EPSILON);
+  const peak = data.reduce((best, d) => (d.value > best.value ? d : best), data[0]);
+  const latest = data[data.length - 1];
+
+  return (
+    <div>
+      <div className="flex items-end gap-1.5" style={{ height }}>
+        {data.map((d) => {
+          const labelled = d === peak || d === latest;
+          // 15% of the plot is kept for the cap label, so the tallest column
+          // never pushes its own label out of the box.
+          const pct = (d.value / max) * 85;
+          return (
+            <div
+              key={d.key}
+              className="flex h-full flex-1 flex-col items-center justify-end"
+              title={`${d.label}: ${d.valueLabel}${d.detail ? ` — ${d.detail}` : ""}`}
+            >
+              {labelled ? (
+                <span className="tabular mb-1 text-[11px] text-muted-foreground">{d.valueLabel}</span>
+              ) : null}
+              {/* ≤24px wide; 4px rounded cap, square at the baseline. */}
+              <div
+                role="img"
+                aria-label={`${d.label}: ${d.valueLabel}`}
+                className="w-full max-w-6"
+                style={{
+                  height: `${pct}%`,
+                  minHeight: d.value > 0 ? 2 : 0,
+                  background: "var(--viz-seq)",
+                  borderRadius: "4px 4px 2px 2px",
+                }}
+              />
+            </div>
+          );
+        })}
+      </div>
+      {/* Hairline baseline, recessive. */}
+      <div className="h-px w-full" style={{ background: "var(--viz-grid)" }} />
+      <div className="mt-1.5 flex gap-1.5">
+        {data.map((d) => (
+          <div
+            key={d.key}
+            className="flex-1 truncate text-center text-[10px] text-muted-foreground"
+          >
+            {d.label}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -637,58 +765,6 @@ export function MonthlyLines({
         <div />
       </div>
     </div>
-  );
-}
-
-/**
- * The table twin of a chart: every value, in text, reachable without a
- * pointer. Collapsed by default so the chart leads; the content is in the
- * DOM either way.
- */
-export function DataTable({
-  caption,
-  columns,
-  rows,
-}: {
-  caption: string;
-  columns: string[];
-  rows: (string | number)[][];
-}) {
-  return (
-    <details className="mt-3 text-[11px] text-muted-foreground">
-      <summary className="cursor-pointer select-none hover:text-foreground">Show as table</summary>
-      <div className="mt-2 overflow-x-auto">
-        <table className="w-full text-[12px]">
-          <caption className="sr-only">{caption}</caption>
-          <thead>
-            <tr className="border-b border-border text-[11px] uppercase tracking-[0.06em]">
-              {columns.map((c) => (
-                <th key={c} scope="col" className="px-2 py-1 text-right font-medium first:text-left">
-                  {c}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={i} className="border-b border-border/50 last:border-0">
-                {r.map((c, j) =>
-                  j === 0 ? (
-                    <th key={j} scope="row" className="px-2 py-1 text-left font-medium text-foreground">
-                      {c}
-                    </th>
-                  ) : (
-                    <td key={j} className="tabular px-2 py-1 text-right">
-                      {c}
-                    </td>
-                  )
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </details>
   );
 }
 

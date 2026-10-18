@@ -5,7 +5,6 @@ import { usd } from "@/lib/format";
 import {
   Card,
   ChartLegend,
-  DataTable,
   Empty,
   MagnitudeBars,
   MonthlyColumns,
@@ -16,6 +15,7 @@ import {
   type ColumnDatum,
   type Texture,
 } from "../charts";
+import { DataTable } from "../data-table";
 
 export const dynamic = "force-dynamic";
 

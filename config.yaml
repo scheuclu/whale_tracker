@@ -46,6 +46,43 @@ alerts:
   # including them would bury the signal under housekeeping.
   cluster_asset_types: [ST, OP, EF, ET, CT, RS, SA]
 
+  # Late-filing compliance. A filing whose EVERY trade was disclosed more
+  # than this many days after it was made leads its Telegram message with
+  # "⚠️ late by N days" and is recorded once as a `late_filing` alert — no
+  # extra message. N is the longest delay in the filing minus the deadline:
+  # the report was due that many days after its earliest trade, and that is
+  # how far past the due date it arrived. A filing with one timely trade
+  # among late ones gets no prefix; its per-trade "(Nd delay)" lines say
+  # which rows were late. Delay is trade date → filing date, never the
+  # report's "Notification Date" column (README: a member trading their own
+  # account is notified the same day, so that column reads 0 however long
+  # the filing took). 45 is the STOCK Act's deadline; 0 turns both off.
+  late_filing_days: 45
+
+  # Options are the most directional disclosure a member can make, and the
+  # filing text carries the contract: 57 rows in the 2026 corpus are typed
+  # [OP], and src/whale/options.py reads the kind (call/put), strike and
+  # expiry out of what each row printed — a House "Description:" line such
+  # as "Call options; Strike price $325; Expires 06/18/2026", eFD's "Option
+  # Type: Call · Strike price: $75.00 · Expires: 2026-08-21", or a broker
+  # symbol like "PUT/XSP @ 690 EXP 10/16/2026". A row whose text names no
+  # contract, or both a call and a put, stays unparsed; a strike is only a
+  # figure the text calls a strike ("10 puts at $11.80" is a premium).
+  #
+  # options_every_trade: every options trade by any member is its own alert,
+  # split per transaction exactly like a watched member's filing — the
+  # per-filing digest degrades to fit Telegram's limit, and the contract is
+  # the detail it drops first. Sent ahead of the routine digests, which still
+  # follow for a filing that holds other trades too. Off by default: it is a
+  # firehose by design, and the 2026 corpus holds one 30-row options filing.
+  options_every_trade: false
+  # cluster_count_options: whether a parsed option counts toward a ticker's
+  # direction in the cluster finder — a call as a buy, a put as a sell, and
+  # selling the contract the reverse. Off (the default), a row with a parsed
+  # contract counts toward neither direction. Either way a bought put is no
+  # longer read as a buy, which is what the action column alone used to say.
+  cluster_count_options: false
+
 # Members whose every trade is worth its own alert, immediately.
 #
 # A watched member's filing is split: each transaction arrives as its own
@@ -68,6 +105,22 @@ watchlist:
   - name: Nancy Pelosi
     bioguide_id: P000197
     every_trade: true
+
+telegram:
+  # The bot token and chat id are secrets and stay in the environment; this
+  # block is for what gets sent.
+  #
+  # Weekly digest: one message with the week's numbers — filings and trades
+  # by chamber, the tickers most members touched (buyers and sellers apart),
+  # the largest equity trades as the brackets they were filed in, who filed
+  # past the 45-day deadline, insider clusters and the largest insider buys
+  # (shares × reported price), how the scans went, and the pipeline's health
+  # in a line, with links to the dashboard. Sent by the poll run on the first
+  # run after Monday 07:00 UTC and recorded in `sync_state.digest_sent_week`,
+  # so a late Monday run catches up and a second one does not repeat it.
+  # Preview it any time with `python -m whale digest --dry-run`. Off until
+  # you turn it on; the first run after flipping it sends one straight away.
+  digest: false
 
 dashboard:
   # Public URL of the Vercel deployment, e.g. https://whale-tracker.vercel.app
@@ -120,9 +173,16 @@ vision:
   # hand-labelled set of 164 rows across 16 filings and all four form layouts
   # seen, called 161 amounts and 155 types with no wrong answers — the rest it
   # left unknown (a poor scan, an X drawn outside its box). A box it cannot
-  # call is stored as unknown, never guessed, and a filing whose grid cannot
-  # be found, or whose row count does not match the transcription, is
-  # reported as unreadable with the reason.
+  # call is stored as unknown, never guessed. The two readings are joined
+  # page by page (#51): a page whose grid cannot be found, or whose row
+  # count does not match the transcription, yields no rows and is recorded
+  # as such (scan_pages.error, a "partially read" note on the filing), and
+  # the filing is parsed from its other pages; only a filing with no
+  # readable page at all is reported as unreadable. A row whose type the
+  # model read differently from the grid keeps the grid's and is flagged
+  # (scan_rows.status = type_disputed); a page, or a filing, is refused for
+  # that only past vision.MAX_DISPUTED_SHARE. Every refused filing is
+  # retried once per vision.JOIN_VERSION, never every run.
   #
   # ON since 2026-10-17, and only because transcribed rows are quarantined,
   # not trusted: they count as trades and in member and ticker lists but
@@ -143,6 +203,33 @@ vision:
   # Scans the budget leaves behind stay queued for the next run; a backlog
   # drains over a few runs instead of blocking one.
   budget_seconds: 480
+
+prices:
+  # Daily closes for every ticker an alert has named, plus SPY as the
+  # benchmark, so the /alerts page can say what the ticker did at +5, +20 and
+  # +60 trading days after each alert minus SPY over the same days. That is
+  # the only use: a descriptive measure of whether the alert rules carry any
+  # signal. It is never advice, and never a trade's return — congressional
+  # amounts are brackets, and nothing here touches one.
+  #
+  # The series is unofficial and key-less, and so can vanish without notice:
+  #   yahoo  Yahoo Finance's chart endpoint; split-adjusted closes. Answers a
+  #          descriptive User-Agent (whale-tracker/…) and 429s a bare one.
+  #   stooq  Stooq's daily CSV, the source issue #53 named. On 2026-10-18 it
+  #          served a JavaScript browser-verification page to every client
+  #          (stooq.com and stooq.pl alike), which the step reports as
+  #          `blocked` and never tries to solve; its documented daily hit
+  #          limit is reported as `throttled`.
+  # Yahoo is the default because it was the one that answered.
+  enabled: true
+  source: yahoo
+  # Seconds one poll run may spend fetching; 0 = no limit. Each ticker is
+  # refreshed once per UTC day (the 00:00 UTC run, after the close), the
+  # benchmark first, then any ticker never fetched, then the longest-unseen,
+  # at no more than two requests a second — about 25 s for 50 tickers. What
+  # the budget leaves behind is fetched on the next run, so a throttle or a
+  # short budget rotates through the list rather than starving its tail.
+  budget_seconds: 60
 
 insiders:
   # SEC Form 4: corporate officers, directors and 10% owners. Only open-market
@@ -269,3 +356,26 @@ insiders:
     #   direction: sell
     #   min_insiders: 4
     #   window_days: 30
+
+issuers:
+  # Industry classification from EDGAR's SIC codes, so the dashboard can say
+  # which sectors a member is buying and which industries see insider
+  # selling. Every ticker in the congressional tables is resolved to a CIK
+  # through EDGAR's company list (one request), and every CIK — those plus
+  # every Form 4 issuer — has its submissions record fetched for the SIC
+  # code (one request each). The codes fold into twelve groups; the table is
+  # in src/whale/issuers.py. An issuer EDGAR gives no code (ETF trusts,
+  # funds) stays unclassified and is counted as such, never guessed.
+  #
+  # The fill runs in the poll run after the insider sync, through the same
+  # throttled EDGAR client and under this many seconds; the corpus on
+  # 2026-10-18 was ~890 congressional tickers and ~1,080 insider issuers, so
+  # at ~7 requests a second the first fill takes a few runs and a refresh
+  # fits in one. Progress is committed per issuer, so a run that stops on
+  # the budget continues next time. 0 switches the step off in the poll run
+  # (`whale classify-issuers --budget-seconds N` still runs by hand).
+  budget_seconds: 90
+  # A stored classification older than this is fetched again, oldest first,
+  # after every issuer that has never been fetched. SIC codes almost never
+  # change; weekly keeps renamed and newly listed issuers current.
+  refresh_days: 7

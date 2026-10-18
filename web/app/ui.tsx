@@ -6,8 +6,63 @@ import {
   OWNER_LABEL,
   isBuy,
   isSell,
+  optionLabel,
   range,
 } from "@/lib/format";
+import { Card } from "./charts";
+import { ScrollX } from "./scroll-area";
+
+/**
+ * The card every `<table>` goes in. The leaderboards are 7–9 columns wide
+ * and do not fit a phone; rather than drop columns, the table scrolls
+ * sideways inside a container that fades its open edge and pins the first
+ * column (the ticker, member or filing id) so a row keeps its name while the
+ * numbers move. It replaces `<Card className="overflow-x-auto p-0">`, which
+ * scrolled silently:
+ *
+ *   <ResponsiveTable>
+ *     <table className="w-full text-[13px]">…</table>
+ *   </ResponsiveTable>
+ *
+ * Cells do not wrap: once the table is wider than its card it sits at its
+ * min-content width, where "535 / 402" would break across three lines.
+ * `wrap` restores wrapping for a table with a prose column.
+ *
+ * `lib/responsive-tables.test.ts` fails any page that renders a bare table.
+ */
+export function ResponsiveTable({
+  children,
+  className,
+  stickyFirstColumn = true,
+  wrap = false,
+}: {
+  children: React.ReactNode;
+  /** Merged onto the card. */
+  className?: string;
+  /** Off for a table whose first column is not the row's identity. */
+  stickyFirstColumn?: boolean;
+  /** Let cells wrap (a column of free text) instead of extending the scroll. */
+  wrap?: boolean;
+}) {
+  return (
+    <Card className={cn("p-0", className)}>
+      <ScrollX className={wrap ? undefined : "whitespace-nowrap"} stickyFirstColumn={stickyFirstColumn}>
+        {children}
+      </ScrollX>
+    </Card>
+  );
+}
+
+/**
+ * A single row of chips or filter pills that is allowed to be wider than a
+ * phone: it scrolls sideways with an edge fade instead of wrapping into a
+ * ragged stack or pushing the page out.
+ */
+export function ScrollRow({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <ScrollX viewportClassName={cn("scrollbar-none flex items-center gap-1", className)}>{children}</ScrollX>
+  );
+}
 
 /**
  * Direction pills. The dot carries the diverging colour and the word carries
@@ -186,6 +241,59 @@ export function ScanTag({
   return (
     <span className={cls} title={title}>
       transcribed from scan
+    </span>
+  );
+}
+
+/**
+ * The issuer's industry group, folded from its EDGAR SIC code
+ * (src/whale/issuers.py). Nothing is rendered for an unclassified row: an
+ * issuer EDGAR gives no SIC — an ETF trust, a fund — stays unknown rather
+ * than being guessed at from its name.
+ */
+export function SectorTag({
+  group,
+  sic,
+  description,
+}: {
+  group: string | null | undefined;
+  sic?: string | null;
+  description?: string | null;
+}) {
+  if (!group) return null;
+  const detail = [description, sic ? `SIC ${sic}` : null].filter(Boolean).join(" · ");
+  return (
+    <span
+      className="rounded bg-muted px-1.5 py-px text-[10px] text-muted-foreground"
+      title={detail ? `${detail} — industry group from the issuer's EDGAR SIC code` : "Industry group from the issuer's EDGAR SIC code"}
+    >
+      {group}
+    </span>
+  );
+}
+
+/**
+ * The option contract a row's own text named: kind, strike, expiry. Neutral
+ * on purpose — the action badge already carries the buy/sell colour, and a
+ * sold call coloured "buy" would contradict it. The words carry the meaning.
+ */
+export function OptionBadge({
+  kind,
+  strikeCents,
+  expiry,
+}: {
+  kind: string | null | undefined;
+  strikeCents: number | null | undefined;
+  expiry: string | null | undefined;
+}) {
+  const label = optionLabel(kind ?? null, strikeCents ?? null, expiry ?? null);
+  if (!label) return null;
+  return (
+    <span
+      className="whitespace-nowrap rounded border border-border bg-muted px-1.5 py-px font-mono text-[10px] font-medium tracking-tight"
+      title="Option contract as the filing's own text describes it: kind, strike and expiry are shown only when printed"
+    >
+      {label}
     </span>
   );
 }

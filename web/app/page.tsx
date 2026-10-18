@@ -2,7 +2,16 @@ import { redirect } from "next/navigation";
 import { getConsensusTickers, getPipeline, getTransactions } from "@/lib/queries";
 import { memberHref, memberLabel, shortDate, usd } from "@/lib/format";
 import { Card, DivergingSplit, Empty, SectionTitle, StatTile } from "./charts";
-import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, ScanTag, TickerChip } from "./ui";
+import {
+  ActionBadge,
+  Amount,
+  DelayTag,
+  OptionBadge,
+  OwnerTag,
+  PartyBadge,
+  ScanTag,
+  TickerChip,
+} from "./ui";
 
 export const dynamic = "force-dynamic";
 
@@ -108,6 +117,7 @@ export default async function FeedPage({
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                     <ActionBadge action={r.action} />
                     <TickerChip ticker={r.ticker} type={r.asset_type} />
+                    <OptionBadge kind={r.option_kind} strikeCents={r.strike_cents} expiry={r.expiry} />
                     <Amount
                       min={r.amount_min_cents}
                       max={r.amount_max_cents}

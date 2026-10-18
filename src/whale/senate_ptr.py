@@ -28,7 +28,9 @@ formatters never learn which chamber a row came from:
              Corporate Bond → CS …). Otherwise `asset_type` is NULL and the
              label is kept in `description` — never a guessed code, because
              `cluster_asset_types` filters on it.
-* ticker     "--" → NULL.
+* ticker     "--" → NULL — unless the asset name carries one symbol in
+             parentheses ("BHP Group Limited (BHP)"), which is then the
+             ticker and the row says so in `description` (#50).
 * amount     the bracket text as printed; `amounts.parse_amount` keeps it a
              range.
 * description  the Comment column, then the asset's sub-detail (option type,
@@ -48,7 +50,7 @@ import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
 
-from .ptr import ParsedFiling, Transaction
+from .ptr import TICKER_FROM_NAME_NOTE, ParsedFiling, Transaction, ticker_from_asset_name
 from .senate import AGREEMENT_RE
 
 EXPECTED_COLUMNS = ("#", "Transaction Date", "Owner", "Ticker", "Asset Name",
@@ -318,6 +320,14 @@ def _transaction(cells: list[_Cell]) -> Transaction:
     symbol, symbols = ticker_from_cell(ticker.text)
     if symbol is None and symbols:
         parts.append("Tickers: " + ", ".join(symbols))
+    elif symbol is None:
+        # An empty cell with the symbol in the name instead. The name column
+        # is free text with no slot of its own, so any single parenthesised
+        # symbol counts; two legs' symbols in the cell were handled above and
+        # the name is not consulted for them.
+        symbol = ticker_from_asset_name(asset.text)
+        if symbol:
+            parts.append(TICKER_FROM_NAME_NOTE)
 
     return Transaction(
         asset_name=asset.text,
