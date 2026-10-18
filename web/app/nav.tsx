@@ -73,15 +73,15 @@ export function Tabs() {
                   underline can run the tab's full width along the header's edge. */}
               <span
                 className={cn(
-                  "flex items-center gap-1.5 rounded-[8px] px-2.5 py-1.5 transition-[background-color,color] duration-150 ease-out",
-                  "group-hover/tab:bg-foreground/[0.05] group-active/tab:bg-foreground/[0.08]",
-                  "group-focus-visible/tab:outline-solid group-focus-visible/tab:outline-2 group-focus-visible/tab:outline-primary"
+                  "flex items-center gap-1.5 rounded-control px-2.5 py-1.5 transition-[background-color,color] duration-(--dur) ease-(--ease-out)",
+                  "group-hover/tab:bg-secondary group-active/tab:bg-foreground/[0.08]",
+                  "group-focus-visible/tab:outline-solid group-focus-visible/tab:outline-2 group-focus-visible/tab:outline-ring"
                 )}
               >
                 <Icon
                   className={cn(
                     "size-3.5 transition-colors duration-150",
-                    active ? "text-primary" : "text-muted-foreground/80 group-hover/tab:text-foreground"
+                    active ? "text-primary" : "text-muted-foreground group-hover/tab:text-foreground"
                   )}
                   aria-hidden
                 />
@@ -111,9 +111,9 @@ export function ThemeToggle() {
     <button
       type="button"
       className={cn(
-        "group flex size-8 shrink-0 items-center justify-center rounded-[8px] text-muted-foreground",
-        "transition-[background-color,color] duration-150 ease-out hover:bg-foreground/[0.06] hover:text-foreground active:bg-foreground/[0.1]",
-        "outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        "group flex size-8 shrink-0 items-center justify-center rounded-control text-muted-foreground",
+        "transition-[background-color,color] duration-(--dur) ease-(--ease-out) hover:bg-secondary hover:text-foreground active:bg-foreground/[0.1]",
+        "outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       )}
       aria-label={mounted ? `Switch to ${resolvedTheme === "dark" ? "light" : "dark"} theme` : "Toggle theme"}
       onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
@@ -168,10 +168,9 @@ export function SearchForm({ className }: { className?: string }) {
         aria-label="Search members, tickers and insider issuers"
         aria-keyshortcuts={hint ? "Meta+K Control+K /" : undefined}
         className={cn(
-          "peer h-8 w-full rounded-[8px] border border-border bg-foreground/[0.03] pl-8 pr-14 text-[13px] text-foreground",
-          "transition-[border-color,background-color,box-shadow] duration-150 ease-out [&::-webkit-search-cancel-button]:hidden",
-          "placeholder:text-muted-foreground hover:border-foreground/20 hover:bg-foreground/[0.05]",
-          "focus:border-primary/60 focus:bg-[var(--card-solid)] focus:outline-none focus:ring-[3px] focus:ring-primary/30"
+          "peer h-8 w-full rounded-control border border-border bg-card pl-8 pr-14 text-[13px] text-foreground",
+          "transition-[border-color,background-color,box-shadow] duration-(--dur) ease-(--ease-out) [&::-webkit-search-cancel-button]:hidden",
+          "placeholder:text-muted-foreground hover:border-border-strong focus:border-ring"
         )}
       />
       {hint ? (
@@ -192,7 +191,7 @@ export function SearchForm({ className }: { className?: string }) {
 
 /**
  * When the pipeline last wrote, as a quiet dot and a relative time; links to
- * /pipeline. Past STALE_AFTER_HOURS the dot turns amber and a screen reader
+ * /pipeline. Past STALE_AFTER_HOURS the dot takes the attention colour and a screen reader
  * hears "stale" — the colour is never the only signal.
  */
 export function SyncStatus({
@@ -209,24 +208,24 @@ export function SyncStatus({
       href="/pipeline"
       title={syncedAt ? `Last pipeline write: ${syncedAt} — open Pipeline` : "Open Pipeline"}
       className={cn(
-        "inline-flex h-8 shrink-0 items-center gap-2 rounded-[8px] px-2.5 text-xs text-muted-foreground",
-        "transition-[background-color,color] duration-150 ease-out hover:bg-foreground/[0.05] hover:text-foreground active:bg-foreground/[0.08]",
-        "outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        "inline-flex h-8 shrink-0 items-center gap-2 rounded-control px-2.5 text-xs text-muted-foreground",
+        "transition-[background-color,color] duration-(--dur) ease-(--ease-out) hover:bg-secondary hover:text-foreground active:bg-foreground/[0.08]",
+        "outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       )}
     >
       <span
         aria-hidden
         className={cn(
           "size-1.5 shrink-0 rounded-full ring-[3px]",
-          tone === "fresh" && "bg-emerald-500 ring-emerald-500/15",
-          tone === "stale" && "bg-amber-500 ring-amber-500/20",
-          tone === "unknown" && "bg-muted-foreground/60 ring-muted-foreground/15"
+          tone === "fresh" && "bg-ok ring-ok-soft",
+          tone === "stale" && "bg-attention ring-attention-soft",
+          tone === "unknown" && "bg-muted-foreground ring-muted"
         )}
       />
       <span className="tabular">
         <span className="sr-only sm:not-sr-only">synced </span>
         {synced}
-        {tone === "stale" ? <span className="text-amber-700 dark:text-amber-300"> · stale</span> : null}
+        {tone === "stale" ? <span className="text-attention"> · stale</span> : null}
       </span>
     </Link>
   );

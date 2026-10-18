@@ -81,7 +81,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <div className="site-header-top mx-auto flex max-w-6xl items-center gap-2 px-4 pt-3.5 sm:px-6">
               <Link
                 href="/"
-                className="group -m-1 flex min-w-0 items-center gap-2.5 rounded-[10px] p-1 outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-primary"
+                className="group -m-1 flex min-w-0 items-center gap-2.5 rounded-[10px] p-1 outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring"
                 aria-label="Whale Tracker — feed"
               >
                 <WhaleMark className="site-header-mark size-8 motion-safe:group-hover:-rotate-6" />

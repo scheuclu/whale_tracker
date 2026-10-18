@@ -83,13 +83,13 @@ export function ScrollRow({ children, className }: { children: React.ReactNode; 
    never the only carrier: every badge spells its meaning in words.
    ------------------------------------------------------------------ */
 
-const CHIP = "inline-flex h-5 shrink-0 align-middle items-center gap-1 whitespace-nowrap rounded-[6px] px-1.5 text-[11px] leading-none";
+const CHIP = "inline-flex h-5 shrink-0 align-middle items-center gap-1 whitespace-nowrap rounded-chip px-1.5 text-[11px] leading-none";
 const NEUTRAL = "bg-muted text-muted-foreground";
 const HAIRLINE = "ring-1 ring-inset ring-border";
-const AMBER = "bg-amber-500/10 text-amber-700 dark:text-amber-300";
+const AMBER = "bg-attention-soft text-attention";
 /** Focus ring for every link and control: 2px primary, offset off the surface. */
 export const FOCUS_RING =
-  "outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary";
+  "outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 
 /** A neutral chip; `variant` picks the hairline or mono flavours. */
 export function Tag({
@@ -109,7 +109,7 @@ export function Tag({
         CHIP,
         variant === "soft" && NEUTRAL,
         variant === "outline" && cn(HAIRLINE, "text-muted-foreground"),
-        variant === "mono" && cn(HAIRLINE, "bg-muted font-mono font-medium tracking-tight text-foreground/80"),
+        variant === "mono" && cn(HAIRLINE, "bg-muted font-mono font-medium tracking-tight text-ink-2"),
         className
       )}
       title={title}
@@ -150,22 +150,23 @@ export function ActionBadge({ action }: { action: string }) {
 
 /**
  * Filing states. Round pills with a dot, in the muted status set: green ok,
- * primary in flight, amber needs attention, red error, grey history.
+ * primary in flight, attention (amber), error, grey history — the status
+ * tokens, never the buy/sell pair.
  */
-const OK = { cls: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300", dot: "bg-emerald-500" };
-const GREY = { cls: NEUTRAL, dot: "bg-muted-foreground/60" };
-const WARN = { cls: AMBER, dot: "bg-amber-500" };
+const OK = { cls: "bg-ok-soft text-ok", dot: "bg-ok" };
+const GREY = { cls: NEUTRAL, dot: "bg-muted-foreground" };
+const WARN = { cls: AMBER, dot: "bg-attention" };
 
 const STATUS_TONE: Record<string, { label: string; cls: string; dot: string }> = {
   notified: { label: "alerted", ...OK },
   backfilled: { label: "history", ...GREY },
   parsed: { label: "sending", cls: "bg-primary/10 text-primary", dot: "bg-primary" },
-  new: { label: "processing", cls: AMBER, dot: "bg-amber-500 motion-safe:animate-pulse" },
+  new: { label: "processing", cls: AMBER, dot: "bg-attention motion-safe:animate-pulse" },
   backfill_queued: { label: "queued", ...WARN },
   failed: {
     label: "unreadable",
-    cls: "bg-red-500/10 text-red-700 dark:text-red-300",
-    dot: "bg-red-500",
+    cls: "bg-error-soft text-error",
+    dot: "bg-error",
   },
   seen_skipped: { label: "indexed", ...GREY },
   // A scan the grid reader has captured but no model has transcribed: the
@@ -210,7 +211,7 @@ export function PartyBadge({ party, full = false }: { party: string | null; full
       className={cn(
         CHIP,
         HAIRLINE,
-        "justify-center bg-muted font-semibold text-foreground/70",
+        "justify-center bg-muted font-semibold text-ink-2",
         full ? "px-1.5" : "w-5 px-0 text-[10.5px]"
       )}
       title={label}
@@ -248,7 +249,7 @@ export function TickerChip({
         HAIRLINE,
         FOCUS_RING,
         "bg-[var(--card-solid)] px-1.5 font-mono text-[11.5px] font-semibold tracking-tight text-foreground",
-        "transition-[background-color,box-shadow,color] duration-150 ease-out",
+        "transition-[background-color,box-shadow,color] duration-(--dur) ease-(--ease-out)",
         "hover:bg-accent hover:text-accent-foreground hover:ring-primary/35 active:bg-primary/15"
       )}
     >
@@ -278,7 +279,7 @@ export function ScanTag({
     return (
       <Link
         href={`/scans/${encodeURIComponent(docId)}`}
-        className={cn(cls, FOCUS_RING, "transition-colors duration-150 hover:bg-amber-500/20")}
+        className={cn(cls, FOCUS_RING, "transition-[filter] duration-(--dur) ease-(--ease-out) hover:brightness-95 dark:hover:brightness-125")}
         title={`${title} Click to inspect the scan.`}
       >
         transcribed from scan
@@ -350,17 +351,17 @@ export function OwnerTag({ owner }: { owner: string | null }) {
   return <Tag>{OWNER_LABEL[owner]}</Tag>;
 }
 
-/** Muted error ink: the destructive role pulled toward the body text. */
-const LATE_INK = "text-[color-mix(in_oklab,var(--destructive)_82%,var(--foreground))]";
-const AS_FILED_INK = "text-amber-700 dark:text-amber-300";
+/** The error status ink: muted, and AA as text on every surface. */
+const LATE_INK = "text-error";
+const AS_FILED_INK = "text-attention";
 
 /** "13d" / "49d late": the figure at full weight, the unit and verdict lighter. */
 function Days({ days, late }: { days: number; late: boolean }) {
   return (
     <>
       {days}
-      <span className={cn("text-[0.92em]", late ? "opacity-80" : "text-muted-foreground/80")}>d</span>
-      {late ? <span className="font-normal opacity-80"> late</span> : null}
+      <span className={cn("text-[0.9em]", !late && "text-muted-foreground")}>d</span>
+      {late ? <span className="font-normal"> late</span> : null}
     </>
   );
 }
@@ -522,38 +523,39 @@ export function Amount({
 
 /** A secondary button / link-button: hairline, soft hover, pressed tint. */
 export const BUTTON = cn(
-  "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[8px] border border-border",
+  "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-control border border-border",
   "bg-[var(--card-solid)] px-3 text-xs font-medium text-muted-foreground",
-  "transition-[background-color,border-color,color] duration-150 ease-out",
-  "hover:border-foreground/15 hover:bg-muted hover:text-foreground active:bg-foreground/[0.07]",
+  "transition-[background-color,border-color,color] duration-(--dur) ease-(--ease-out)",
+  "hover:border-border-strong hover:bg-raised hover:text-foreground active:bg-secondary",
   FOCUS_RING
 );
 /** The one filled button in a form: its submit. */
 export const BUTTON_PRIMARY = cn(
-  "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[8px] bg-primary px-3.5",
+  "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-control bg-primary px-3.5",
   "text-xs font-medium text-primary-foreground shadow-[inset_0_1px_0_0_rgb(255_255_255/0.12)]",
-  "transition-[filter,background-color] duration-150 ease-out hover:brightness-110 active:brightness-95",
+  "transition-[filter,background-color] duration-(--dur) ease-(--ease-out) hover:brightness-110 active:brightness-95",
   FOCUS_RING
 );
 
 /** Text inputs and selects: one height, radius, hover and focus treatment. */
 export const FIELD = cn(
-  "h-8 w-full min-w-0 rounded-[8px] border border-input bg-[var(--card-solid)] px-2.5 text-[13px] text-foreground",
-  "transition-[border-color,box-shadow] duration-150 ease-out dark:[color-scheme:dark]",
-  "hover:border-foreground/20 focus:border-primary/60 focus:outline-none focus:ring-[3px] focus:ring-primary/30",
+  "h-8 w-full min-w-0 rounded-control border border-input bg-[var(--card-solid)] px-2.5 text-[13px] text-foreground",
+  "transition-[border-color,box-shadow] duration-(--dur) ease-(--ease-out) dark:[color-scheme:dark]",
+  // Focus keeps the base 2px ring (offset 2px); the border firms to match it.
+  "hover:border-border-strong focus:border-ring",
   "placeholder:text-muted-foreground"
 );
 
 /** One option of a segmented control (see `Segmented`). */
 export function segmentClass(active: boolean) {
   return cn(
-    "inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[6px] px-2.5 text-xs font-medium",
-    "transition-[background-color,color,box-shadow] duration-150 ease-out",
+    "inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-chip px-2.5 text-xs font-medium",
+    "transition-[background-color,color,box-shadow] duration-(--dur) ease-(--ease-out)",
     FOCUS_RING,
     "focus-visible:outline-offset-1",
     active
       ? "bg-[var(--card-solid)] text-foreground shadow-[0_1px_2px_rgb(0_0_0/0.06)] ring-1 ring-border"
-      : "text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground active:bg-foreground/[0.08]"
+      : "text-muted-foreground hover:bg-secondary hover:text-foreground active:bg-foreground/[0.08]"
   );
 }
 
@@ -575,7 +577,7 @@ export function Segmented({
   return (
     <nav
       aria-label={label}
-      className={cn("inline-flex max-w-full items-center gap-0.5 rounded-[8px] bg-muted p-0.5 ring-1 ring-inset ring-border/60", className)}
+      className={cn("inline-flex max-w-full items-center gap-0.5 rounded-control bg-muted p-0.5 ring-1 ring-inset ring-border/60", className)}
     >
       {items.map((it) => (
         <a key={it.key} href={it.href} aria-current={it.active ? "page" : undefined} className={segmentClass(it.active)}>

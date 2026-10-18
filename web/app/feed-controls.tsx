@@ -146,7 +146,7 @@ export function FilterBar({ filters, ignored }: { filters: TransactionFilters; i
         </div>
       </form>
       {ignored.length ? (
-        <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">
+        <p className="mt-3 text-xs text-attention">
           Ignored unrecognised filter{ignored.length === 1 ? "" : "s"}: {ignored.join(", ")}
         </p>
       ) : null}
@@ -175,7 +175,7 @@ export function ShownLine({
   const counted = all - totals.transcribed;
   return (
     <p className="mb-3 text-xs text-muted-foreground">
-      {span} · disclosed total <MoneyText value={range(totals.volume_min, totals.volume_max)} className="text-foreground/80" />
+      {span} · disclosed total <MoneyText value={range(totals.volume_min, totals.volume_max)} className="text-ink-2" />
       {shown === all ? "" : ` across all ${all.toLocaleString()}`}
       {totals.transcribed
         ? ` · ${totals.transcribed.toLocaleString()} transcribed from scans, not in the total (${counted.toLocaleString()} counted)`
