@@ -45,7 +45,7 @@ def _scan_filing(conn, doc_id, method="scanned", status="failed"):
 
 
 def test_schema_version_8_has_the_scan_tables(conn):
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 8
+    assert conn.execute("PRAGMA user_version").fetchone()[0] >= 8
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert {"scan_pages", "scan_rows"} <= tables
 
@@ -58,7 +58,7 @@ def test_a_version_7_database_gains_the_tables_on_connect(tmp_path):
     c.close()
     c = db.connect(path)
     try:
-        assert c.execute("PRAGMA user_version").fetchone()[0] == 8
+        assert c.execute("PRAGMA user_version").fetchone()[0] >= 8
         assert c.execute("SELECT COUNT(*) FROM scan_pages").fetchone()[0] == 0
         assert c.execute("SELECT COUNT(*) FROM scan_rows").fetchone()[0] == 0
     finally:

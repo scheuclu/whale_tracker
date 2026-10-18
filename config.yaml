@@ -59,6 +59,30 @@ alerts:
   # the filing took). 45 is the STOCK Act's deadline; 0 turns both off.
   late_filing_days: 45
 
+  # Options are the most directional disclosure a member can make, and the
+  # filing text carries the contract: 57 rows in the 2026 corpus are typed
+  # [OP], and src/whale/options.py reads the kind (call/put), strike and
+  # expiry out of what each row printed — a House "Description:" line such
+  # as "Call options; Strike price $325; Expires 06/18/2026", eFD's "Option
+  # Type: Call · Strike price: $75.00 · Expires: 2026-08-21", or a broker
+  # symbol like "PUT/XSP @ 690 EXP 10/16/2026". A row whose text names no
+  # contract, or both a call and a put, stays unparsed; a strike is only a
+  # figure the text calls a strike ("10 puts at $11.80" is a premium).
+  #
+  # options_every_trade: every options trade by any member is its own alert,
+  # split per transaction exactly like a watched member's filing — the
+  # per-filing digest degrades to fit Telegram's limit, and the contract is
+  # the detail it drops first. Sent ahead of the routine digests, which still
+  # follow for a filing that holds other trades too. Off by default: it is a
+  # firehose by design, and the 2026 corpus holds one 30-row options filing.
+  options_every_trade: false
+  # cluster_count_options: whether a parsed option counts toward a ticker's
+  # direction in the cluster finder — a call as a buy, a put as a sell, and
+  # selling the contract the reverse. Off (the default), a row with a parsed
+  # contract counts toward neither direction. Either way a bought put is no
+  # longer read as a buy, which is what the action column alone used to say.
+  cluster_count_options: false
+
 # Members whose every trade is worth its own alert, immediately.
 #
 # A watched member's filing is split: each transaction arrives as its own

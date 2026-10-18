@@ -27,6 +27,7 @@ from pathlib import Path
 
 from .amounts import BRACKETS
 from .db import COUNTED_STATUSES, connect
+from .ptr import TICKER_FROM_NAME_NOTE
 from .stats import STOCK_ACT_DEADLINE_DAYS, TRANSCRIBED_METHOD, disclosure_delay_days
 
 # Severity ordering, worst first.
@@ -157,6 +158,37 @@ def check_ticker_sanity(conn, today: date | None = None) -> list[Finding]:
         "ST is Sensata, AB is AllianceBernstein, BA is Boeing.",
         [f"{r['ticker']!r}  type={r['asset_type']}  filing {r['doc_id']}  {r['asset_name'][:40]}"
          for r in suspicious],
+    )]
+
+
+def check_tickers_from_asset_names(conn, today: date | None = None) -> list[Finding]:
+    """Tickers read off the asset name because the ticker column was empty (#50).
+
+    Informational: the symbol is the one the filer typed, just in the wrong
+    cell. The evidence lists every such symbol with its row and member
+    counts, because this is where a parenthesised word that is not a ticker
+    would surface. Silent when no row carries the provenance note.
+    """
+    rows = _rows(conn, f"""
+        SELECT t.ticker, COUNT(*) AS n, COUNT(DISTINCT t.politician_id) AS members
+        FROM transactions t JOIN filings f ON f.id = t.filing_id
+        WHERE f.status IN {_counted()} AND t.ticker IS NOT NULL AND t.description LIKE ?
+        GROUP BY t.ticker ORDER BY n DESC, t.ticker
+    """, (f"%{TICKER_FROM_NAME_NOTE}%",))
+    if not rows:
+        return []
+    total = sum(r["n"] for r in rows)
+    return [Finding(
+        INFO, "tickers_from_asset_names",
+        f"{total} transaction(s) carry a ticker read from the asset name "
+        f"({len(rows)} distinct symbol(s))",
+        "The ticker column was empty and the asset name carried exactly one "
+        "symbol in parentheses — \"BHP Group Limited (BHP)\" — so the parser "
+        "took it and marked the row in `description`; the name is kept "
+        "verbatim. On a House row only the form's own \"(SYM) [XX]\" slot "
+        "counts. A symbol colliding with an asset-type code is not a defect "
+        "(SE is Sea Limited); a plain word in this list would be.",
+        [f"{r['ticker']:<8}{r['n']:>5} row(s)  {r['members']} member(s)" for r in rows],
     )]
 
 
@@ -644,6 +676,77 @@ def check_senate_parse_coverage(conn, today: date | None = None) -> list[Finding
     return findings
 
 
+# --- pipeline runs ----------------------------------------------------------
+
+
+def check_pipeline_runs(conn, today: date | None = None) -> list[Finding]:
+    """What the last pipeline runs did, from the run log `pipeline.run` keeps.
+
+    The CI digest in the weekly review sees the Actions history: which jobs
+    went green. This sees the other half — what each run actually parsed,
+    sent and stored — from `sync_state.recent_runs`, newest first. Silent
+    on a database no run has written yet (expected until the first run with
+    the log), so a fresh checkout says nothing. A failed run warns with its
+    error; a log whose newest run is more than a day old warns too, because
+    the poll is scheduled every 90 minutes and the database only reaches the
+    repository through a run — a day of silence is a broken schedule, not a
+    quiet one. The run log is bounded, so this never grows with the corpus.
+    """
+    import json
+
+    from .db import get_state
+
+    raw = get_state(conn, "recent_runs")
+    if raw is None:
+        return []
+    # A log that no longer parses must surface as `check_failed`, not as a
+    # pass: json.loads raising is the intended behaviour.
+    runs = [r for r in json.loads(raw) if isinstance(r, dict)]
+    if not runs:
+        return []
+
+    def line(r: dict) -> str:
+        return (f"{r.get('started', '?')}  {r.get('duration_s', '?')}s  "
+                f"parsed {r.get('filings_parsed', '?')}  alerts {r.get('alerts_sent', '?')}  "
+                f"scans {r.get('scans_transcribed', '?')}  insiders {r.get('insiders_stored', '?')}  "
+                f"{r.get('outcome', '?')}" + (f"  {r['error']}" if r.get("error") else ""))
+
+    failed = [r for r in runs if r.get("outcome") != "ok"]
+    out = [Finding(
+        INFO, "pipeline_runs",
+        f"{len(runs)} pipeline run(s) logged, {len(failed)} failed; "
+        f"newest started {runs[0].get('started', '?')}",
+        "One line per run, newest first: when it started, how long it took, "
+        "and what it parsed, sent and stored. Dry runs and runs the job "
+        "timeout killed leave no entry; the Actions history has those.",
+        [line(r) for r in runs[:10]],
+    )]
+    if failed:
+        out.append(Finding(
+            WARN, "pipeline_run_failed",
+            f"{len(failed)} of the last {len(runs)} pipeline run(s) failed",
+            "A run that raised still logged what it managed before it broke; "
+            "every step commits its own work, so the next run resumed from "
+            "there. Read the error, then the run's log in Actions.",
+            [line(r) for r in failed],
+        ))
+
+    newest = str(runs[0].get("started") or "")
+    if newest:
+        age_days = ((today or date.today()) - date.fromisoformat(newest[:10])).days
+        if age_days > 1:
+            out.append(Finding(
+                WARN, "pipeline_runs_stale",
+                f"No pipeline run logged in {age_days} days (newest {newest})",
+                "The poll workflow is scheduled every 90 minutes and GitHub "
+                "delivers it hours late at worst, never days. Either the "
+                "schedule stopped, every run since has been killed before "
+                "its `finally`, or the database being audited is not the one "
+                "the pipeline writes.",
+            ))
+    return out
+
+
 
 # --- insiders (SEC Form 4) ---------------------------------------------------
 #
@@ -879,8 +982,14 @@ def check_insider_feed_health(conn, today: date | None = None) -> list[Finding]:
             ERROR, "insider_feed_gap",
             f"The insider feed advanced past a gap ({gap})",
             "Filings in this range were published while the pipeline was not "
-            "watching and the feed has since forgotten them. They will never "
-            "arrive on their own.",
+            "watching and the feed has since forgotten them. The poll run "
+            "repairs this itself: after each live-feed sync it walks EDGAR's "
+            "daily index for the gap, oldest day first, inside "
+            "`insiders.gap_repair_budget_seconds`, and the range narrows as "
+            "days are covered — `edgar_status` reports each run's progress. "
+            "This stays an error until the gap clears. If the range is not "
+            "shrinking between runs (the budget is 0, or the status reports "
+            "a repair error) walk it by hand:",
             [f"python -m whale backfill-insiders --from {start} --to {end}"],
         ))
 
@@ -974,6 +1083,7 @@ CHECKS = (
     check_house_age_cutoff,
     check_missing_transaction_fields,
     check_ticker_sanity,
+    check_tickers_from_asset_names,
     check_unmatched_filers,
     check_date_anomalies,
     check_late_filings,
@@ -983,6 +1093,7 @@ CHECKS = (
     check_alert_health,
     check_senate,
     check_senate_parse_coverage,
+    check_pipeline_runs,
     check_insider_empty_filings,
     check_insider_primary_owner,
     check_insider_values,

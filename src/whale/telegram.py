@@ -14,6 +14,7 @@ from urllib.parse import quote
 import httpx
 
 from .amounts import format_amount, usd
+from .options import describe as describe_option
 from .stats import Cluster, InsiderCluster, TickerStat
 
 log = logging.getLogger(__name__)
@@ -65,6 +66,11 @@ def _tx_line(tx: dict) -> str:
     detail = []
     if name and ticker:
         detail.append(esc(name[:60]))
+    if contract := describe_option(tx.get("option_kind"), tx.get("strike_cents"),
+                                   tx.get("expiry")):
+        # The contract as the filing printed it: kind, and strike and expiry
+        # only when they were given. The most directional line in the message.
+        detail.append(esc(contract))
     if tx.get("tx_date"):
         traded = tx["tx_date"][5:].replace("-", "/")
         delay = tx.get("delay_days")
@@ -287,8 +293,30 @@ def format_watchlist_transaction(member: str, party: str | None, state: str | No
     reconstructable, so a 7-trade filing reads as 7 of one event, not 7 events.
     """
     header = member_label(member, party, state, district, chamber)
+    return _single_transaction(f"🚨 <b>WATCHLIST — {esc(header)}</b>", filing_date,
+                               pdf_url, tx, index, total, context)
+
+
+def format_options_transaction(member: str, party: str | None, state: str | None,
+                               district: str | None, chamber: str | None,
+                               filing_date: str | None, pdf_url: str, tx: dict,
+                               index: int, total: int,
+                               context: TickerStat | None = None) -> str:
+    """One message per options trade, for `alerts.options_every_trade`.
+
+    The watchlist's shape, because the reason is the same: the per-filing
+    digest degrades to fit Telegram's limit, and an option's contract is the
+    detail it would drop first. `index`/`total` place the trade in its filing.
+    """
+    header = member_label(member, party, state, district, chamber)
+    return _single_transaction(f"🎯 <b>OPTIONS — {esc(header)}</b>", filing_date,
+                               pdf_url, tx, index, total, context)
+
+
+def _single_transaction(headline: str, filing_date: str | None, pdf_url: str, tx: dict,
+                        index: int, total: int, context: TickerStat | None) -> str:
     parts = [
-        f"🚨 <b>WATCHLIST — {esc(header)}</b>",
+        headline,
         _tx_line(tx),
         "",
         f"Filed {esc(filing_date or 'unknown')} · transaction {index} of {total}",

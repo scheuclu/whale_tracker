@@ -2,9 +2,19 @@ name: poll
 
 on:
   schedule:
-    # The Clerk republishes the disclosure index roughly daily, so polling
-    # more often than this would just re-download the same ZIP.
-    - cron: "0 */3 * * *"
+    # Two lines, 90 minutes apart, both off the hour. GitHub queues scheduled
+    # runs and delays or drops them under load, worst at :00. Measured over
+    # the 100 runs before this change (2026-09-25 → 2026-10-18, 97 of them
+    # scheduled, on a single `0 */3 * * *`): the gap between runs was a
+    # median 5.3 h, p90 8.5 h, max 10.6 h against the 3 h asked for, and
+    # delivery ran a median 29 min (p90 54 min) past the hour. A slot GitHub
+    # drops now gets a second chance 90 minutes later instead of three hours.
+    # The Clerk republishes its index roughly daily, so a spare run costs one
+    # more download of the same ZIP; the EDGAR feed remembers about two
+    # business days, so a long gap costs missed Form 4s. The measured cadence
+    # is reported by the weekly review and the Pipeline page.
+    - cron: "17 */3 * * *"
+    - cron: "47 1-22/3 * * *"
   workflow_dispatch:
     inputs:
       backfill_year:
@@ -39,9 +49,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -88,7 +98,13 @@ jobs:
         # to resume.
         run: python -m whale backfill-insiders --from "$FROM" ${TO:+--to "$TO"} --budget-seconds 480
 
+      # Also after a failed step: every pipeline step commits its own work,
+      # so the database is consistent at any point, and a run that raised
+      # has logged itself (outcome, error, what it managed) in
+      # sync_state.recent_runs — the Pipeline page cannot show that unless
+      # it is pushed. The job still goes red for the failed step.
       - name: Commit knowledge base
+        if: ${{ !cancelled() }}
         run: |
           git config user.name "whale-bot"
           git config user.email "whale-bot@users.noreply.github.com"

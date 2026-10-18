@@ -11,13 +11,15 @@ import json
 import logging
 import sqlite3
 import time
+from dataclasses import dataclass, field
 from datetime import date
 
-from . import (db, house, insider_alerts, insiders, roster, senate, senate_ptr, stats,
-               telegram)
+from . import (db, house, insider_alerts, insiders, options, roster, senate, senate_ptr,
+               stats, telegram)
 from .amounts import parse_amount
 from .config import Config
-from .ptr import ParsedFiling, ScannedFilingError, parse_pdf
+from .ptr import (PAREN_SYMBOL_RE, SLOT_SYMBOL_RE, ParsedFiling, ScannedFilingError, parse_pdf,
+                  ticker_from_asset_name, with_ticker_note)
 from .vision import ScanUnreadable, VisionUnavailable, parse_scanned
 
 log = logging.getLogger(__name__)
@@ -25,16 +27,109 @@ log = logging.getLogger(__name__)
 
 def run(config: Config, dry_run: bool = False) -> None:
     conn = db.connect(config.db_path)
+    tally = RunTally()
     try:
         sync(conn, config)
         retry_scanned(conn, config)
-        parse_pending(conn, config)
-        notify_pending(conn, config, dry_run=dry_run)
-        notify_clusters(conn, config, dry_run=dry_run)
-        _sync_insiders(conn, config)
-        notify_insiders(conn, config, dry_run=dry_run)
+        tally.filings_parsed = parse_pending(conn, config, tally=tally)
+        tally.alerts_sent += notify_pending(conn, config, dry_run=dry_run)
+        tally.alerts_sent += notify_clusters(conn, config, dry_run=dry_run)
+        tally.insiders_stored = _sync_insiders(conn, config)
+        tally.alerts_sent += notify_insiders(conn, config, dry_run=dry_run)
+        tally.outcome = "ok"
+    except Exception as exc:
+        tally.outcome = "failed"
+        tally.error = f"{type(exc).__name__}: {exc}"
+        raise
     finally:
-        conn.close()
+        try:
+            record_run(conn, tally, dry_run=dry_run)
+        finally:
+            conn.close()
+
+
+# --- run log ----------------------------------------------------------------
+
+# sync_state key: the last RUN_LOG_SIZE pipeline runs as a JSON list, newest
+# first. One entry per `run`, written in its `finally`, so a run that failed
+# is logged with what it managed before it broke:
+#   {started, finished, duration_s, filings_parsed, alerts_sent,
+#    scans_transcribed, insiders_stored, outcome ("ok" | "failed"), error}
+# The Pipeline page lists it and the audit reads it. A dry run leaves no
+# entry: it is a preview, and must not appear on the page as a run. A run
+# the job timeout kills leaves none either — SIGTERM ends the process
+# without reaching the `finally` — so the Actions history stays the record
+# for those; the weekly review digests it.
+RUN_LOG_STATE = "recent_runs"
+RUN_LOG_SIZE = 20
+
+
+@dataclass
+class RunTally:
+    """What one `run` did, filled in as the steps return."""
+
+    started: str = field(default_factory=db.now_iso)
+    filings_parsed: int = 0
+    alerts_sent: int = 0
+    scans_transcribed: int = 0
+    insiders_stored: int = 0
+    outcome: str = "failed"
+    error: str | None = None
+    clock: object = time.monotonic
+    _t0: float = field(init=False)
+
+    def __post_init__(self) -> None:
+        self._t0 = self.clock()
+
+    def entry(self) -> dict:
+        return {
+            "started": self.started,
+            "finished": db.now_iso(),
+            "duration_s": round(self.clock() - self._t0, 1),
+            "filings_parsed": self.filings_parsed,
+            "alerts_sent": self.alerts_sent,
+            "scans_transcribed": self.scans_transcribed,
+            "insiders_stored": self.insiders_stored,
+            "outcome": self.outcome,
+            "error": self.error,
+        }
+
+
+def recent_runs(conn: sqlite3.Connection) -> list[dict]:
+    """The logged runs, newest first; empty when none, or when the value no
+    longer parses (a log that cannot be read is replaced, not fatal)."""
+    raw = db.get_state(conn, RUN_LOG_STATE)
+    if raw is None:
+        return []
+    try:
+        runs = json.loads(raw)
+    except ValueError:
+        log.warning("sync_state %r is not JSON; starting the run log afresh", RUN_LOG_STATE)
+        return []
+    if not isinstance(runs, list):
+        log.warning("sync_state %r is not a list; starting the run log afresh", RUN_LOG_STATE)
+        return []
+    return [r for r in runs if isinstance(r, dict)]
+
+
+def record_run(conn: sqlite3.Connection, tally: RunTally, dry_run: bool = False) -> None:
+    """Prepend this run to the log and keep the newest RUN_LOG_SIZE.
+
+    Called from `run`'s `finally`. Rolls back first: every step commits what
+    it means to keep, so anything still pending belongs to the unit a failing
+    step was in the middle of, and the log entry's commit must not carry it
+    along. Never raises — a log write that fails must neither turn a good run
+    red nor mask the exception of a failing one.
+    """
+    if dry_run:
+        return
+    try:
+        conn.rollback()
+        runs = [tally.entry()] + recent_runs(conn)[:RUN_LOG_SIZE - 1]
+        db.set_state(conn, RUN_LOG_STATE, json.dumps(runs))
+        conn.commit()
+    except Exception:
+        log.exception("could not record the run in sync_state %r", RUN_LOG_STATE)
 
 
 # --- sync -------------------------------------------------------------------
@@ -53,6 +148,7 @@ AGE_CUTOFF_STATE = "house_age_cutoff"
 def sync(conn: sqlite3.Connection, config: Config) -> int:
     """Refresh the roster and record newly filed disclosures."""
     roster.sync(conn)
+    _derive_tickers_from_names(conn)
     matcher = roster.Matcher(conn)
 
     new_count = 0
@@ -267,35 +363,87 @@ def _normalise_senate_rows(conn: sqlite3.Connection) -> int:
     return fixed
 
 
+def _derive_tickers_from_names(conn: sqlite3.Connection) -> int:
+    """Give stored ticker-less rows the symbol their asset name carries (#50).
+
+    The parsers now read "(BHP)" off the name when the ticker column is
+    empty; rows stored before they did are brought into line here, the way
+    `_normalise_senate_rows` does for Senate dates. Same rule per chamber as
+    at parse time — the House form's own "(SYM) [XX]" slot, any single
+    parenthesised symbol on the Senate's free-text name — and the same
+    provenance note in `description`, so the audit counts both alike. A
+    Senate cell that held two legs' symbols was not empty, and the name is
+    not consulted for it. Idempotent: a row with a ticker is never touched,
+    so nothing matches once converted, and it runs on every sync and backfill.
+    """
+    rows = conn.execute(
+        """SELECT t.id, t.asset_name, t.description, t.raw_text, f.chamber
+           FROM transactions t JOIN filings f ON f.id = t.filing_id
+           WHERE t.ticker IS NULL AND t.asset_name LIKE '%(%)%'"""
+    ).fetchall()
+    fixed = 0
+    for row in rows:
+        if row["chamber"] == "house":
+            pattern = SLOT_SYMBOL_RE
+        elif _senate_cell_had_symbols(row["raw_text"]):
+            continue
+        else:
+            pattern = PAREN_SYMBOL_RE
+        symbol = ticker_from_asset_name(row["asset_name"], pattern)
+        if symbol is None:
+            continue
+        conn.execute(
+            "UPDATE transactions SET ticker = ?, description = ? WHERE id = ?",
+            (symbol, with_ticker_note(row["description"]), row["id"]))
+        fixed += 1
+    if fixed:
+        conn.commit()
+        log.info("tickers: read %d ticker(s) off the asset names of stored rows", fixed)
+    return fixed
+
+
+def _senate_cell_had_symbols(raw_text: str | None) -> bool:
+    """Whether a stored Senate row's ticker cell held any symbol at all.
+
+    `raw_text` is the nine cells joined by " | " and the ticker is the
+    fourth; the three before it never contain the separator.
+    """
+    cells = (raw_text or "").split(" | ", 4)
+    return len(cells) > 3 and bool(senate_ptr.ticker_from_cell(cells[3])[1])
+
+
 def _sync_insiders(conn: sqlite3.Connection, config: Config,
                    client: insiders.EdgarClient | None = None,
-                   today: date | None = None) -> None:
+                   today: date | None = None) -> int:
     """Best-effort, and last: an EDGAR slowdown must never delay House alerts.
 
     `insiders.sync` absorbs the failures it knows about (throttling, network,
     a malformed filing); this guard is for everything else. A recorded feed
     gap is repaired afterwards, so a walk of the daily index can never starve
     the live feed, and only when the feed was read to the end: a throttled
-    or out-of-time sync is no moment to ask EDGAR for more.
+    or out-of-time sync is no moment to ask EDGAR for more. Returns how many
+    filings were stored, feed and repair together, for the run log.
     """
     if not config.insiders.enabled:
-        return
+        return 0
     try:
         result = insiders.sync(conn, config, client=client, today=today)
     except Exception as exc:
         log.exception("insider sync failed unexpectedly")
         db.set_state(conn, insiders.STATE_STATUS, f"error: {exc}")
         conn.commit()
-        return
+        return 0
     log.info("insiders: %s", result.summary())
     if result.aborted:
-        return
+        return result.stored
     try:
-        insiders.repair_gap(conn, config, result, client=client, today=today)
+        repaired = insiders.repair_gap(conn, config, result, client=client, today=today)
     except Exception as exc:
         log.exception("insider gap repair failed unexpectedly")
         db.set_state(conn, insiders.STATE_STATUS, f"error: gap repair failed: {exc}")
         conn.commit()
+        return result.stored
+    return result.stored + (repaired.stored if repaired else 0)
 
 
 def notify_insiders(conn: sqlite3.Connection, config: Config, dry_run: bool = False,
@@ -457,12 +605,15 @@ class VisionDeferred(Exception):
 def parse_pending(conn: sqlite3.Connection, config: Config,
                   statuses: tuple[str, ...] = ("new",),
                   target_status: str = "parsed", limit: int | None = None,
-                  silent: bool = False, clock=time.monotonic) -> int:
+                  silent: bool = False, clock=time.monotonic,
+                  tally: RunTally | None = None) -> int:
     """Download and parse queued filings into transactions.
 
     `silent` marks everything it touches as already notified, which is what
     backfill needs: history should populate the statistics without replaying
-    months of filings into Telegram.
+    months of filings into Telegram. `tally`, when `run` passes one, counts
+    the scans a vision model transcribed — the return value counts every
+    filing parsed and cannot tell them apart.
 
     House filings are PDFs from the Clerk; Senate filings are eFD report pages
     and take `_parse_senate_filings`. Both land in the same `transactions`
@@ -532,6 +683,8 @@ def parse_pending(conn: sqlite3.Connection, config: Config,
 
         if method == "vision":
             vision_spent += clock() - started
+            if tally is not None:
+                tally.scans_transcribed += 1
         rows = [_transaction_row(t) for t in parsed.transactions]
         db.replace_transactions(conn, filing["id"], filing["politician_id"], rows)
         # A filing Telegram has already heard of — a scan reported as
@@ -710,6 +863,10 @@ def _transaction_row(tx) -> dict:
         ),
         "description": tx.description,
         "raw_text": tx.raw_text,
+        # The option contract, if the row's own text names one (#58). Here
+        # rather than in either parser: both chambers and the vision path
+        # build their rows through this one function.
+        **options.columns(tx.asset_name, tx.description, tx.asset_type),
     }
 
 
@@ -741,8 +898,35 @@ def notify_pending(conn: sqlite3.Connection, config: Config, dry_run: bool = Fal
     for filing, member, rows in watched:
         sent += _notify_watched_filing(conn, config, filing, member, rows, dry_run)
 
+    # Option trades next, when `alerts.options_every_trade` asks for them:
+    # each is its own alert ahead of the routine digests, like a watched
+    # member's. A filing whose option alerts did not all go out is held back
+    # from its digest so the whole filing replays next run; one whose every
+    # row went out this way is consumed, as a watched filing is.
+    held: set[int] = set()
+    consumed: set[int] = set()
+    if config.alerts.options_every_trade:
+        for filing in pending:
+            if filing["id"] in watched_ids:
+                continue
+            rows = [dict(r) for r in db.transactions_for_filing(conn, filing["id"])]
+            wanted = sum(1 for r in rows if r.get("option_kind"))
+            if not wanted:
+                continue
+            delivered = _notify_option_trades(conn, config, filing, rows, dry_run)
+            if delivered < wanted:
+                held.add(filing["id"])
+            elif wanted == len(rows):
+                consumed.add(filing["id"])
+                if not dry_run:
+                    db.set_status(conn, filing["id"], "notified", None)
+                    db.mark_notified(conn, filing["id"])
+            if not dry_run:
+                sent += delivered
+            conn.commit()
+
     for filing in pending:
-        if filing["id"] in watched_ids:
+        if filing["id"] in watched_ids or filing["id"] in held or filing["id"] in consumed:
             continue
         rows = [dict(r) for r in db.transactions_for_filing(conn, filing["id"])]
         for r in rows:
@@ -859,6 +1043,46 @@ def _notify_watched_filing(conn: sqlite3.Connection, config: Config, filing,
     return delivered if delivered == total else 0
 
 
+def _notify_option_trades(conn: sqlite3.Connection, config: Config, filing,
+                          rows: list[dict], dry_run: bool) -> int:
+    """One alert per option trade in a routine filing (`alerts.options_every_trade`).
+
+    Never through the filing's digest: that message degrades to fit Telegram's
+    limit — context first, then each row's asset detail, then rows — and the
+    contract is exactly the detail that would go. The digest still follows
+    with every row when the filing holds other trades too, so the filing stays
+    reported as one event and the alert is its highlight, not a replacement.
+    `index`/`total` are the row's place in the whole filing for the same reason.
+
+    Returns how many option alerts were delivered. Short of all of them the
+    caller leaves the filing pending, so the whole filing replays next run: a
+    duplicate options alert is a smaller harm than a missing one. Watched
+    members never reach here — their filings are already split per trade.
+    """
+    total = len(rows)
+    delivered = 0
+    for index, row in enumerate(rows, start=1):
+        if not row.get("option_kind"):
+            continue
+        row["delay_days"] = stats.disclosure_delay_days(row["tx_date"], filing["filing_date"])
+        context = (stats.ticker_context(conn, row["ticker"], config.alerts.window_days)
+                   if row["ticker"] else None)
+        text = telegram.format_options_transaction(
+            member=filing["member_name"] or filing["filer_name"],
+            party=filing["party"], state=_state_of(filing),
+            district=_district_of(filing),
+            chamber=filing["member_chamber"] or filing["chamber"],
+            filing_date=filing["filing_date"], pdf_url=filing["pdf_url"],
+            tx=row, index=index, total=total, context=context,
+        )
+        if _deliver(config, text, dry_run):
+            delivered += 1
+    if delivered and not dry_run:
+        log.info("options alert for %s: %d transaction(s)",
+                 filing["member_name"] or filing["filer_name"], delivered)
+    return delivered
+
+
 def notify_clusters(conn: sqlite3.Connection, config: Config, dry_run: bool = False) -> int:
     """Alert when several members converge on one ticker."""
     if not (config.telegram_configured or dry_run):
@@ -927,6 +1151,7 @@ def backfill(config: Config, year: int | None, limit: int | None,
     conn = db.connect(config.db_path)
     try:
         _normalise_senate_rows(conn)
+        _derive_tickers_from_names(conn)
         chambers = ("house", "senate") if chamber == "all" else (chamber,)
         marks = ", ".join("?" for _ in chambers)
         sql = f"SELECT id FROM filings WHERE status = 'seen_skipped' AND chamber IN ({marks})"
