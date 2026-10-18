@@ -95,7 +95,7 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ doc
         <StatTile
           label="Pages"
           value={String(pages.length)}
-          hint={failedPages ? `${failedPages} the reader could not decompose` : "all decomposed"}
+          hint={failedPages ? `${failedPages} yielded no rows` : "all decomposed and joined"}
         />
         <StatTile label="Rows read" value={String(rows.length)} hint="transaction rows the grid found" />
         <StatTile label="Unknown" value={String(unknown)} hint="amount or type not called" />
@@ -128,7 +128,7 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ doc
             </SectionTitle>
             {page.error ? (
               <p className="mb-2 text-xs text-amber-600 dark:text-amber-400">
-                Reader could not decompose this page: <span className="font-mono">{page.error}</span>
+                This page yielded no rows: <span className="font-mono">{page.error}</span>
               </p>
             ) : null}
             <div className="grid gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
@@ -230,7 +230,7 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ doc
                   </table>
                 ) : (
                   <p className="p-4 text-xs text-muted-foreground">
-                    {page.error ? "No rows: the page could not be decomposed." : "No transaction rows on this page."}
+                    {page.error ? "No rows: the page yielded none." : "No transaction rows on this page."}
                   </p>
                 )}
               </Card>
