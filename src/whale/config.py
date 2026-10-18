@@ -38,6 +38,11 @@ class AlertSettings:
     cluster_asset_types: list[str] = field(
         default_factory=lambda: list(DEFAULT_CLUSTER_ASSET_TYPES)
     )
+    # A filing whose EVERY trade was disclosed more than this many days after
+    # it was made leads its Telegram message with "⚠️ late by N days" and is
+    # recorded once as a `late_filing` alert. 45 is the STOCK Act's deadline
+    # (`stats.STOCK_ACT_DEADLINE_DAYS`); 0 turns both off.
+    late_filing_days: int = 45
     # Every options trade by any member is its own alert, split per
     # transaction like a watched member's filing and sent ahead of the
     # routine digests. Off by default: it is a firehose by design.
@@ -71,7 +76,8 @@ class IngestSettings:
 # config.yaml looking like a setting while alerting on nothing.
 ALERT_KEYS = frozenset({
     "window_days", "min_politicians", "min_volume_usd", "min_member_floor_usd",
-    "cluster_asset_types", "options_every_trade", "cluster_count_options",
+    "cluster_asset_types", "late_filing_days", "options_every_trade",
+    "cluster_count_options",
 })
 
 # What a rule may say. Anything else is a typo, and a typo that silently
@@ -207,6 +213,23 @@ def _member_floor(raw) -> int:
     if value < 0:
         raise ConfigError(
             f"alerts.min_member_floor_usd is {value}; it must be 0 (off) or more")
+    return value
+
+
+def _late_filing_days(raw) -> int:
+    """`alerts.late_filing_days`: whole days past the trade, 0 for off.
+
+    A negative value would call every filing late, or none, depending on how
+    it was read — while sitting in config.yaml looking tuned. It raises.
+    """
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        raise ConfigError(
+            f"alerts.late_filing_days must be a whole number of days, not {raw!r}") from None
+    if value < 0:
+        raise ConfigError(
+            f"alerts.late_filing_days is {value}; it must be 0 (off) or more")
     return value
 
 
@@ -489,6 +512,7 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
             str(t).upper()
             for t in (a.get("cluster_asset_types") or DEFAULT_CLUSTER_ASSET_TYPES)
         ],
+        late_filing_days=_late_filing_days(a.get("late_filing_days", 45)),
         options_every_trade=_flag(a.get("options_every_trade", False),
                                   "alerts.options_every_trade"),
         cluster_count_options=_flag(a.get("cluster_count_options", False),

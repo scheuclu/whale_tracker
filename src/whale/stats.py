@@ -325,8 +325,8 @@ def find_clusters(conn: sqlite3.Connection, settings: AlertSettings,
 
 
 # `alerts.kind`: what fired. The two cluster kinds are also dedupe keys, so
-# `db.last_alert` must always be asked for one of them by name. The other
-# three are logged per message so the /alerts page is the whole history.
+# `db.last_alert` must always be asked for one of them by name. The others
+# are logged per message so the /alerts page is the whole history.
 CLUSTER_KIND = "cluster"
 INSIDER_CLUSTER_KIND = "insider_cluster"
 FILING_KIND = "filing"
@@ -337,6 +337,14 @@ INSIDER_FILING_KIND = "insider_filing"
 OPTIONS_KIND = "options"
 ALERT_KINDS = (CLUSTER_KIND, INSIDER_CLUSTER_KIND, FILING_KIND, WATCHLIST_KIND,
                INSIDER_FILING_KIND, OPTIONS_KIND)
+# One row per filing whose every trade was disclosed past the deadline. The
+# `alerts` table has no filing column, so the row is keyed the way `filings`
+# is unique: `ticker` holds the Clerk's document id and `direction` the
+# chamber. `window_days` is the deadline it was judged by and
+# `politician_count` the number of late trades. See `is_new_late_filing`.
+LATE_FILING_KIND = "late_filing"
+# Not in ALERT_KINDS: it is a marker beside the filing's own `filing` row, not
+# a message of its own, so the /alerts page does not list it.
 
 
 def is_new_cluster(conn: sqlite3.Connection, cluster: Cluster,
@@ -389,6 +397,42 @@ def is_new_insider_cluster(conn: sqlite3.Connection, cluster: InsiderCluster,
     # At least one more insider, and at least `growth`× the reported size.
     # ceil() so a fractional threshold rounds towards fewer messages.
     return cluster.insider_count >= max(before + 1, math.ceil(before * growth))
+
+
+def filing_late_by_days(delays, deadline_days: int) -> int | None:
+    """How late a filing is when every trade in it is past the deadline.
+
+    The report was due `deadline_days` after its earliest trade, so the
+    figure is the longest delay minus the deadline: how many days past its
+    due date the report reached the Clerk. The per-trade delays are each
+    row's own clock; this is the filing's.
+
+    None when the feature is off (`deadline_days` 0), when any trade is
+    inside the deadline — the filing is then partly on time, and the
+    per-trade lines say which rows were not — or when any delay is unknown:
+    a filing whose dates contradict each other cannot be called all-late.
+    """
+    if deadline_days <= 0:
+        return None
+    delays = list(delays)
+    if not delays or any(d is None for d in delays):
+        return None
+    if min(delays) <= deadline_days:
+        return None
+    return max(delays) - deadline_days
+
+
+def is_new_late_filing(conn: sqlite3.Connection, chamber: str, doc_id: str) -> bool:
+    """Whether no `late_filing` alert has been recorded for this filing.
+
+    Deduped per filing, and keyed on the filing itself (document id and
+    chamber: what `filings` is unique on), so a late filing is recorded once
+    however many times its message is rebuilt. Kind-scoped, like every other
+    dedupe: a cluster row on the same key must not suppress it.
+    """
+    from . import db as _db
+
+    return _db.last_alert(conn, doc_id, chamber, LATE_FILING_KIND) is None
 
 
 def politician_stats(conn: sqlite3.Connection, window_days: int | None = None,

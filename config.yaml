@@ -46,6 +46,19 @@ alerts:
   # including them would bury the signal under housekeeping.
   cluster_asset_types: [ST, OP, EF, ET, CT, RS, SA]
 
+  # Late-filing compliance. A filing whose EVERY trade was disclosed more
+  # than this many days after it was made leads its Telegram message with
+  # "⚠️ late by N days" and is recorded once as a `late_filing` alert — no
+  # extra message. N is the longest delay in the filing minus the deadline:
+  # the report was due that many days after its earliest trade, and that is
+  # how far past the due date it arrived. A filing with one timely trade
+  # among late ones gets no prefix; its per-trade "(Nd delay)" lines say
+  # which rows were late. Delay is trade date → filing date, never the
+  # report's "Notification Date" column (README: a member trading their own
+  # account is notified the same day, so that column reads 0 however long
+  # the filing took). 45 is the STOCK Act's deadline; 0 turns both off.
+  late_filing_days: 45
+
   # Options are the most directional disclosure a member can make, and the
   # filing text carries the contract: 57 rows in the 2026 corpus are typed
   # [OP], and src/whale/options.py reads the kind (call/put), strike and

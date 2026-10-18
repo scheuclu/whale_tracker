@@ -14,9 +14,16 @@ import { getDb } from "./db";
  * keep it that way until the committed database is past schema 13.
  */
 
-/** The message kinds — `stats.ALERT_KINDS` in Python. */
+/**
+ * The message kinds — `stats.ALERT_KINDS` in Python. Not here: `late_filing`
+ * (#57), a per-filing marker recorded beside the filing's own `filing` row
+ * so its "late by N days" prefix is sent once; it is not a message of its
+ * own, so the queries below leave it out rather than list the filing twice.
+ */
 export const ALERT_KINDS = ["cluster", "insider_cluster", "filing", "watchlist", "insider_filing", "options"] as const;
 export type AlertKind = (typeof ALERT_KINDS)[number];
+
+const KIND_LIST = ALERT_KINDS.map((k) => `'${k}'`).join(", ");
 
 export const KIND_LABEL: Record<AlertKind, string> = {
   cluster: "Cluster",
@@ -114,7 +121,7 @@ export async function getAlerts(opts: { kind?: string; limit?: number } = {}): P
   const f = (expr: string) => (filing ? expr : "NULL");
   const i = (expr: string) => (insider ? expr : "NULL");
 
-  const where: string[] = [];
+  const where: string[] = [`a.kind IN (${KIND_LIST})`];
   const params: unknown[] = [];
   if (opts.kind) {
     where.push("a.kind = ?");
@@ -143,7 +150,7 @@ export async function getAlerts(opts: { kind?: string; limit?: number } = {}): P
        FROM alerts a
        ${filing ? "LEFT JOIN filings f ON f.id = a.filing_id LEFT JOIN politicians p ON p.id = f.politician_id" : ""}
        ${insider ? "LEFT JOIN insider_filings i ON i.id = a.insider_filing_id" : ""}
-       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+       WHERE ${where.join(" AND ")}
        ORDER BY a.fired_at DESC, a.id DESC
        LIMIT ?`
     )
@@ -175,7 +182,7 @@ export async function getAlertTotals(): Promise<AlertTotals> {
       `SELECT kind, COUNT(*) AS total,
               SUM(julianday(fired_at) >= julianday('now', '-7 days')) AS last_7d,
               MAX(fired_at) AS last_fired
-       FROM alerts GROUP BY kind ORDER BY kind`
+       FROM alerts WHERE kind IN (${KIND_LIST}) GROUP BY kind ORDER BY kind`
     )
     .all() as AlertKindTotal[];
   const since = db.prepare("SELECT value FROM sync_state WHERE key = 'alerts_recorded_since'").get() as
@@ -203,7 +210,7 @@ export async function getAlertsPerWeek(weeks = 8): Promise<WeeklyAlertCount[]> {
               CAST((julianday('now') - julianday(fired_at)) / 7 AS INTEGER) AS weeks_ago,
               COUNT(*) AS n
        FROM alerts
-       WHERE julianday(fired_at) > julianday('now') - ?
+       WHERE kind IN (${KIND_LIST}) AND julianday(fired_at) > julianday('now') - ?
        GROUP BY kind, weeks_ago`
     )
     .all(weeks * 7) as WeeklyAlertCount[];

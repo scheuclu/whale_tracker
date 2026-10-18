@@ -28,7 +28,7 @@ from pathlib import Path
 from .amounts import BRACKETS
 from .db import ALERTS_RECORDED_SINCE, COUNTED_STATUSES, connect
 from .ptr import TICKER_FROM_NAME_NOTE
-from .stats import TRANSCRIBED_METHOD
+from .stats import STOCK_ACT_DEADLINE_DAYS, TRANSCRIBED_METHOD, disclosure_delay_days
 
 # Severity ordering, worst first.
 ERROR, WARN, INFO = "error", "warning", "info"
@@ -391,6 +391,64 @@ def check_date_anomalies(conn, today: date | None = None) -> list[Finding]:
              for r in backwards],
         ))
     return out
+
+
+# The weekly review runs on Monday; this is the week it reviews.
+LATE_FILING_LOOKBACK_DAYS = 7
+
+
+def check_late_filings(conn, today: date | None = None) -> list[Finding]:
+    """Filings of the last week that disclose trades past the 45-day deadline.
+
+    Informational: a late disclosure is a reporting fact the filing proves,
+    not an allegation. The delay is trade date → filing date, never the
+    report's notification column, and it is computed by the same
+    `stats.disclosure_delay_days` as the statistics and the Telegram prefix,
+    so this line cannot drift from either.
+    """
+    now = today or date.today()
+    since = (now - timedelta(days=LATE_FILING_LOOKBACK_DAYS)).isoformat()
+    rows = _rows(conn, f"""
+        SELECT f.chamber, f.doc_id, f.filing_date, t.tx_date,
+               COALESCE(p.full_name, f.filer_name) AS member_name
+        FROM transactions t
+        JOIN filings f ON f.id = t.filing_id
+        LEFT JOIN politicians p ON p.id = f.politician_id
+        WHERE f.status IN {_counted()} AND f.filing_date >= ?
+        ORDER BY f.filing_date DESC, f.id, t.id
+    """, (since,))
+
+    per: dict[tuple[str, str], dict] = {}
+    for r in rows:
+        entry = per.setdefault((r["chamber"], r["doc_id"]), {
+            "doc_id": r["doc_id"], "filed": r["filing_date"],
+            "member": r["member_name"], "trades": 0, "late": 0, "worst": 0,
+        })
+        entry["trades"] += 1
+        delay = disclosure_delay_days(r["tx_date"], r["filing_date"])
+        if delay is not None and delay > STOCK_ACT_DEADLINE_DAYS:
+            entry["late"] += 1
+            entry["worst"] = max(entry["worst"], delay)
+
+    late = [e for e in per.values() if e["late"]]
+    if not late:
+        return []
+    trades = sum(e["late"] for e in late)
+    return [Finding(
+        INFO, "late_filings",
+        f"{len(late)} filing(s) in the last {LATE_FILING_LOOKBACK_DAYS} days disclose "
+        f"{trades} trade(s) past the {STOCK_ACT_DEADLINE_DAYS}-day deadline",
+        "Delay is measured from the trade to the date the report reached the "
+        "Clerk — never the report's notification column, which reads 0 for a "
+        "member trading their own account. A late disclosure is a reporting "
+        "fact, not an allegation. \"all\" marks a filing whose every trade was "
+        "late: those led with the late-by prefix in Telegram and hold a "
+        "late_filing alert row.",
+        [f"{e['filed']}  filing {e['doc_id']}  {e['member']}  "
+         f"{e['late']}/{e['trades']} trades late · worst {e['worst']}d"
+         + ("  · all" if e["late"] == e["trades"] else "")
+         for e in late],
+    )]
 
 
 def check_parse_coverage(conn, today: date | None = None) -> list[Finding]:
@@ -1208,6 +1266,7 @@ CHECKS = (
     check_tickers_from_asset_names,
     check_unmatched_filers,
     check_date_anomalies,
+    check_late_filings,
     check_parse_coverage,
     check_vision_rows,
     check_vision_join,
