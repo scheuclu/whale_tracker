@@ -359,12 +359,46 @@ def _parse_watch(raw: dict, index: int) -> WatchedMember:
                          every_trade=bool(raw.get("every_trade", True)))
 
 
+# What the `telegram:` block may say. Same contract as the rules and the
+# watchlist: an unknown key is a typo, and `digest: true` under a misspelt
+# key would read as configured while sending nothing.
+TELEGRAM_KEYS = frozenset({"digest"})
+
+
+@dataclass
+class TelegramSettings:
+    """Message-level options; the bot secrets stay in the environment."""
+
+    # The weekly digest, sent by the poll run on the first run after Monday
+    # 07:00 UTC. Off by default: an absent block must never start sending.
+    digest: bool = False
+
+
+def _parse_telegram(raw) -> TelegramSettings:
+    if raw is None:
+        return TelegramSettings()
+    if not isinstance(raw, dict):
+        raise ConfigError(f"telegram must be a mapping, not {type(raw).__name__}")
+    unknown = set(raw) - TELEGRAM_KEYS
+    if unknown:
+        raise ConfigError(
+            f"telegram has unknown key(s) {sorted(unknown)}; allowed: {sorted(TELEGRAM_KEYS)}")
+    digest = raw.get("digest", False)
+    if not isinstance(digest, bool):
+        # YAML reads `yes`/`on` as booleans but a quoted "true" as a string,
+        # and bool("false") is True: a string here would silently turn the
+        # digest on, or off, regardless of what it says.
+        raise ConfigError(f"telegram.digest must be true or false, not {digest!r}")
+    return TelegramSettings(digest=digest)
+
+
 @dataclass
 class Config:
     alerts: AlertSettings = field(default_factory=AlertSettings)
     ingest: IngestSettings = field(default_factory=IngestSettings)
     insiders: InsiderSettings = field(default_factory=InsiderSettings)
     watchlist: WatchlistSettings = field(default_factory=WatchlistSettings)
+    telegram: TelegramSettings = field(default_factory=TelegramSettings)
     senate_enabled: bool = True
     # Scanned-PDF transcription; see config.yaml for the measured accuracy
     # and the quarantine that lets it be on.
@@ -458,6 +492,7 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
         ingest=ingest,
         insiders=insiders,
         watchlist=watchlist,
+        telegram=_parse_telegram(raw.get("telegram")),
         senate_enabled=bool((raw.get("senate") or {}).get("enabled", True)),
         vision_enabled=bool((raw.get("vision") or {}).get("enabled", False)),
         vision_budget_seconds=_seconds((raw.get("vision") or {}).get("budget_seconds", 480),

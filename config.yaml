@@ -69,6 +69,22 @@ watchlist:
     bioguide_id: P000197
     every_trade: true
 
+telegram:
+  # The bot token and chat id are secrets and stay in the environment; this
+  # block is for what gets sent.
+  #
+  # Weekly digest: one message with the week's numbers — filings and trades
+  # by chamber, the tickers most members touched (buyers and sellers apart),
+  # the largest equity trades as the brackets they were filed in, who filed
+  # past the 45-day deadline, insider clusters and the largest insider buys
+  # (shares × reported price), how the scans went, and the pipeline's health
+  # in a line, with links to the dashboard. Sent by the poll run on the first
+  # run after Monday 07:00 UTC and recorded in `sync_state.digest_sent_week`,
+  # so a late Monday run catches up and a second one does not repeat it.
+  # Preview it any time with `python -m whale digest --dry-run`. Off until
+  # you turn it on; the first run after flipping it sends one straight away.
+  digest: false
+
 dashboard:
   # Public URL of the Vercel deployment, e.g. https://whale-tracker.vercel.app
   # — no trailing slash needed. A routine filing with more than 40

@@ -13,8 +13,8 @@ import sqlite3
 import time
 from datetime import date
 
-from . import (db, house, insider_alerts, insiders, roster, senate, senate_ptr, stats,
-               telegram)
+from . import (db, digest, house, insider_alerts, insiders, roster, senate, senate_ptr,
+               stats, telegram)
 from .amounts import parse_amount
 from .config import Config
 from .ptr import ParsedFiling, ScannedFilingError, parse_pdf
@@ -33,6 +33,7 @@ def run(config: Config, dry_run: bool = False) -> None:
         notify_clusters(conn, config, dry_run=dry_run)
         _sync_insiders(conn, config)
         notify_insiders(conn, config, dry_run=dry_run)
+        digest.scheduled(conn, config, dry_run=dry_run)
     finally:
         conn.close()
 
