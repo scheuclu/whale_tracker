@@ -10,6 +10,7 @@ import {
   OptionBadge,
   OwnerTag,
   PartyBadge,
+  ResponsiveTable,
   ScanTag,
   TickerChip,
 } from "./ui";
@@ -200,7 +201,7 @@ async function BothSides() {
       >
         Both sides
       </SectionTitle>
-      <Card className="overflow-x-auto p-0">
+      <ResponsiveTable>
         <table className="w-full text-[13px]">
           <thead>
             <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.06em] text-muted-foreground">
@@ -244,7 +245,7 @@ async function BothSides() {
             ))}
           </tbody>
         </table>
-      </Card>
+      </ResponsiveTable>
       <p className="mt-3 text-[11px] text-muted-foreground">
         Two sets of books, never summed: members are distinct filers on House and Senate
         disclosures, insiders are distinct primary reporting owners on SEC Form 4s, matched on
