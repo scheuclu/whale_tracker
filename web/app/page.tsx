@@ -10,6 +10,7 @@ import { DirectionFilter, FeedList } from "./feed-list";
 import { ActionBadge, ResponsiveTable } from "./ui";
 import { Disclosure } from "./disclosure";
 import { PAGE_STACK, PageHeader } from "./page-header";
+import { AgentAlternates } from "./agent-alternates";
 
 export const dynamic = "force-dynamic";
 
@@ -77,6 +78,7 @@ export default async function FeedPage({
 
   return (
     <div className={PAGE_STACK}>
+      <AgentAlternates markdown="/api/v1/feed.md" json="/api/v1/trades" />
       <PageHeader
         title="Congressional trades"
         subtitle="Stock trades members of the House and Senate disclose under the STOCK Act, reproduced as filed. Amounts are the disclosed bracket, never one exact figure."

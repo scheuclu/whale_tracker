@@ -39,6 +39,7 @@ import { Disclosure, RangeCaption } from "../disclosure";
 import { PAGE_STACK, PageHeader, Quiet } from "../page-header";
 import { MemberBars } from "./member-bars";
 import { MemberHero } from "./member-hero";
+import { AgentAlternates } from "../agent-alternates";
 import { POLITICIAN_SORT, isDefaultSort, parseSort, type PoliticianSortKey } from "@/lib/table-sort";
 import { BODY_ROW, BarCell, DATA_TABLE, HEAD_ROW, LateCell, SortHeader, SplitCell, sortHref } from "../sortable-table";
 import { RowLinkBody, StickyThead } from "../table-client";
@@ -313,6 +314,7 @@ async function MemberDetail({ member, action }: { member: string; action?: strin
 
   return (
     <div className={PAGE_STACK}>
+      <AgentAlternates member={detail.bioguide_id} />
       <header className="space-y-5">
         <div className="space-y-2">
           <a

@@ -7,6 +7,7 @@ import {
   type IssuerRow,
 } from "@/lib/insider-queries";
 import { memberHref, memberLabel, range, shortDate, usd } from "@/lib/format";
+import { AgentAlternates } from "../agent-alternates";
 import {
   Card,
   DivergingSplit,
@@ -341,6 +342,7 @@ async function TickerDetail({ ticker }: { ticker: string }) {
 
   return (
     <div className={PAGE_STACK}>
+      <AgentAlternates ticker={ticker} />
       <PageHeader
         back={{ href: "/tickers", label: "all tickers" }}
         title={stat.ticker}
