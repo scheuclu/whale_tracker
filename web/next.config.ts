@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { NextConfig } from "next";
+import { PAGE_CDN_CACHE_CONTROL, PAGE_SOURCE } from "./lib/cache-policy";
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["better-sqlite3"],
@@ -32,6 +33,13 @@ const nextConfig: NextConfig = {
       afterFiles: [],
       fallback: [],
     };
+  },
+  // Every page renders per request (they read searchParams), so Next sends
+  // `Cache-Control: private, no-store`; this targeted header lets Vercel's
+  // CDN hold each URL for a minute anyway. The lifetimes, and the staleness
+  // bound they add up to: lib/cache-policy.ts.
+  async headers() {
+    return [{ source: PAGE_SOURCE, headers: [{ key: "CDN-Cache-Control", value: PAGE_CDN_CACHE_CONTROL }] }];
   },
 };
 

@@ -16,6 +16,24 @@ const EXPAND_AT = 8;
 
 export function HeaderShell({ children }: { children: React.ReactNode }) {
   const [condensed, setCondensed] = useState(false);
+  const [firstLoad, setFirstLoad] = useState(true);
+
+  // `data-first-load` stays on the header until the reader first interacts,
+  // and while it is there globals.css plays the page-in fade in zero time:
+  // the fade marks new content replacing old, and on the document's own
+  // first paint there is nothing to replace. Holding the content at opacity
+  // 0 for that first 260 ms only delayed its paint (and with it the page's
+  // Largest Contentful Paint). Every client navigation follows a click, a
+  // key or history traversal, so they all still fade in.
+  useEffect(() => {
+    if (!firstLoad) return;
+    const done = () => setFirstLoad(false);
+    const events = ["pointerdown", "keydown", "popstate"] as const;
+    for (const e of events) window.addEventListener(e, done, { once: true, passive: true });
+    return () => {
+      for (const e of events) window.removeEventListener(e, done);
+    };
+  }, [firstLoad]);
 
   useEffect(() => {
     let frame = 0;
@@ -38,6 +56,7 @@ export function HeaderShell({ children }: { children: React.ReactNode }) {
   return (
     <header
       data-condensed={condensed ? "" : undefined}
+      data-first-load={firstLoad ? "" : undefined}
       className="site-header sticky top-0 z-30 border-b border-border bg-background/75 backdrop-blur-xl backdrop-saturate-150"
     >
       {children}
