@@ -20,6 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import { revealOffset } from "@/lib/scroll-edges";
 import { ScrollX } from "./scroll-area";
+import { LiveRelativeTime } from "./live-relative-time";
 
 const TABS = [
   { href: "/", label: "Feed", icon: Receipt },
@@ -224,7 +225,7 @@ export function SyncStatus({
       />
       <span className="tabular">
         <span className="sr-only sm:not-sr-only">synced </span>
-        {synced}
+        <LiveRelativeTime iso={syncedAt} initial={synced} />
         {tone === "stale" ? <span className="text-attention"> · stale</span> : null}
       </span>
     </Link>

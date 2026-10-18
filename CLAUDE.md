@@ -30,7 +30,18 @@ parser stays faithful to the PDF and the UI flags the row rather than
 
 - `data/trades.sqlite3` is both pipeline state and knowledge base; the
   dashboard (`web/`, Next.js on Vercel) fetches it server-side with a short TTL
-  and queries it with better-sqlite3.
+  and queries it with better-sqlite3. The re-check is a conditional GET (the
+  blob's ETag), so an unchanged file is a 304, not an 18 MB download.
+- **Dashboard staleness bound: 120 s** after the pipeline's commit lands, the
+  same bound the old 120 s DB TTL gave. Pages render per request (they read
+  `searchParams`) but `next.config.ts` adds `CDN-Cache-Control` so Vercel's CDN
+  holds each URL (query string and Next's `Vary` headers in the key) briefly:
+  DB re-check 30 s + CDN 60 s + stale-while-revalidate 30 s, all in
+  `web/lib/cache-policy.ts`, whose test fails if the sum exceeds 120 s.
+  Raising any term means stating the new bound. Text computed from the clock
+  at render time can trail by that much: the header's "synced X ago" is
+  recomputed in the browser (`app/live-relative-time.tsx`). `/api/*` routes
+  set their own headers and are excluded.
 - Filing status is a state machine (`src/whale/db.py`). Two details matter:
   `backfill_queued` is deliberately distinct from `new` so a backfill cannot
   swallow filings still owed a notification, and `notified_at` is separate from
@@ -421,6 +432,14 @@ skill before changing any palette value.
 - Summary stat tiles must aggregate over the whole dataset, not the rendered
   page slice (see `getPoliticianTotals`) — summing a truncated list understates
   the total it claims to report.
+- Caching must never key one page's data under another URL: rely on the
+  CDN's full-URL key, never a cache that ignores `searchParams`. A new page
+  gets the CDN header automatically (`PAGE_SOURCE` in `lib/cache-policy.ts`);
+  a new route handler opts in by sending `PAGE_CDN_CACHE_CONTROL` itself.
+- The page-in fade (`.site-header + main > *`) plays on client navigations,
+  not on the document's first paint (`data-first-load`, `header-shell.tsx`):
+  holding first-load content at opacity 0 delayed LCP by ~0.2 s real, ~1 s in
+  Lighthouse's mobile model.
 
 ## Late-filing compliance
 
