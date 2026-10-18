@@ -196,7 +196,7 @@ export default async function InsidersPage({
                   ]
                     .filter(Boolean)
                     .join(", "),
-                  c.issuer_name?.slice(0, 22),
+                  c.issuer_name,
                 ]
                   .filter(Boolean)
                   .join(" · "),
@@ -235,12 +235,15 @@ export default async function InsidersPage({
           <SectionTitle>Most bought</SectionTitle>
           <Card>
             <MagnitudeBars
+              note="shares × reported price"
               data={mostBought.slice(0, 12).map((r) => ({
                 key: r.issuer_cik,
                 label: r.ticker ?? "—",
                 sublabel: `${r.issuer_name?.slice(0, 22) ?? ""} · ${r.buy_insiders} insider${r.buy_insiders === 1 ? "" : "s"}`,
                 value: r.buy_value,
                 valueLabel: usd(r.buy_value),
+                title: r.issuer_name ?? undefined,
+                detail: `bought by ${r.buy_insiders} insider${r.buy_insiders === 1 ? "" : "s"}`,
                 href: r.ticker ? issuerHref(r.ticker) : undefined,
               }))}
             />
@@ -251,12 +254,15 @@ export default async function InsidersPage({
           <SectionTitle>Most sold</SectionTitle>
           <Card>
             <MagnitudeBars
+              note="shares × reported price"
               data={mostSold.slice(0, 12).map((r) => ({
                 key: r.issuer_cik,
                 label: r.ticker ?? "—",
                 sublabel: `${r.issuer_name?.slice(0, 22) ?? ""} · ${r.sell_insiders} insider${r.sell_insiders === 1 ? "" : "s"}`,
                 value: r.sell_value,
                 valueLabel: usd(r.sell_value),
+                title: r.issuer_name ?? undefined,
+                detail: `sold by ${r.sell_insiders} insider${r.sell_insiders === 1 ? "" : "s"}`,
                 href: r.ticker ? issuerHref(r.ticker) : undefined,
               }))}
             />
@@ -415,7 +421,7 @@ function InsiderSectors({ sectors }: { sectors: InsiderSectorRow[] }) {
               Bought
             </h3>
             {list("buy_value").length ? (
-              <MagnitudeBars variant="name" data={bars("buy_value")} />
+              <MagnitudeBars variant="name" note="shares × reported price" data={bars("buy_value")} />
             ) : (
               <Empty>No priced insider purchase in this window.</Empty>
             )}
@@ -426,7 +432,7 @@ function InsiderSectors({ sectors }: { sectors: InsiderSectorRow[] }) {
               Sold
             </h3>
             {list("sell_value").length ? (
-              <MagnitudeBars variant="name" data={bars("sell_value")} />
+              <MagnitudeBars variant="name" note="shares × reported price" data={bars("sell_value")} />
             ) : (
               <Empty>No priced insider sale in this window.</Empty>
             )}
