@@ -6,6 +6,7 @@ import {
   type IssuerRow,
 } from "@/lib/insider-queries";
 import { memberHref, memberLabel, range, shortDate, usd } from "@/lib/format";
+import { AgentAlternates } from "../agent-alternates";
 import {
   Card,
   DivergingSplit,
@@ -338,6 +339,7 @@ async function TickerDetail({ ticker }: { ticker: string }) {
 
   return (
     <div className="space-y-8">
+      <AgentAlternates ticker={ticker} />
       <div>
         <a href="/tickers" className="text-xs text-muted-foreground hover:text-primary">
           ← all tickers
