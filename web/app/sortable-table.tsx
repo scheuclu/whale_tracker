@@ -35,7 +35,7 @@ export const BODY_ROW =
  */
 export const PLAIN_HEAD_ROW = "border-b border-border text-left text-[12px] font-medium text-muted-foreground";
 export const PLAIN_BODY_ROW =
-  "border-b border-border/60 transition-colors duration-150 last:border-0 hover:bg-muted/60";
+  "border-b border-border/60 transition-colors duration-(--dur-fast) last:border-0 hover:bg-raised";
 
 /**
  * Builds the URL a header links to: the page's own parameters (window,
@@ -92,7 +92,7 @@ export function SortHeader<K extends string>({
         href={href}
         aria-describedby={hintId}
         className={cn(
-          "group/sort relative flex items-center gap-1 px-3 py-2.5 outline-none transition-colors duration-150",
+          "group/sort relative flex items-center gap-1 px-3 py-2.5 outline-none transition-colors duration-(--dur-fast)",
           "hover:text-foreground focus-visible:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
           // A right-aligned column puts its arrow before the label, so the
           // label's right edge lines up with the figures beneath it.
@@ -106,7 +106,7 @@ export function SortHeader<K extends string>({
         <Icon
           aria-hidden
           className={cn(
-            "size-3 shrink-0 transition-opacity duration-150",
+            "size-3 shrink-0 transition-opacity duration-(--dur-fast)",
             active ? "text-primary" : "opacity-0 group-hover/sort:opacity-60 group-focus-visible/sort:opacity-60"
           )}
           strokeWidth={2.25}
@@ -222,7 +222,7 @@ export function SplitCell({ buys, sells, className }: { buys: number; sells: num
       <span className="inline-flex items-center justify-end gap-2">
         <span>
           <span aria-hidden>
-            <span className="text-foreground/80">{buys}</span> / <span className="text-foreground/80">{sells}</span>
+            <span className="text-ink-2">{buys}</span> / <span className="text-ink-2">{sells}</span>
           </span>
           <span className="sr-only">
             {buys} {buys === 1 ? "buy" : "buys"}, {sells} {sells === 1 ? "sell" : "sells"}
@@ -320,4 +320,4 @@ export function TableFooter({
 }
 
 const FOOTER_LINK =
-  "rounded-sm text-foreground/80 underline decoration-border underline-offset-[3px] transition-colors duration-150 hover:text-primary hover:decoration-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
+  "rounded-sm text-ink-2 underline decoration-border underline-offset-[3px] transition-colors duration-(--dur-fast) hover:text-primary hover:decoration-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";

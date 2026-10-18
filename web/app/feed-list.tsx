@@ -129,19 +129,19 @@ function DaySection({ day, today, index }: { day: DayGroup<TransactionRow>; toda
         {day.date ? <span className="tabular text-muted-foreground">{day.date}</span> : null}
         {day.future ? (
           <span
-            className="rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 py-px text-[11px] font-medium text-amber-700 dark:text-amber-300"
+            className="rounded-md border bg-attention-soft px-1.5 py-px text-[11px] font-medium text-attention"
             title="This trade date is later than today: the filing's own date, reproduced as filed rather than corrected"
           >
             future date as filed
           </span>
         ) : null}
         {day.key === null ? null : (
-          <span className="hidden text-muted-foreground/80 sm:inline">traded</span>
+          <span className="hidden text-muted-foreground sm:inline">traded</span>
         )}
         <span className="flex-1" />
         <span className="tabular text-muted-foreground">
           {day.trades} {day.trades === 1 ? "trade" : "trades"}
-          <span aria-hidden className="text-muted-foreground/60"> · </span>
+          <span aria-hidden className="text-muted-foreground"> · </span>
           {day.filings} {day.filings === 1 ? "filing" : "filings"}
         </span>
       </h3>
@@ -175,7 +175,7 @@ function FilingBlockView({ block, today }: { block: FilingBlock<TransactionRow>;
             </span>
             <a
               href={memberHref(r0.member_name)}
-              className="min-w-0 truncate rounded-sm text-[13px] font-medium transition-colors duration-150 hover:text-primary focus-visible:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring lg:line-clamp-2 lg:whitespace-normal lg:py-[9px] lg:leading-[18px]"
+              className="min-w-0 truncate rounded-sm text-[13px] font-medium transition-colors duration-(--dur-fast) hover:text-primary focus-visible:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring lg:line-clamp-2 lg:whitespace-normal lg:py-[9px] lg:leading-[18px]"
               title={label}
             >
               {label}
@@ -188,20 +188,20 @@ function FilingBlockView({ block, today }: { block: FilingBlock<TransactionRow>;
             {n > 1 ? (
               <span>
                 {n} trades
-                <span aria-hidden className="text-muted-foreground/60"> · </span>
+                <span aria-hidden className="text-muted-foreground"> · </span>
               </span>
             ) : null}
             {filed ? (
               <span>
                 filed {filed}
-                <span aria-hidden className="text-muted-foreground/60"> · </span>
+                <span aria-hidden className="text-muted-foreground"> · </span>
               </span>
             ) : null}
             <a
               href={r0.pdf_url}
               target="_blank"
               rel="noreferrer"
-              className="rounded-sm underline decoration-border underline-offset-[3px] transition-colors duration-150 hover:text-primary hover:decoration-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="rounded-sm underline decoration-border underline-offset-[3px] transition-colors duration-(--dur-fast) hover:text-primary hover:decoration-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
               filing<span aria-hidden>&nbsp;↗</span>
               <span className="sr-only"> (opens the original filing)</span>
@@ -220,7 +220,7 @@ function FilingBlockView({ block, today }: { block: FilingBlock<TransactionRow>;
 
 function FeedRow({ r }: { r: TransactionRow }) {
   return (
-    <li className="feed-row rounded-md px-1.5 py-1 transition-colors duration-150 hover:bg-[var(--feed-hover)] focus-within:bg-[var(--feed-hover)] sm:min-h-9 sm:px-2">
+    <li className="feed-row rounded-md px-1.5 py-1 transition-colors duration-(--dur-fast) hover:bg-raised focus-within:bg-raised sm:min-h-9 sm:px-2">
       <span className="[grid-area:act]">
         <ActionBadge action={r.action} />
       </span>

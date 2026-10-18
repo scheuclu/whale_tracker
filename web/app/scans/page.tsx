@@ -77,7 +77,7 @@ export default async function ScansPage({
               </thead>
               <tbody>
                 {filings.map((f) => (
-                  <tr key={f.id} className="border-b border-border/60 transition-colors duration-150 last:border-0 hover:bg-muted/60">
+                  <tr key={f.id} className="border-b border-border/60 transition-colors duration-(--dur-fast) last:border-0 hover:bg-raised">
                     <td className="px-4 py-2 font-mono text-xs">
                       {f.pages ? (
                         <a href={`/scans/${encodeURIComponent(f.doc_id)}`} className="font-semibold hover:text-primary">
@@ -115,7 +115,7 @@ export default async function ScansPage({
                         <>
                           {f.pages}
                           {f.pages_failed ? (
-                            <span className="text-[11px] text-amber-600 dark:text-amber-400">
+                            <span className="text-[11px] text-attention">
                               {" "}· {f.pages_failed} unread
                             </span>
                           ) : null}

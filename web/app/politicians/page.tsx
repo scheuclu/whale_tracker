@@ -738,7 +738,7 @@ async function CommitteeView({ id }: { id: string }) {
                 {members.map((r) => (
                   <tr
                     key={r.bioguide_id ?? r.member_name}
-                    className="border-b border-border/60 transition-colors duration-150 last:border-0 hover:bg-muted/60"
+                    className="border-b border-border/60 transition-colors duration-(--dur-fast) last:border-0 hover:bg-raised"
                   >
                     <td className="px-4 py-2">
                       <div className="flex items-center gap-2">
@@ -1018,7 +1018,7 @@ async function LateView() {
             </thead>
             <tbody>
               {members.map((r) => (
-                <tr key={r.member_name} className="border-b border-border/60 transition-colors duration-150 last:border-0 hover:bg-muted/60">
+                <tr key={r.member_name} className="border-b border-border/60 transition-colors duration-(--dur-fast) last:border-0 hover:bg-raised">
                   <td className="px-4 py-2">
                     <div className="flex items-center gap-2">
                       <MemberAvatar name={r.member_name} bioguideId={r.bioguide_id} size="sm" />

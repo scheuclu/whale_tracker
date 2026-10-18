@@ -82,7 +82,7 @@ export function TradeDelay({ r }: { r: Pick<TransactionRow, "tx_date" | "filing_
   if (!r.dates_inconsistent && filedBeforeTrade(r.tx_date, r.filing_date)) {
     return (
       <span
-        className="text-[11px] text-amber-600 dark:text-amber-400"
+        className="text-[11px] text-attention"
         title="The filing is dated before the trade it reports — reproduced as filed"
       >
         date as filed
@@ -98,7 +98,7 @@ function FilingLink({ href }: { href: string }) {
       href={href}
       target="_blank"
       rel="noreferrer"
-      className="rounded-sm text-[12px] text-muted-foreground underline decoration-border underline-offset-[3px] transition-colors duration-150 hover:text-primary hover:decoration-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      className="rounded-sm text-[12px] text-muted-foreground underline decoration-border underline-offset-[3px] transition-colors duration-(--dur-fast) hover:text-primary hover:decoration-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
     >
       filing<span aria-hidden>&nbsp;↗</span>
       <span className="sr-only"> (opens the original filing)</span>
@@ -128,7 +128,7 @@ export function TradeRow({ r, subject }: { r: TransactionRow; subject: "asset" |
   return (
     <li
       className={cn(
-        "grid items-center gap-x-3 gap-y-1 rounded-md px-1.5 py-2 transition-colors duration-150 hover:bg-[var(--feed-hover)] focus-within:bg-[var(--feed-hover)] sm:min-h-10 sm:px-2 sm:py-1.5",
+        "grid items-center gap-x-3 gap-y-1 rounded-md px-1.5 py-2 transition-colors duration-(--dur-fast) hover:bg-raised focus-within:bg-raised sm:min-h-10 sm:px-2 sm:py-1.5",
         "grid-cols-[auto_minmax(0,1fr)_auto] [grid-template-areas:'act_subj_amt'_'detail_detail_meta']",
         subject === "asset"
           ? "sm:grid-cols-[5.75rem_6.5rem_5.5rem_11rem_minmax(0,1fr)_auto]"
@@ -154,7 +154,7 @@ export function TradeRow({ r, subject }: { r: TransactionRow; subject: "asset" |
             <MemberAvatar name={r.member_name} bioguideId={r.bioguide_id} size="sm" />
             <a
               href={memberHref(r.member_name)}
-              className="min-w-0 truncate rounded-sm text-[13px] font-medium transition-colors duration-150 hover:text-primary focus-visible:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="min-w-0 truncate rounded-sm text-[13px] font-medium transition-colors duration-(--dur-fast) hover:text-primary focus-visible:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               title={memberLabel(r.member_name, r.party, r.state, r.district, r.chamber)}
             >
               {memberLabel(r.member_name, null, r.state, r.district, r.chamber)}

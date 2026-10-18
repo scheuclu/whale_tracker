@@ -219,7 +219,7 @@ async function BothSides() {
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={`${r.ticker}-${r.direction}`} className="border-b border-border/60 transition-colors duration-150 last:border-0 hover:bg-muted/60">
+              <tr key={`${r.ticker}-${r.direction}`} className="border-b border-border/60 transition-colors duration-(--dur-fast) last:border-0 hover:bg-raised">
                 <td className="px-4 py-2">
                   <a
                     href={`/tickers?t=${encodeURIComponent(r.ticker)}`}

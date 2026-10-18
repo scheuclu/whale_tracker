@@ -16,7 +16,7 @@ export function DataTable({
 }) {
   return (
     <details className="mt-3 text-[12px] text-muted-foreground">
-      <summary className="w-fit cursor-pointer select-none rounded-sm transition-colors duration-150 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">Show as table</summary>
+      <summary className="w-fit cursor-pointer select-none rounded-sm transition-colors duration-(--dur-fast) hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">Show as table</summary>
       <ResponsiveTable className="mt-2">
         <table className="w-full text-[13px]">
           <caption className="sr-only">{caption}</caption>

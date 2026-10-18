@@ -361,7 +361,7 @@ async function TickerDetail({ ticker }: { ticker: string }) {
                 description={trades[0]?.sic_description}
               />
             </div>
-            <p className="mt-1.5 text-base text-foreground/80">{stat.asset_name}</p>
+            <p className="mt-1.5 text-base text-ink-2">{stat.asset_name}</p>
           </div>
           <FlowSplit
             buys={stat.buys}
@@ -451,7 +451,7 @@ async function TickerDetail({ ticker }: { ticker: string }) {
               </thead>
               <tbody>
                 {optionTrades.map((r) => (
-                  <tr key={r.id} className="border-b border-border/60 transition-colors duration-150 last:border-0 hover:bg-muted/60">
+                  <tr key={r.id} className="border-b border-border/60 transition-colors duration-(--dur-fast) last:border-0 hover:bg-raised">
                     <td className="px-4 py-2">
                       <OptionBadge kind={r.option_kind} strikeCents={r.strike_cents} expiry={null} />
                     </td>
