@@ -11,11 +11,20 @@ import { relativeTime } from "@/lib/format";
 import { getAlertOutcomes, getOutcomeSummary } from "@/lib/outcome-queries";
 import { Empty, SectionTitle, StatTile } from "../charts";
 import { Disclosure } from "../disclosure";
-import { PAGE_STACK, PageHeader, PillLinks, Quiet } from "../page-header";
+import { DataError, PAGE_STACK, PageHeader, PillLinks, Quiet } from "../page-header";
 import { AlertLog, AlertRowCard } from "./alert-row";
 import { OutcomeLine, OutcomeSummarySection } from "./outcomes";
+import { pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
+
+/** Kind filters and row counts are views of `/alerts`. */
+export const metadata = pageMetadata({
+  title: "Alert log: clusters, late filings and large trades",
+  description:
+    "Every alert the tracker sent, newest first, with the message as it went out: congressional clusters, late STOCK Act filings, watched members and insider Form 4 rules, and what each ticker did afterwards.",
+  path: "/alerts",
+});
 
 /**
  * Every alert the bot sent, newest first, with what the message said. This
@@ -59,7 +68,7 @@ export default async function AlertsPage({
       getOutcomeSummary(),
     ]);
   } catch (err) {
-    return <Empty>{(err as Error).message}</Empty>;
+    return <DataError error={err} />;
   }
 
   const byKind = new Map(totals.byKind.map((k) => [k.kind, k]));

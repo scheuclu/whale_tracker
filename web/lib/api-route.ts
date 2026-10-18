@@ -7,10 +7,10 @@
 
 import type { NextRequest } from "next/server";
 import { jsonResponse, optionsResponse, textResponse, type ApiResult } from "./api-format";
-import { siteUrl } from "./site-url";
+import { siteUrl } from "./site";
 
 export function originOf(request: NextRequest): string {
-  return siteUrl(request.nextUrl.origin);
+  return siteUrl(process.env, request.nextUrl.origin);
 }
 
 export async function sendJson(

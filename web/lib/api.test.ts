@@ -150,7 +150,7 @@ test("member totals agree with the member page's", async () => {
   assert.equal(b.data.member.volume.max_usd, page.volume_max == null ? null : page.volume_max / 100);
   assert.equal(b.data.member.volume.midpoint_estimate_usd, page.volume_mid / 100);
   assert.equal(b.data.recent_trades.length, Math.min(5, page.trades));
-  assert.equal(b.data.member.url, `${ORIGIN}/politicians?m=Nancy%20Pelosi`);
+  assert.equal(b.data.member.url, `${ORIGIN}/members/nancy-pelosi-p000197`);
 });
 
 test("ticker totals agree with the ticker page's", async () => {
@@ -161,7 +161,7 @@ test("ticker totals agree with the ticker page's", async () => {
   assert.equal(b.data.ticker.members, page.politicians);
   assert.equal(b.data.ticker.volume.min_usd, page.volume_min / 100);
   assert.equal(b.data.ticker.volume.midpoint_estimate_usd, page.volume_mid / 100);
-  assert.equal(b.data.ticker.url, `${ORIGIN}/tickers?t=NVDA`);
+  assert.equal(b.data.ticker.url, `${ORIGIN}/tickers/NVDA`);
 });
 
 test("trade totals agree with the feed's and cover the whole match, not the page", async () => {

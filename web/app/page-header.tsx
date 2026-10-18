@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import { Segmented } from "./ui";
+import { Empty } from "./charts";
 
 /**
  * Page composition shared by every route: one hero, then sections at one
@@ -81,6 +82,18 @@ export function PageHeader({
       {children}
     </header>
   );
+}
+
+/**
+ * Every page's and section's "the query failed" state, in one place. A page
+ * catch block renders `<DataError error={err} />`; `context` prefixes a
+ * section-level failure ("Insider data unavailable"). To adopt the states
+ * lane's `DataUnavailable` (status-screen.tsx, #94), change only the body
+ * of this function.
+ */
+export function DataError({ error, context }: { error: unknown; context?: string }) {
+  const message = error instanceof Error ? error.message : String(error);
+  return <Empty>{context ? `${context}: ${message}` : message}</Empty>;
 }
 
 /** An empty section or a zero state: one muted line, not a box the size of a chart. */

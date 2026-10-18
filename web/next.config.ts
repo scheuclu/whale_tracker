@@ -18,6 +18,22 @@ const nextConfig: NextConfig = {
     minimumCacheTTL: 2678400,
     qualities: [75],
   },
+  // The query-string entity URLs from before /members/<slug> and
+  // /tickers/<SYMBOL>, answered with a 308 by app/api/legacy-redirect
+  // (see the note there for why a page cannot do it). Matched on the query
+  // key, so `/politicians` and `/tickers` themselves are untouched; the
+  // original query string travels with the rewrite.
+  async rewrites() {
+    return {
+      beforeFiles: [
+        { source: "/politicians", has: [{ type: "query", key: "m" }], destination: "/api/legacy-redirect/member" },
+        { source: "/", has: [{ type: "query", key: "member" }], destination: "/api/legacy-redirect/feed-member" },
+        { source: "/tickers", has: [{ type: "query", key: "t" }], destination: "/api/legacy-redirect/ticker" },
+      ],
+      afterFiles: [],
+      fallback: [],
+    };
+  },
   // Every page renders per request (they read searchParams), so Next sends
   // `Cache-Control: private, no-store`; this targeted header lets Vercel's
   // CDN hold each URL for a minute anyway. The lifetimes, and the staleness

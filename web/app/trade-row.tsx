@@ -153,7 +153,7 @@ export function TradeRow({ r, subject }: { r: TransactionRow; subject: "asset" |
           <>
             <MemberAvatar name={r.member_name} bioguideId={r.bioguide_id} size="sm" />
             <a
-              href={memberHref(r.member_name)}
+              href={memberHref(r.member_name, r.bioguide_id)}
               className="min-w-0 truncate rounded-sm text-[13px] font-medium transition-colors duration-(--dur-fast) hover:text-primary focus-visible:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               title={memberLabel(r.member_name, r.party, r.state, r.district, r.chamber)}
             >

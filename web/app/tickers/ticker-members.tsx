@@ -31,7 +31,7 @@ export function TickerMembers({ ticker, members }: { ticker: string; members: Ti
           return (
             <li key={m.member_name}>
               <a
-                href={memberHref(m.member_name)}
+                href={memberHref(m.member_name, m.bioguide_id)}
                 className="glass lift flex h-full items-center gap-3 rounded-2xl border border-border bg-card px-3.5 py-3"
               >
                 <MemberAvatar name={m.member_name} bioguideId={m.bioguide_id} size="lg" />

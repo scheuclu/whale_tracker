@@ -19,7 +19,7 @@
  * client. `TimelineFrame` adds the tooltip, keyboard walk and phone scroll.
  */
 
-import { ACTION_LABEL, OWNER_LABEL, memberHref, memberLabel, range, shortDate } from "@/lib/format";
+import { ACTION_LABEL, OWNER_LABEL, memberHref, memberLabel, range, shortDate, tickerHref } from "@/lib/format";
 import { LABEL_COL, floorRadius, layoutTimeline, type PlacedMark, type TimelineLayout } from "@/lib/timeline";
 import { getTimelineTrades, type TimelineTrade } from "@/lib/timeline-queries";
 import { cn } from "@/lib/utils";
@@ -378,7 +378,7 @@ function Mark({
     .filter(Boolean)
     .join("; ");
 
-  const href = mode === "ticker" ? memberHref(t.member_name) : t.ticker ? `/tickers?t=${encodeURIComponent(t.ticker)}` : t.pdf_url;
+  const href = mode === "ticker" ? memberHref(t.member_name, t.bioguide_id) : t.ticker ? tickerHref(t.ticker) : t.pdf_url;
   const external = mode === "member" && !t.ticker;
   const r = m.r;
   const x = round(m.x);

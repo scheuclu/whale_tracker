@@ -1041,7 +1041,8 @@ def notify_pending(conn: sqlite3.Connection, config: Config, dry_run: bool = Fal
             # more than a wall of tickers. Watched members never reach here:
             # their filings were split per transaction above and stay exempt.
             text = telegram.format_filing_summary(
-                member_url=telegram.member_page_url(name, config.dashboard_url), **common)
+                member_url=telegram.member_page_url(name, config.dashboard_url,
+                                                    filing["bioguide_id"]), **common)
         else:
             text = telegram.format_filing(**common)
         if _deliver(config, text, dry_run) and not dry_run:

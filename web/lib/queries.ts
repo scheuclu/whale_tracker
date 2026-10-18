@@ -1131,6 +1131,8 @@ export type LateFiling = {
   doc_id: string;
   chamber: string | null;
   member_name: string;
+  /** The roster's id, for the member's URL; NULL for an unmatched filer. */
+  bioguide_id: string | null;
   party: string | null;
   state: string | null;
   district: string | null;
@@ -1164,7 +1166,7 @@ export async function getLateFilings(limit = 25): Promise<LateFiling[]> {
               t.asset_type, t.owner, t.amount_min_cents, t.amount_max_cents,
               t.amount_exact_cents,
               COALESCE(p.full_name, f.filer_name) AS member_name,
-              p.party, p.state, p.district,
+              p.party, p.state, p.district, p.bioguide_id,
               COALESCE(p.chamber, f.chamber) AS chamber,
               f.pdf_url, f.filing_date,
               ${DELAY} AS delay_days,
@@ -1195,6 +1197,7 @@ export async function getLateFilings(limit = 25): Promise<LateFiling[]> {
       doc_id: r.doc_id,
       chamber: r.chamber,
       member_name: r.member_name,
+      bioguide_id: r.bioguide_id ?? null,
       party: r.party,
       state: r.state,
       district: r.district,

@@ -9,6 +9,7 @@ import {
   isSell,
   optionLabel,
   range,
+  tickerHref,
 } from "@/lib/format";
 import { PARTY_LABEL } from "@/lib/members";
 import { Card } from "./charts";
@@ -243,7 +244,7 @@ export function TickerChip({
   }
   return (
     <Link
-      href={href ?? `/tickers?t=${encodeURIComponent(ticker)}`}
+      href={href ?? tickerHref(ticker)}
       className={cn(
         CHIP,
         HAIRLINE,

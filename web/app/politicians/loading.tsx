@@ -46,7 +46,7 @@ function MembersLoading() {
 }
 
 /** One member: profile card, tiles, volume range, bars beside the buy/sell split, every trade. */
-function MemberLoading() {
+export function MemberLoading() {
   return (
     <SkeletonPage label="the member">
       <ProfileSkeleton />

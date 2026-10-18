@@ -1,11 +1,22 @@
 import { getScanFilings, getScanTotals } from "@/lib/scan-queries";
-import { shortDate } from "@/lib/format";
+import { memberHref, shortDate } from "@/lib/format";
 import { Empty, SectionTitle, StatTile } from "../charts";
 import { Disclosure } from "../disclosure";
-import { PAGE_STACK, PageHeader, Quiet } from "../page-header";
+import { DataError, PAGE_STACK, PageHeader, Quiet } from "../page-header";
 import { PartyBadge, StatusBadge, ResponsiveTable } from "../ui";
+import { pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
+
+// The index of scans is indexable (it says what exists and why it is not
+// counted); a per-member filter is a view of it. The per-filing pages are
+// `noindex` — see app/scans/[docId]/page.tsx.
+export const metadata = pageMetadata({
+  title: "Scanned paper filings",
+  description:
+    "House STOCK Act filings submitted as scanned paper, what the grid reader made of each page, and why transcribed rows are shown but never counted in any total.",
+  path: "/scans",
+});
 
 /**
  * Scanned paper filings and what the grid reader made of them. Every House
@@ -23,7 +34,7 @@ export default async function ScansPage({
   try {
     [filings, totals] = await Promise.all([getScanFilings({ member: params.m }), getScanTotals()]);
   } catch (err) {
-    return <Empty>{(err as Error).message}</Empty>;
+    return <DataError error={err} />;
   }
 
   return (
@@ -94,7 +105,7 @@ export default async function ScansPage({
                     <td className="px-4 py-2">
                       <div className="flex items-center gap-2">
                         <PartyBadge party={f.party} />
-                        <a href={`/politicians?m=${encodeURIComponent(f.member_name)}`} className="whitespace-nowrap font-medium hover:text-primary">
+                        <a href={memberHref(f.member_name, f.bioguide_id)} className="whitespace-nowrap font-medium hover:text-primary">
                           {f.member_name}
                         </a>
                       </div>

@@ -78,6 +78,8 @@ export type AlertRow = {
   message: string | null;
   // Joined from the filing the alert was about, when it was about one.
   member_name: string | null;
+  /** The roster's id, for the member's URL; NULL for an unmatched filer. */
+  bioguide_id: string | null;
   party: string | null;
   state: string | null;
   district: string | null;
@@ -136,6 +138,7 @@ export async function getAlerts(opts: { kind?: string; limit?: number } = {}): P
               ${optional},
               ${f("COALESCE(p.full_name, f.filer_name)")} AS member_name,
               ${f("p.party")} AS party,
+              ${f("p.bioguide_id")} AS bioguide_id,
               ${f("p.state")} AS state,
               ${f("p.district")} AS district,
               ${f("COALESCE(p.chamber, f.chamber)")} AS chamber,

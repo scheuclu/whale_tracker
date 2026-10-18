@@ -18,7 +18,7 @@
  *
  * The CDN keys each entry on the full URL, query string included, plus
  * Next's `Vary` request headers (RSC payload vs HTML, prefetch, router
- * state), so `/tickers?t=MSFT` and `/tickers?t=NVDA` are separate entries and
+ * state), so `/tickers?w=30` and `/tickers?w=90` are separate entries and
  * an RSC payload is never served for a document request.
  */
 export const DB_TTL_SECONDS = 30;

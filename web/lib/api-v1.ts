@@ -151,12 +151,12 @@ export function tradeJson(r: TransactionRow, origin: string) {
       state: r.state,
       district: r.district,
       chamber: r.chamber,
-      url: absolute(origin, memberHref(r.member_name)),
+      url: absolute(origin, memberHref(r.member_name, r.bioguide_id)),
       api_url: memberApi(origin, r.bioguide_id),
     },
     industry_group: r.industry_group,
     source_url: r.pdf_url,
-    url: absolute(origin, memberHref(r.member_name)),
+    url: absolute(origin, memberHref(r.member_name, r.bioguide_id)),
     ticker_url: r.ticker ? absolute(origin, tickerHref(r.ticker)) : null,
   };
 }
@@ -177,7 +177,7 @@ function memberRowJson(r: PoliticianRow, origin: string) {
     transcribed_trades: r.transcribed,
     avg_disclosure_delay_days: round1(r.avg_delay),
     late_trades: r.late_count,
-    url: absolute(origin, memberHref(r.member_name)),
+    url: absolute(origin, memberHref(r.member_name, r.bioguide_id)),
     api_url: memberApi(origin, r.bioguide_id),
   };
 }
@@ -496,7 +496,7 @@ function tickerMemberJson(r: Awaited<ReturnType<typeof getTickerMembers>>[number
     sells: r.sells,
     volume: volumeJson(r),
     last_trade_date: r.last_tx_date,
-    url: absolute(origin, memberHref(r.member_name)),
+    url: absolute(origin, memberHref(r.member_name, r.bioguide_id)),
     api_url: memberApi(origin, r.bioguide_id),
   };
 }

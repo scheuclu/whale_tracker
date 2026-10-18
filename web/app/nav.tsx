@@ -59,7 +59,11 @@ export function Tabs() {
     <nav aria-label="Sections" className="min-w-0 max-w-full">
       <ScrollX viewportRef={viewport} viewportClassName="scrollbar-none flex gap-0.5 px-0.5 pt-0.5">
         {TABS.map(({ href, label, icon: Icon }) => {
-          const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+          // A member's page lives at /members/<slug> but belongs to Politicians.
+          const active =
+            href === "/"
+              ? pathname === "/"
+              : pathname.startsWith(href) || (href === "/politicians" && pathname.startsWith("/members/"));
           return (
             <Link
               key={href}

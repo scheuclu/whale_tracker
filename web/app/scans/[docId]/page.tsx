@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { getScanFiling, parsePageNo, type ScanPage, type ScanRow } from "@/lib/scan-queries";
-import { ACTION_LABEL, OWNER_LABEL, isBuy, isSell, memberLabel, range, shortDate } from "@/lib/format";
+import { ACTION_LABEL, OWNER_LABEL, isBuy, isSell, memberHref, memberLabel, range, shortDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Card, Empty, SectionTitle, StatTile } from "../../charts";
 import { Disclosure } from "../../disclosure";
-import { PAGE_STACK, PageHeader, Quiet } from "../../page-header";
+import { DataError, PAGE_STACK, PageHeader, Quiet } from "../../page-header";
 import { PartyBadge, StatusBadge, ResponsiveTable } from "../../ui";
+import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/seo";
 
 /** The read path as words; the raw `parse_method` stays in the label's title. */
 const METHOD_LABEL: Record<string, string> = {
@@ -16,6 +18,22 @@ const METHOD_LABEL: Record<string, string> = {
 };
 
 export const dynamic = "force-dynamic";
+
+/**
+ * `noindex, follow`: a machine reading of a scanned form, quarantined from
+ * every total, is an audit trail rather than a source — a search result
+ * should land on the member's page or the Clerk's PDF, not here.
+ */
+export async function generateMetadata({ params }: { params: Promise<{ docId: string }> }): Promise<Metadata> {
+  const { docId } = await params;
+  const id = decodeURIComponent(docId);
+  return pageMetadata({
+    title: `Scanned filing ${id}`,
+    description: `Captured pages of scanned House filing ${id} and the rows the grid reader found on them. Transcribed rows are not counted in any total.`,
+    path: `/scans/${encodeURIComponent(id)}`,
+    noindex: true,
+  });
+}
 
 const LETTERS = "ABCDEFGHIJK";
 const BRACKET: Record<string, string> = {
@@ -66,7 +84,7 @@ export default async function ScanDetailPage({
   try {
     data = await getScanFiling(decodeURIComponent(docId), pageNo);
   } catch (err) {
-    return <Empty>{(err as Error).message}</Empty>;
+    return <DataError error={err} />;
   }
   if (!data) {
     return (
@@ -111,7 +129,7 @@ export default async function ScanDetailPage({
           <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
             <PartyBadge party={filing.party} />
             <a
-              href={`/politicians?m=${encodeURIComponent(filing.member_name)}`}
+              href={memberHref(filing.member_name, filing.bioguide_id)}
               className="font-medium text-foreground hover:text-primary"
             >
               {memberLabel(filing.member_name, null, filing.state, filing.district, "house")}

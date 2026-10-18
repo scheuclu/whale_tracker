@@ -174,7 +174,7 @@ function FilingBlockView({ block, today }: { block: FilingBlock<TransactionRow>;
               <MemberAvatar name={r0.member_name} bioguideId={r0.bioguide_id} size="sm" />
             </span>
             <a
-              href={memberHref(r0.member_name)}
+              href={memberHref(r0.member_name, r0.bioguide_id)}
               className="min-w-0 truncate rounded-sm text-[13px] font-medium transition-colors duration-(--dur-fast) hover:text-primary focus-visible:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring lg:line-clamp-2 lg:whitespace-normal lg:py-[9px] lg:leading-[18px]"
               title={label}
             >

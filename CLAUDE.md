@@ -432,6 +432,22 @@ skill before changing any palette value.
 - Summary stat tiles must aggregate over the whole dataset, not the rendered
   page slice (see `getPoliticianTotals`) — summing a truncated list understates
   the total it claims to report.
+- **Entity URLs** are `/members/<name-slug>-<bioguide>` (name alone for an
+  unmatched filer; the id makes the URL survive a respelling) and
+  `/tickers/<SYMBOL>`. Build every link with `memberHref(name, bioguideId)` /
+  `tickerHref` in `web/lib/format.ts` — pass the bioguide id, or the link costs
+  a redirect — and keep `member_page_url` in `src/whale/telegram.py` in
+  agreement (both slug functions are pinned by tests). The legacy
+  `?m=`/`?member=`/`?t=` URLs get a real 308 from `app/api/legacy-redirect`
+  via `next.config.ts` rewrites; a page cannot do it, because every page
+  streams behind `app/loading.tsx` and a `redirect()`/`notFound()` there goes
+  out as a 200 with a meta refresh / `noindex`.
+- **Metadata**: every page sets title, description and canonical through
+  `pageMetadata` (`web/lib/seo.ts`); sorted/filtered/paged variants
+  canonicalise to the base page, `/search` and `/scans/<doc>` are `noindex,
+  follow`. Absolute URLs come from `NEXT_PUBLIC_SITE_URL` (the public domain,
+  never a deployment URL). Metadata, share cards and JSON-LD follow the range
+  rules like any other surface: counts or disclosed ranges, never a midpoint.
 - Caching must never key one page's data under another URL: rely on the
   CDN's full-URL key, never a cache that ignores `searchParams`. A new page
   gets the CDN header automatically (`PAGE_SOURCE` in `lib/cache-policy.ts`);
