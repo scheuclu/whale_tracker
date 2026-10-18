@@ -5,7 +5,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "node --test --experimental-strip-types lib/*.test.ts"
+    "test": "node --test --experimental-strip-types --import ./lib/resolve-ts.mjs lib/*.test.ts"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.3.3",

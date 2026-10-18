@@ -1,5 +1,5 @@
 import { getDb } from "./db";
-import { COUNTED, DELAY, MID, sinceClause } from "./queries";
+import { COUNTED, DELAY, sinceClause } from "./queries";
 
 /**
  * SEC Form 4 insider trades — separate tables, separate queries (see
@@ -23,8 +23,21 @@ const FROM = `FROM insider_transactions t
   LEFT JOIN insider_filing_owners o ON o.filing_id = f.id AND o.owner_index = 0
   LEFT JOIN insiders i ON i.cik = o.insider_cik`;
 
+/**
+ * The value of one row. Insider values are exact (`shares × price as filed`),
+ * so this is the exact figure, and the range form only because the columns
+ * are shared with the congressional tables. It is deliberately NOT the
+ * congressional `MID`: that helper excludes rows transcribed from a scanned
+ * paper filing via `filings.parse_method`, a column Form 4 tables do not
+ * have — importing it here took the Insiders tab down with
+ * "no such column: f.parse_method" (2026-10-17).
+ */
+const INSIDER_MID = `COALESCE(t.amount_exact_cents,
+  CASE WHEN t.amount_max_cents IS NULL THEN t.amount_min_cents
+       ELSE (t.amount_min_cents + t.amount_max_cents) / 2 END)`;
+
 /** Value of one row, or NULL when it has no price or its as-filed value is implausible. */
-const VALUE = `CASE WHEN t.implausible IS NOT 1 THEN ${MID} END`;
+const VALUE = `CASE WHEN t.implausible IS NOT 1 THEN ${INSIDER_MID} END`;
 const BUY_VALUE = `COALESCE(SUM(CASE WHEN t.action = 'purchase' THEN ${VALUE} END), 0)`;
 const SELL_VALUE = `COALESCE(SUM(CASE WHEN t.action = 'sale' THEN ${VALUE} END), 0)`;
 

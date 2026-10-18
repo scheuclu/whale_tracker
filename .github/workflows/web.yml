@@ -1,0 +1,31 @@
+name: web
+
+# The dashboard renders a query error inside a 200 page, so Vercel's build
+# check cannot tell a working tab from a broken one: the Insiders tab shipped
+# "no such column: f.parse_method" for a day. `npm test` executes every
+# dashboard query against the committed database and fails on the first error.
+on:
+  pull_request:
+    paths:
+      - "web/**"
+      - "data/trades.sqlite3"
+      - ".github/workflows/web.yml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build

@@ -35,7 +35,7 @@ from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 11
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS politicians (
@@ -96,7 +96,10 @@ CREATE TABLE IF NOT EXISTS transactions (
   amount_exact_cents INTEGER,
   cap_gains_over_200 INTEGER,
   description TEXT,
-  raw_text TEXT
+  raw_text TEXT,
+  option_kind TEXT,                    -- call | put, as the text above names it; see options.py
+  strike_cents INTEGER,                -- only a figure the text calls the strike
+  expiry TEXT                          -- ISO; all three NULL when the text does not say
 );
 CREATE INDEX IF NOT EXISTS idx_tx_ticker ON transactions(ticker);
 CREATE INDEX IF NOT EXISTS idx_tx_date ON transactions(tx_date);
@@ -334,6 +337,17 @@ def _migrate(conn: sqlite3.Connection) -> None:
         # Scan capture tables. Empty until `whale capture-scans` runs or the
         # pipeline meets a scan; nothing to backfill at migration time.
         conn.executescript(_SCAN_DDL)
+    if version < 11:
+        # Options as structured data (#58). A fresh DB has the columns from
+        # the DDL and no rows; an existing one gains them here and has them
+        # filled from the asset names and descriptions it already stores, so
+        # production needs no manual replay.
+        added = [_add_column(conn, "transactions", definition)
+                 for definition in ("option_kind TEXT", "strike_cents INTEGER", "expiry TEXT")]
+        if any(added):
+            from . import options
+
+            options.backfill(conn)
     if version < SCHEMA_VERSION:
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         conn.commit()
@@ -469,14 +483,15 @@ def replace_transactions(conn: sqlite3.Connection, filing_id: int,
                (filing_id, politician_id, tx_date, notification_date, owner,
                 asset_name, ticker, asset_type, action, amount_min_cents,
                 amount_max_cents, amount_exact_cents, cap_gains_over_200,
-                description, raw_text)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                description, raw_text, option_kind, strike_cents, expiry)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 filing_id, politician_id, r.get("tx_date"), r.get("notification_date"),
                 r.get("owner"), r["asset_name"], r.get("ticker"), r.get("asset_type"),
                 r["action"], r.get("amount_min_cents"), r.get("amount_max_cents"),
                 r.get("amount_exact_cents"), r.get("cap_gains_over_200"),
                 r.get("description"), r.get("raw_text"),
+                r.get("option_kind"), r.get("strike_cents"), r.get("expiry"),
             ),
         )
     return len(rows)
