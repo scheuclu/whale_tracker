@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { createPortal, flushSync } from "react-dom";
+import { useEffect } from "react";
 
 /**
  * Page-wide accessibility and motion hooks, mounted once per page from
@@ -18,51 +17,47 @@ const MAIN_ID = "main-content";
  * box are one keypress rather than twelve. Hidden until focused (motion.css,
  * `.skip-link`).
  *
- * It must come first in tab order, so it is portalled to the start of
- * <body>, ahead of the header. When the layout mounts <SkipLinkAnchor /> as
- * the first child of <body> itself (and sets `id="main-content"` on <main>),
- * the portal step can go.
+ * It must come first in tab order, so it is placed at the start of <body>,
+ * ahead of the header — created once, outside React's tree, because the
+ * root layout (which owns <body>) is not this file's to edit. When the
+ * layout renders <SkipLinkAnchor /> as the first child of <body> itself and
+ * sets `id="main-content"` on <main>, this effect can go.
  */
 export function SkipLink() {
-  const [host, setHost] = useState<HTMLElement | null>(null);
-
   useEffect(() => {
-    // One host for the life of the document: the template remounts on every
-    // navigation, and a fresh node each time would drop focus from a link the
-    // reader has just tabbed to.
-    let el = document.getElementById("skip-link-host");
-    if (!el) {
-      el = document.createElement("div");
-      el.id = "skip-link-host";
-      document.body.prepend(el);
-    }
     const main = document.querySelector("main");
     if (main && !main.id) main.id = MAIN_ID;
-    setHost(el);
+    // One link for the life of the document: the template remounts on every
+    // navigation, and a fresh node each time would drop focus from a link
+    // the reader has just tabbed to.
+    if (document.querySelector(".skip-link")) return;
+    const link = document.createElement("a");
+    link.href = `#${MAIN_ID}`;
+    link.className = "skip-link";
+    link.textContent = "Skip to content";
+    link.addEventListener("click", skipToMain);
+    document.body.prepend(link);
   }, []);
-
-  return host ? createPortal(<SkipLinkAnchor />, host) : null;
+  return null;
 }
 
-/** The link itself; server-renderable, for a layout that mounts it directly. */
+/** The link as a component, for a layout that renders it directly. */
 export function SkipLinkAnchor() {
   return (
-    <a
-      href={`#${MAIN_ID}`}
-      className="skip-link"
-      onClick={(e) => {
-        const main = document.querySelector("main");
-        if (!main) return;
-        e.preventDefault();
-        // tabindex -1: focusable from script, not added to the tab order.
-        if (!main.hasAttribute("tabindex")) main.setAttribute("tabindex", "-1");
-        main.focus({ preventScroll: true });
-        if (main.getBoundingClientRect().top < 0) window.scrollTo({ top: 0 });
-      }}
-    >
+    <a href={`#${MAIN_ID}`} className="skip-link" onClick={(e) => skipToMain(e.nativeEvent)}>
       Skip to content
     </a>
   );
+}
+
+function skipToMain(e: Event) {
+  const main = document.querySelector("main");
+  if (!main) return;
+  e.preventDefault();
+  // tabindex -1: focusable from script, not added to the tab order.
+  if (!main.hasAttribute("tabindex")) main.setAttribute("tabindex", "-1");
+  main.focus({ preventScroll: true });
+  if (main.getBoundingClientRect().top < 0) window.scrollTo({ top: 0 });
 }
 
 /**
@@ -93,9 +88,11 @@ export function ThemeTransition() {
       const root = document.documentElement;
       const before = root.className;
       document.startViewTransition(async () => {
+        // A synthetic click is a discrete event: React renders the toggle's
+        // update synchronously before .click() returns.
         replaying = true;
         try {
-          flushSync(() => toggle.click());
+          toggle.click();
         } finally {
           replaying = false;
         }

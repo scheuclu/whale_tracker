@@ -51,7 +51,16 @@ export function SkeletonPage({ label, children }: { label: string; children: Rea
 }
 
 /** One `StatTile` (charts.tsx): label, figure, hint line. */
-export function TileSkeleton({ tall = false, trend = false }: { tall?: boolean; trend?: boolean }) {
+export function TileSkeleton({
+  tall = false,
+  trend = false,
+  wrap = true,
+}: {
+  tall?: boolean;
+  trend?: boolean;
+  /** On a phone the tile is half the screen wide and its hint wraps to two lines. */
+  wrap?: boolean;
+}) {
   return (
     <div className="glass flex h-full flex-col rounded-xl border border-border bg-card p-4 sm:px-5">
       <Line h="h-5" bone="h-3 w-16" />
@@ -60,6 +69,7 @@ export function TileSkeleton({ tall = false, trend = false }: { tall?: boolean; 
         {trend ? <Bone className="hidden h-6 w-20 rounded-sm sm:block" /> : null}
       </div>
       <Line h="h-[16.5px]" bone="h-2.5 w-28 max-w-full" className="mt-2.5" />
+      {wrap ? <Line h="h-[16.5px]" bone="h-2.5 w-16" className="sm:hidden" /> : null}
       {tall ? <Line h="h-[16.5px]" bone="h-2.5 w-20" className="mt-1" /> : null}
     </div>
   );
@@ -70,16 +80,22 @@ export function TilesSkeleton({
   count = 4,
   cols = "sm:grid-cols-4",
   tall = false,
+  trend = false,
+  wrap = true,
 }: {
   count?: number;
   cols?: string;
-  /** The feed's tiles carry a sparkline and a change line. */
+  /** One tile carries a second hint line (a change, a wrapped hint); the row stretches to it. */
   tall?: boolean;
+  /** The first and last tiles carry a sparkline (the feed). */
+  trend?: boolean;
+  /** Hints wrap to a second line on a phone (off for tiles with short or no hints). */
+  wrap?: boolean;
 }) {
   return (
     <section className={cn("grid grid-cols-2 gap-3", cols)}>
       {Array.from({ length: count }, (_, i) => (
-        <TileSkeleton key={i} tall={tall && i === 0} trend={tall && (i === 0 || i === count - 1)} />
+        <TileSkeleton key={i} tall={tall && i === 0} trend={trend && (i === 0 || i === count - 1)} wrap={wrap} />
       ))}
     </section>
   );
@@ -95,34 +111,32 @@ export function SectionTitleSkeleton({ width = "w-32", right = false }: { width?
   );
 }
 
-/** Two-line row label: symbol and company, as the bar charts print them. */
-function RowLabel({ i, className }: { i: number; className?: string }) {
-  return (
-    <div className={cn("min-w-0", className)}>
-      <Line h="h-[19px]" bone={cn("h-3", LABEL_WIDTHS[i % LABEL_WIDTHS.length])} />
-      <Line h="h-4" bone={cn("h-2 max-w-full", SUB_WIDTHS[i % SUB_WIDTHS.length])} />
-    </div>
-  );
-}
-
-/** A `MagnitudeBars` card: label pair, bar on its track, value. */
+/** A `MagnitudeBars` card (charts.tsx): rank, symbol over name, an 8px bar on its track, the value. */
 export function BarsSkeleton({ rows = 8, names = false }: { rows?: number; names?: boolean }) {
   return (
     <Card>
-      <ol className="space-y-1.5">
+      <ol className="space-y-0.5">
         {Array.from({ length: rows }, (_, i) => (
           <li
             key={i}
             className={cn(
-              "grid items-center gap-3 px-1 py-1",
-              names ? "grid-cols-[8rem_1fr_auto] sm:grid-cols-[11rem_1fr_auto]" : "grid-cols-[5.5rem_1fr_auto] sm:grid-cols-[7rem_1fr_auto]"
+              "grid items-center gap-x-2.5 px-1.5 py-1 sm:gap-x-3",
+              names
+                ? "grid-cols-[1rem_8rem_minmax(0,1fr)_4rem] sm:grid-cols-[1.25rem_11rem_minmax(0,1fr)_5rem]"
+                : "grid-cols-[1rem_6.5rem_minmax(0,1fr)_4rem] sm:grid-cols-[1.25rem_7.5rem_minmax(0,1fr)_5rem]"
             )}
           >
-            <RowLabel i={i} />
-            <div className="relative h-3 overflow-hidden rounded-sm bg-[var(--viz-track)]">
-              <Bone className="h-full rounded-sm" style={{ width: `${BAR_WIDTHS[i % BAR_WIDTHS.length]}%` }} />
+            <div className="flex justify-end">
+              <Bone className="h-2.5 w-2" />
             </div>
-            <div className="flex w-16 justify-end sm:w-20">
+            <div className="min-w-0">
+              <Line h="h-5" bone={cn("h-3", names ? "w-28" : LABEL_WIDTHS[i % LABEL_WIDTHS.length])} />
+              <Line h="h-4" bone={cn("h-2 max-w-full", SUB_WIDTHS[i % SUB_WIDTHS.length])} />
+            </div>
+            <div className="h-2 overflow-hidden rounded-[2px] bg-[var(--viz-track)]">
+              <Bone className="h-full rounded-[2px]" style={{ width: `${BAR_WIDTHS[i % BAR_WIDTHS.length]}%` }} />
+            </div>
+            <div className="flex justify-end">
               <Bone className="h-3 w-12" />
             </div>
           </li>
@@ -144,39 +158,44 @@ function LegendSkeleton({ note = true }: { note?: boolean }) {
   );
 }
 
-/** A `DivergingSplit` card: legend, direction captions, bars either side of a centre axis. */
+/**
+ * A `DivergingSplit` card (charts.tsx): legend, direction captions, 10px
+ * bars either side of a hairline axis. Same container queries as the chart:
+ * a narrow card stacks symbol over name, a wide one sets them on one line.
+ */
 export function SplitSkeleton({ rows = 6 }: { rows?: number }) {
-  const rowCols = "grid grid-cols-[7.25rem_1fr] gap-3 sm:grid-cols-[10.5rem_1fr]";
+  const rowCols =
+    "grid grid-cols-[7rem_minmax(0,1fr)] gap-x-3 @md:grid-cols-[13rem_minmax(0,1fr)] @3xl:grid-cols-[17rem_minmax(0,1fr)]";
   return (
     <Card>
-      <LegendSkeleton />
-      <div className="relative mt-3">
-        <div className={cn(rowCols, "h-5 px-1 pb-1")} />
-        <ol className="space-y-1">
-          {Array.from({ length: rows }, (_, i) => {
-            const left = [42, 30, 30, 18, 18, 30, 12, 24, 18, 12][i % 10];
-            const right = [70, 56, 38, 46, 30, 30, 22, 16, 24, 14][i % 10];
-            return (
-              <li key={i} className={cn(rowCols, "items-center px-1 py-1")}>
-                {/* Company names wrap to two lines in the real chart. */}
-                <div className="min-w-0">
-                  <Line h="h-[19px]" bone={cn("h-3", LABEL_WIDTHS[i % LABEL_WIDTHS.length])} />
-                  <Line h="h-4" bone={cn("h-2 max-w-full", SUB_WIDTHS[i % SUB_WIDTHS.length])} />
-                  {i % 2 === 0 ? <Line h="h-4" bone="h-2 w-10" /> : null}
-                </div>
-                <div className="flex h-5 items-center">
-                  <div className="flex flex-1 justify-end pr-0.5">
-                    <Bone className="h-3 rounded-sm" style={{ width: `${left}%` }} />
+      <div className="@container">
+        <LegendSkeleton />
+        <div className="relative mt-3">
+          <div className={cn(rowCols, "h-[22px] px-1.5 pb-0.5")} />
+          <ol className="space-y-px">
+            {Array.from({ length: rows }, (_, i) => {
+              const left = [42, 30, 30, 18, 18, 30, 12, 24, 18, 12][i % 10];
+              const right = [70, 56, 38, 46, 30, 30, 22, 16, 24, 14][i % 10];
+              return (
+                <li key={i} className={cn(rowCols, "items-center px-1.5 py-1")}>
+                  <div className="flex min-w-0 flex-col @md:flex-row @md:items-center @md:gap-2">
+                    <Line h="h-5" bone={cn("h-3", LABEL_WIDTHS[i % LABEL_WIDTHS.length])} className="@md:w-[3.75rem] @md:shrink-0" />
+                    <Line h="h-4 @md:h-5" bone={cn("h-2 max-w-full", SUB_WIDTHS[i % SUB_WIDTHS.length])} className="min-w-0" />
                   </div>
-                  <span className="h-5 w-0.5 rounded-full bg-[var(--viz-axis)] opacity-30" />
-                  <div className="flex flex-1 pl-0.5">
-                    <Bone className="h-3 rounded-sm" style={{ width: `${right}%` }} />
+                  <div className="flex h-6 items-center px-7">
+                    <div className="flex flex-1 justify-end pr-0.5">
+                      <Bone className="h-2.5 rounded-[2px]" style={{ width: `${left}%` }} />
+                    </div>
+                    <span className="h-6 w-px bg-[var(--viz-axis)] opacity-30" />
+                    <div className="flex flex-1 pl-0.5">
+                      <Bone className="h-2.5 rounded-[2px]" style={{ width: `${right}%` }} />
+                    </div>
                   </div>
-                </div>
-              </li>
-            );
-          })}
-        </ol>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
       </div>
     </Card>
   );
@@ -298,30 +317,44 @@ export function TradeRowsSkeleton({ rows = 6 }: { rows?: number }) {
   );
 }
 
-/** A monthly column chart card (Trends): legend, columns above and below a baseline. */
+/**
+ * A monthly column chart card (Trends, `MonthlyColumns`): legend, bought
+ * columns rising from a centre baseline and sold columns falling from it,
+ * month labels, the two-line caption and the "Show as table" toggle.
+ */
 export function ColumnsSkeleton({ months = 12 }: { months?: number }) {
-  const up = [38, 52, 44, 61, 70, 48, 57, 80, 66, 73, 58, 30];
-  const down = [22, 30, 18, 34, 28, 40, 26, 36, 31, 24, 29, 12];
+  const up = [6, 40, 44, 60, 100, 52, 64, 54, 72, 40, 24, 6];
+  const down = [8, 52, 32, 56, 46, 48, 62, 52, 70, 52, 34, 4];
   return (
     <Card>
       <LegendSkeleton />
-      {/* Columns standing on a baseline, in fixed pixels (160px tall). */}
-      <div className="mt-4 flex h-40 items-end gap-1.5 border-b border-border sm:gap-3">
-        {Array.from({ length: months }, (_, i) => (
-          <Bone
-            key={i}
-            className="min-w-0 flex-1 rounded-b-none"
-            style={{ height: Math.round(((up[i % up.length] + down[i % down.length]) / 120) * 160) }}
-          />
-        ))}
+      <div className="relative mt-3 h-[232px]">
+        <span className="absolute inset-x-0 top-1/2 h-px bg-border" />
+        <div className="absolute inset-0 flex gap-3 px-2 sm:gap-6 sm:px-6">
+          {Array.from({ length: months }, (_, i) => (
+            <div key={i} className="flex min-w-0 flex-1 flex-col items-center">
+              <div className="flex h-1/2 w-full max-w-9 items-end justify-center pb-px">
+                <Bone className="w-full rounded-b-none rounded-t-[3px]" style={{ height: `${up[i % up.length]}%` }} />
+              </div>
+              <div className="flex h-1/2 w-full max-w-9 items-start justify-center pt-px">
+                <Bone className="w-full rounded-b-[3px] rounded-t-none" style={{ height: `${down[i % down.length] * 0.6}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
-      <div className="mt-2 flex gap-1.5 sm:gap-3">
+      <div className="mt-1 flex h-5 gap-3 px-2 sm:gap-6 sm:px-6">
         {Array.from({ length: months }, (_, i) => (
-          <div key={i} className="flex min-w-0 flex-1 justify-center">
-            {i % 3 === 0 ? <Bone className="h-2 w-6" /> : null}
+          <div key={i} className="flex min-w-0 flex-1 items-center justify-center">
+            <Bone className="h-2 w-7 max-w-full" />
           </div>
         ))}
       </div>
+      <div className="mt-3">
+        <Line h="h-[17px]" bone="h-2.5 w-full" />
+        <Line h="h-[17px]" bone="h-2.5 w-2/3" />
+      </div>
+      <Line h="h-5" bone="h-2.5 w-24" className="mt-3" />
     </Card>
   );
 }
@@ -335,13 +368,13 @@ export function TimelineSkeleton() {
   return (
     <Card>
       <LegendSkeleton />
-      <div className="relative mt-2 h-[137px]">
-        <span className="absolute inset-x-6 top-[60px] h-px bg-border" />
+      <div className="relative mt-2 h-[155px]">
+        <span className="absolute inset-x-6 top-[64px] h-px bg-border" />
         {marks.map((x, i) => (
           <Bone
             key={i}
             className="absolute size-2.5 rounded-full"
-            style={{ left: `${x}%`, top: i % 3 === 0 ? 70 : i % 2 ? 44 : 52 }}
+            style={{ left: `${x}%`, top: i % 3 === 0 ? 74 : i % 2 ? 48 : 56 }}
           />
         ))}
         <div className="absolute inset-x-6 bottom-2 flex justify-between">
@@ -350,29 +383,37 @@ export function TimelineSkeleton() {
           ))}
         </div>
       </div>
-      <div className="mt-2 space-y-1.5 px-1">
-        <Bone className="h-2.5 w-full max-w-3xl" />
-        <Bone className="h-2.5 w-1/3" />
+      <div className="mt-2 px-1">
+        <Line h="h-[18px]" bone="h-2.5 w-full max-w-3xl" />
+        <Line h="h-[18px]" bone="h-2.5 w-full max-w-3xl" />
+        <Line h="h-[18px]" bone="h-2.5 w-16" />
       </div>
     </Card>
   );
 }
 
-/** A `VolumeRange` card: the band on its track, three labels under it, the note. */
+/** A `VolumeRange` card (charts.tsx): the midpoint label, the band on its track, ticks, three labels, the note. */
 export function RangeSkeleton() {
   return (
     <Card>
-      <div className="relative pb-6 pt-6">
-        <div className="relative h-3 rounded-full bg-[var(--viz-track)]">
-          <Bone className="absolute inset-y-0 left-[22%] right-[2%] rounded-full" />
+      <div className="relative pb-6 pt-7">
+        <div className="absolute left-1/2 top-0 flex h-5 -translate-x-1/2 items-center">
+          <Bone className="h-3 w-24" />
         </div>
-        <div className="absolute inset-x-0 bottom-0 flex justify-between">
+        <div className="relative h-3 overflow-hidden rounded-[3px] bg-[var(--viz-track)]">
+          <Bone className="absolute inset-y-0 left-[22%] right-[2%] rounded-none" />
+        </div>
+        <div className="h-1.5" />
+        <div className="absolute inset-x-0 bottom-0 flex h-5 items-center justify-between">
           <Bone className="h-2.5 w-6" />
           <Bone className="h-2.5 w-16" />
           <Bone className="h-2.5 w-20" />
         </div>
       </div>
-      <Bone className="mt-4 h-2.5 w-2/3" />
+      <Line h="h-[18px]" bone="h-2.5 w-2/3" className="mt-3" />
+      {/* The note wraps on a phone. */}
+      <Line h="h-[18px]" bone="h-2.5 w-1/2" className="sm:hidden" />
+      <Line h="h-[18px]" bone="h-2.5 w-1/3" className="sm:hidden" />
     </Card>
   );
 }
@@ -457,7 +498,7 @@ export function ProfileSkeleton() {
   return (
     <div>
       <Line h="h-6" bone="h-2.5 w-24" />
-      <div className="glass flex h-[270px] flex-col gap-5 rounded-xl border border-border bg-card p-5 sm:flex-row sm:items-start sm:p-6">
+      <div className="glass flex h-[345px] flex-col gap-5 rounded-xl sm:h-[270px] border border-border bg-card p-5 sm:flex-row sm:items-start sm:p-6">
         <Bone className="size-20 shrink-0 rounded-full sm:size-24" />
         <div className="min-w-0 flex-1 space-y-3">
           <Bone className="h-8 w-64 max-w-full" />

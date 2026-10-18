@@ -127,7 +127,10 @@
    border tint in its place, so the shell's ring is restored on them here,
    unlayered, and it beats the utility.
    ------------------------------------------------------------------ */
-:is(select, textarea, input:not([type="checkbox"], [type="radio"])):not(.site-header form[role="search"] *):focus-visible {
+:is(select, textarea, input:not([type="checkbox"], [type="radio"])):not(.site-header form[role="search"] *):focus-visible,
+/* Chromium never matches :focus-visible on a date field (focus sits in its
+   inner segments), so these take the ring on any focus. */
+input:is([type="date"], [type="time"], [type="datetime-local"], [type="month"], [type="week"]):focus {
   outline: 2px solid var(--ring);
   outline-offset: 1px;
 }
@@ -155,15 +158,22 @@ main[tabindex="-1"]:focus {
   font-size: 0.875rem;
   font-weight: 500;
   box-shadow: var(--elev-popover);
+  /* Off-screen and transparent (its shadow would otherwise peek in). */
+  opacity: 0;
+  pointer-events: none;
   transform: translateY(calc(-100% - 1rem));
 }
 .skip-link:focus-visible,
 .skip-link:focus {
+  opacity: 1;
+  pointer-events: auto;
   transform: none;
 }
 @media (prefers-reduced-motion: no-preference) {
   .skip-link {
-    transition: transform var(--dur-fast) var(--ease-out);
+    transition:
+      transform var(--dur-fast) var(--ease-out),
+      opacity var(--dur-fast) ease-out;
   }
 }
 
@@ -218,7 +228,8 @@ main[tabindex="-1"]:focus {
   [class*="--viz-seq"],
   [style*="--viz-buy"],
   [style*="--viz-sell"],
-  [style*="--viz-seq"] {
+  [style*="--viz-seq"],
+  .brand-mark {
     forced-color-adjust: none;
   }
   .skeleton {

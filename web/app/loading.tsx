@@ -11,7 +11,7 @@ import {
 export default function Loading() {
   return (
     <SkeletonPage label="the feed">
-      <TilesSkeleton tall />
+      <TilesSkeleton tall trend />
       <section>
         <SectionTitleSkeleton width="w-40" right />
         <SplitSkeleton rows={6} />

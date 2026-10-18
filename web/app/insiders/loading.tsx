@@ -26,7 +26,7 @@ export default function Loading() {
 function InsidersLoading() {
   return (
     <SkeletonPage label="insiders">
-      <TilesSkeleton count={6} cols="sm:grid-cols-3 lg:grid-cols-6" />
+      <TilesSkeleton count={6} cols="sm:grid-cols-3 lg:grid-cols-6" wrap={false} />
       <section>
         <SectionTitleSkeleton width="w-36" right />
         <SplitSkeleton rows={8} />
@@ -59,7 +59,7 @@ function IssuerLoading() {
           <Bone className="h-3 w-80 max-w-full" />
         </span>
       </div>
-      <TilesSkeleton count={5} cols="sm:grid-cols-5" />
+      <TilesSkeleton count={5} cols="sm:grid-cols-5" wrap={false} />
       <section>
         <SectionTitleSkeleton width="w-40" />
         <Card>

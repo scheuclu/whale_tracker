@@ -52,7 +52,7 @@ function TickerLoading() {
   return (
     <SkeletonPage label="the ticker">
       <HeadingSkeleton split />
-      <TilesSkeleton />
+      <TilesSkeleton wrap={false} />
       <section>
         <SectionTitleSkeleton width="w-32" right />
         <TimelineSkeleton />
@@ -63,7 +63,7 @@ function TickerLoading() {
       </section>
       <section>
         <SectionTitleSkeleton width="w-36" right />
-        <CardGridSkeleton count={6} />
+        <CardGridSkeleton count={9} />
       </section>
       <section>
         <SectionTitleSkeleton width="w-40" right />

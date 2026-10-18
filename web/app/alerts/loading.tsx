@@ -1,15 +1,31 @@
 import { Bone, PillsSkeleton, SectionTitleSkeleton, SkeletonPage, TilesSkeleton } from "../skeletons";
 
-/** Alerts: intro, six tiles, then the alert log cards. */
+/** Alerts: intro, six tiles, the price-move note, then the alert log cards. */
 export default function Loading() {
   return (
     <SkeletonPage label="alerts">
-      <div className="max-w-3xl space-y-2">
-        <Bone className="h-3 w-full" />
-        <Bone className="h-3 w-11/12" />
-        <Bone className="h-3 w-2/3" />
+      <div className="max-w-[68ch]">
+        {["w-full", "w-full", "w-full", "w-2/3"].map((w, i) => (
+          <span key={i} className="flex h-5 items-center">
+            <Bone className={`h-3 ${w}`} />
+          </span>
+        ))}
       </div>
       <TilesSkeleton count={6} cols="sm:grid-cols-3 lg:grid-cols-6" />
+      <section>
+        <SectionTitleSkeleton width="w-44" />
+        <div className="max-w-[68ch]">
+          {["w-full", "w-full", "w-full", "w-1/2"].map((w, i) => (
+            <span key={i} className="flex h-[18px] items-center">
+              <Bone className={`h-2.5 ${w}`} />
+            </span>
+          ))}
+        </div>
+        <div className="mt-4 space-y-2 border-l-2 border-border py-1 pl-3">
+          <Bone className="h-3 w-96 max-w-full" />
+          <Bone className="h-3 w-64 max-w-full" />
+        </div>
+      </section>
       <section>
         <SectionTitleSkeleton width="w-20" right />
         <PillsSkeleton count={5} note={false} />

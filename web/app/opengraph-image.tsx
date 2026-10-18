@@ -89,7 +89,7 @@ export async function renderShareCard() {
           <div style={{ display: "flex", fontSize: 62, lineHeight: 1.1, letterSpacing: "-0.02em", maxWidth: 1000 }}>
             What members of Congress and corporate insiders are trading.
           </div>
-          <div style={{ display: "flex", fontSize: 26, lineHeight: 1.45, color: ink[3], maxWidth: 960 }}>
+          <div style={{ display: "flex", fontSize: 26, lineHeight: 1.45, color: ink[3], maxWidth: 1056 }}>
             STOCK Act disclosures from the House and Senate, and SEC Form 4 open-market trades. Amounts
             are shown as the ranges members file.
           </div>
