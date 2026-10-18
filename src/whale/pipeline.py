@@ -13,8 +13,8 @@ import sqlite3
 import time
 from datetime import date
 
-from . import (db, house, insider_alerts, insiders, roster, senate, senate_ptr, stats,
-               telegram)
+from . import (db, house, insider_alerts, insiders, issuers, roster, senate, senate_ptr,
+               stats, telegram)
 from .amounts import parse_amount
 from .config import Config
 from .ptr import ParsedFiling, ScannedFilingError, parse_pdf
@@ -33,6 +33,7 @@ def run(config: Config, dry_run: bool = False) -> None:
         notify_clusters(conn, config, dry_run=dry_run)
         _sync_insiders(conn, config)
         notify_insiders(conn, config, dry_run=dry_run)
+        _classify_issuers(conn, config)
     finally:
         conn.close()
 
@@ -296,6 +297,25 @@ def _sync_insiders(conn: sqlite3.Connection, config: Config,
         log.exception("insider gap repair failed unexpectedly")
         db.set_state(conn, insiders.STATE_STATUS, f"error: gap repair failed: {exc}")
         conn.commit()
+
+
+def _classify_issuers(conn: sqlite3.Connection, config: Config,
+                      client: insiders.EdgarClient | None = None,
+                      today: date | None = None) -> None:
+    """Best-effort, after every alert has gone out: a sector label is the
+    least urgent thing this run produces, and an EDGAR slowdown here must
+    delay nothing. `issuers.classify` absorbs the failures it knows about and
+    keeps its own time budget; this guard is for everything else."""
+    if config.issuers.budget_seconds <= 0:
+        return
+    try:
+        result = issuers.classify(conn, config, client=client, today=today)
+    except Exception as exc:
+        log.exception("issuer classification failed unexpectedly")
+        db.set_state(conn, issuers.STATE_STATUS, f"error: {exc}")
+        conn.commit()
+        return
+    log.info("issuers: %s", result.summary())
 
 
 def notify_insiders(conn: sqlite3.Connection, config: Config, dry_run: bool = False,

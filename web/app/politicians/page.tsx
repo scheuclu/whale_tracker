@@ -1,12 +1,13 @@
 import {
   getPoliticianDetail,
+  getPoliticianSectors,
   getPoliticianTickers,
   getPoliticianTotals,
   getPoliticians,
   getTransactions,
 } from "@/lib/queries";
 import { getScanFilings } from "@/lib/scan-queries";
-import { memberHref, shortDate, usd } from "@/lib/format";
+import { memberHref, range, shortDate, usd } from "@/lib/format";
 import {
   Card,
   DivergingSplit,
@@ -16,7 +17,7 @@ import {
   StatTile,
   VolumeRange,
 } from "../charts";
-import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, ScanTag, TickerChip } from "../ui";
+import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, ScanTag, SectorTag, TickerChip } from "../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -176,13 +177,14 @@ const FILTERS = [
 ];
 
 async function MemberDetail({ member, action }: { member: string; action?: string }) {
-  let detail, tickers, trades, scans;
+  let detail, tickers, trades, scans, sectors;
   try {
-    [detail, tickers, trades, scans] = await Promise.all([
+    [detail, tickers, trades, scans, sectors] = await Promise.all([
       getPoliticianDetail(member),
       getPoliticianTickers(member, 40),
       getTransactions({ member, action, limit: TRADE_PAGE }),
       getScanFilings({ member }),
+      getPoliticianSectors(member),
     ]);
   } catch (err) {
     return <Empty>{(err as Error).message}</Empty>;
@@ -378,6 +380,7 @@ async function MemberDetail({ member, action }: { member: string; action?: strin
                       max={r.amount_max_cents}
                       exact={r.amount_exact_cents}
                     />
+                    <SectorTag group={r.industry_group} sic={r.sic} description={r.sic_description} />
                     <OwnerTag owner={r.owner} />
                     <ScanTag transcribed={r.transcribed} docId={r.doc_id} />
                     <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">
@@ -402,6 +405,62 @@ async function MemberDetail({ member, action }: { member: string; action?: strin
           <Empty>No trades match this filter.</Empty>
         )}
       </section>
+
+      <MemberSectors sectors={sectors} trades={detail.trades} />
     </div>
+  );
+}
+
+/**
+ * Trades by industry group (#55): every trade of the member, counted and
+ * with the range its brackets disclose. The unclassified remainder is a row
+ * of its own, so the groups always add up to the member's trade count.
+ */
+function MemberSectors({
+  sectors,
+  trades,
+}: {
+  sectors: Awaited<ReturnType<typeof getPoliticianSectors>>;
+  trades: number;
+}) {
+  const classified = sectors.filter((s) => s.industry_group);
+  const unclassified = sectors.find((s) => !s.industry_group);
+  return (
+    <section>
+      <SectionTitle
+        right={<span className="text-[11px] text-muted-foreground">trade count · disclosed range</span>}
+      >
+        By sector
+      </SectionTitle>
+      <Card>
+        {classified.length ? (
+          <MagnitudeBars
+            variant="name"
+            data={[...classified, ...(unclassified ? [unclassified] : [])].map((s) => ({
+              key: s.industry_group ?? "unclassified",
+              label: s.industry_group ?? "Unclassified",
+              sublabel: `${
+                s.trades > s.transcribed ? range(s.volume_min, s.volume_max) : "no counted amount"
+              } · ${s.buys} buy / ${s.sells} sell`,
+              value: s.trades,
+              valueLabel: `${s.trades} trade${s.trades === 1 ? "" : "s"}`,
+            }))}
+          />
+        ) : (
+          <Empty>
+            No sector is known for this member&rsquo;s trades yet. The pipeline classifies
+            issuers from their EDGAR SIC codes after each run.
+          </Empty>
+        )}
+        <p className="mt-3 text-[11px] text-muted-foreground">
+          Industry groups fold EDGAR&rsquo;s SIC code for each issuer into twelve sectors.
+          {unclassified
+            ? ` ${unclassified.trades} of ${trades} trades are unclassified: assets with no ticker (Treasuries, funds), ETF trusts and other issuers EDGAR lists no SIC for, or symbols the fill has not reached yet.`
+            : " Every trade here carries a sector."}{" "}
+          The range is what the brackets in that sector disclose; a group with an open-ended
+          bracket shows a floor only.
+        </p>
+      </Card>
+    </section>
   );
 }

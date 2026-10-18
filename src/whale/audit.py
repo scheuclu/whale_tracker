@@ -472,6 +472,78 @@ def check_transaction_density(conn, today: date | None = None) -> list[Finding]:
                     "No sign of a template change.", [detail])]
 
 
+def check_issuer_classification(conn, today: date | None = None) -> list[Finding]:
+    """How much of the corpus carries an industry group (#55).
+
+    Coverage, not correctness: the sector views on the dashboard aggregate
+    only the rows whose issuer EDGAR has classified, so the share that is
+    unclassified is the share those views are silent about. Measured on
+    equity-like congressional rows — the ones that can have a sector — and
+    on insider filings by issuer. An issuer EDGAR gives no SIC (ETF trusts,
+    funds) is unclassified by design and counted, never guessed. INFO on a
+    healthy database; a warning only when the last run itself reported a
+    throttle or error, which is the step going dark rather than the data
+    being what it is.
+    """
+    from .config import DEFAULT_CLUSTER_ASSET_TYPES
+    from .db import get_state
+
+    equity_types = "(" + ", ".join(f"'{t}'" for t in DEFAULT_CLUSTER_ASSET_TYPES) + ")"
+    status = get_state(conn, "issuers_status")
+    row = conn.execute(f"""
+        SELECT COUNT(*) rows_,
+               SUM(s.industry_group IS NOT NULL) classified,
+               COUNT(DISTINCT t.ticker) tickers,
+               COUNT(DISTINCT CASE WHEN s.industry_group IS NOT NULL THEN t.ticker END)
+                 classified_tickers
+        FROM transactions t JOIN filings f ON f.id = t.filing_id
+        LEFT JOIN issuer_tickers it ON it.ticker = t.ticker
+        LEFT JOIN issuers s ON s.cik = it.cik
+        WHERE f.status IN {_counted()} AND t.ticker IS NOT NULL AND t.ticker != ''
+          AND t.asset_type IN {equity_types}
+    """).fetchone()
+    insider = conn.execute(f"""
+        SELECT COUNT(DISTINCT f.issuer_cik) issuers,
+               COUNT(DISTINCT CASE WHEN s.industry_group IS NOT NULL THEN f.issuer_cik END)
+                 classified
+        FROM insider_filings f LEFT JOIN issuers s ON s.cik = f.issuer_cik
+        WHERE f.status IN {_counted()} AND f.issuer_cik IS NOT NULL
+    """).fetchone()
+    fetched = conn.execute("SELECT COUNT(*) n FROM issuers WHERE fetched_at IS NOT NULL").fetchone()["n"]
+    if status is None and not fetched:
+        return [Finding(
+            INFO, "issuer_classification_not_run",
+            "Issuer classification has not run",
+            "No sector is known for any ticker or Form 4 issuer. The step runs in the "
+            "poll run after the insider sync and needs EDGAR_USER_AGENT; the sector "
+            "views on the dashboard stay empty until it has.",
+        )]
+
+    rows, classified = row["rows_"] or 0, row["classified"] or 0
+    tickers, classified_tickers = row["tickers"] or 0, row["classified_tickers"] or 0
+    issuers_n, issuers_classified = insider["issuers"] or 0, insider["classified"] or 0
+    pct = 100 * classified / rows if rows else 0.0
+    evidence = [
+        f"congressional equity rows with a sector: {classified} of {rows} ({pct:.0f}%)",
+        f"tickers classified: {classified_tickers} of {tickers}",
+        f"Form 4 issuers classified: {issuers_classified} of {issuers_n}",
+        f"last run: {status or '—'}",
+    ]
+    degraded = bool(status) and not status.startswith(("ok", "skipped"))
+    return [Finding(
+        WARN if degraded else INFO, "issuer_classification",
+        f"{pct:.0f}% of congressional equity rows carry an industry group; "
+        f"{issuers_classified} of {issuers_n} Form 4 issuers classified"
+        + (f" — last run: {status}" if degraded else ""),
+        "Sector views aggregate only classified rows, so this is the share they "
+        "describe. Unclassified means EDGAR lists no SIC for the issuer (ETF "
+        "trusts, funds), the symbol is not in EDGAR's company list, or the fill "
+        "has not reached it yet — the last run's status line says which. A "
+        "throttle or error is the step going dark, not the data being what it is.",
+        evidence,
+    )]
+
+
 def check_alert_health(conn, today: date | None = None) -> list[Finding]:
     """Whether cluster alerting is doing anything at all."""
     n = conn.execute("SELECT COUNT(*) c FROM alerts").fetchone()["c"]
@@ -921,6 +993,7 @@ CHECKS = (
     check_parse_coverage,
     check_vision_rows,
     check_transaction_density,
+    check_issuer_classification,
     check_alert_health,
     check_senate,
     check_senate_parse_coverage,

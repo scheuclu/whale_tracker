@@ -190,6 +190,33 @@ export function ScanTag({
   );
 }
 
+/**
+ * The issuer's industry group, folded from its EDGAR SIC code
+ * (src/whale/issuers.py). Nothing is rendered for an unclassified row: an
+ * issuer EDGAR gives no SIC — an ETF trust, a fund — stays unknown rather
+ * than being guessed at from its name.
+ */
+export function SectorTag({
+  group,
+  sic,
+  description,
+}: {
+  group: string | null | undefined;
+  sic?: string | null;
+  description?: string | null;
+}) {
+  if (!group) return null;
+  const detail = [description, sic ? `SIC ${sic}` : null].filter(Boolean).join(" · ");
+  return (
+    <span
+      className="rounded bg-muted px-1.5 py-px text-[10px] text-muted-foreground"
+      title={detail ? `${detail} — industry group from the issuer's EDGAR SIC code` : "Industry group from the issuer's EDGAR SIC code"}
+    >
+      {group}
+    </span>
+  );
+}
+
 export function OwnerTag({ owner }: { owner: string | null }) {
   if (!owner || !OWNER_LABEL[owner]) return null;
   return (

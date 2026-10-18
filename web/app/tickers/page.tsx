@@ -1,5 +1,5 @@
-import { getTickers, getTransactions } from "@/lib/queries";
-import { memberHref, memberLabel, shortDate, usd } from "@/lib/format";
+import { getSectorLeaderboard, getTickers, getTransactions, type SectorRow } from "@/lib/queries";
+import { memberHref, memberLabel, range, shortDate, usd } from "@/lib/format";
 import {
   Card,
   DivergingSplit,
@@ -9,7 +9,7 @@ import {
   StatTile,
   VolumeRange,
 } from "../charts";
-import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, ScanTag } from "../ui";
+import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, ScanTag, SectorTag } from "../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -30,9 +30,9 @@ export default async function TickersPage({
 
   if (params.t) return <TickerDetail ticker={params.t.toUpperCase()} />;
 
-  let rows;
+  let rows, sectors;
   try {
-    rows = await getTickers(days, 40);
+    [rows, sectors] = await Promise.all([getTickers(days, 40), getSectorLeaderboard(days)]);
   } catch (err) {
     return <Empty>{(err as Error).message}</Empty>;
   }
@@ -145,7 +145,82 @@ export default async function TickersPage({
           </table>
         </Card>
       </section>
+
+      <SectorLeaderboard sectors={sectors} />
     </div>
+  );
+}
+
+/**
+ * Members and trades per industry group inside the window (#55), over the
+ * same ticker-bearing rows as the tables above. Two measures, two charts:
+ * breadth (distinct members) and estimated volume share one hue each, and
+ * the unclassified remainder closes each list so the groups never claim
+ * more than they cover.
+ */
+function SectorLeaderboard({ sectors }: { sectors: SectorRow[] }) {
+  const classified = sectors.filter((s) => s.industry_group);
+  const unclassified = sectors.find((s) => !s.industry_group);
+  const tail = unclassified ? [unclassified] : [];
+  const byVolume = [...classified].sort((a, b) => b.volume_mid - a.volume_mid);
+  const tickersTotal = sectors.reduce((n, s) => n + s.tickers, 0);
+  const tickersKnown = classified.reduce((n, s) => n + s.tickers, 0);
+  return (
+    <section>
+      <SectionTitle right={<span className="text-[11px] text-muted-foreground">same window as above</span>}>
+        By sector
+      </SectionTitle>
+      {classified.length ? (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card>
+            <h3 className="mb-3 text-[11px] font-medium uppercase tracking-[0.07em] text-muted-foreground">
+              Most members trading
+            </h3>
+            <MagnitudeBars
+              variant="name"
+              data={[...classified, ...tail].map((s) => ({
+                key: s.industry_group ?? "unclassified",
+                label: s.industry_group ?? "Unclassified",
+                sublabel: `${s.trades} trade${s.trades === 1 ? "" : "s"} · ${s.tickers} ticker${s.tickers === 1 ? "" : "s"}`,
+                value: s.politicians,
+                valueLabel: `${s.politicians}`,
+              }))}
+            />
+          </Card>
+          <Card>
+            <h3 className="mb-3 text-[11px] font-medium uppercase tracking-[0.07em] text-muted-foreground">
+              Estimated volume
+            </h3>
+            <MagnitudeBars
+              variant="name"
+              data={[...byVolume, ...tail].map((s) => ({
+                key: s.industry_group ?? "unclassified",
+                label: s.industry_group ?? "Unclassified",
+                sublabel: `disclosed ${range(s.volume_min, s.volume_max)}`,
+                value: s.volume_mid,
+                valueLabel: usd(s.volume_mid),
+              }))}
+            />
+            <p className="mt-3 text-[11px] text-muted-foreground">
+              Bracket midpoints; the disclosed range is under each bar.
+            </p>
+          </Card>
+        </div>
+      ) : (
+        <Card>
+          <Empty>
+            No sector is known for any ticker yet. The pipeline classifies issuers from their
+            EDGAR SIC codes after each run.
+          </Empty>
+        </Card>
+      )}
+      <p className="mt-3 text-[11px] text-muted-foreground">
+        Industry groups fold each issuer&rsquo;s EDGAR SIC code into twelve sectors.{" "}
+        {tickersKnown} of {tickersTotal} tickers in this window are classified; the rest are
+        ETF trusts and other issuers EDGAR lists no SIC for, symbols not in EDGAR&rsquo;s
+        company list, or issuers the fill has not reached yet.
+      </p>
+    </section>
   );
 }
 
@@ -166,7 +241,14 @@ async function TickerDetail({ ticker }: { ticker: string }) {
           ← all tickers
         </a>
         <h1 className="mt-2 font-mono text-3xl font-semibold tracking-tight">{stat.ticker}</h1>
-        <p className="text-sm text-muted-foreground">{stat.asset_name}</p>
+        <p className="flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
+          <span>{stat.asset_name}</span>
+          <SectorTag
+            group={trades[0]?.industry_group}
+            sic={trades[0]?.sic}
+            description={trades[0]?.sic_description}
+          />
+        </p>
       </div>
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -201,6 +283,7 @@ async function TickerDetail({ ticker }: { ticker: string }) {
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <ActionBadge action={r.action} />
                 <Amount min={r.amount_min_cents} max={r.amount_max_cents} exact={r.amount_exact_cents} />
+                <SectorTag group={r.industry_group} sic={r.sic} description={r.sic_description} />
                 <PartyBadge party={r.party} />
                 <a href={memberHref(r.member_name)} className="text-[13px] font-medium hover:text-primary">
                   {memberLabel(r.member_name, null, r.state, r.district, r.chamber)}

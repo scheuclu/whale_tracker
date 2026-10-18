@@ -194,7 +194,33 @@ parser stays faithful to the PDF and the UI flags the row rather than
   deadline, so there is no reporting lag to absorb.
 - `4/A`, Forms 3/5 and the derivative table are not ingested yet (counted in
   `sync_state.edgar_skipped`).
-- `insiders.sync` runs **last** in `pipeline.run` and must never raise into it.
+- `insiders.sync` runs after every House and Senate step in `pipeline.run`
+  and must never raise into it. Only issuer classification runs after it.
+
+## Issuer classification (SIC sectors)
+
+- `src/whale/issuers.py` (#55) resolves every ticker in `transactions` and
+  every issuer CIK in `insider_filings` to an EDGAR SIC code, through
+  `edgar.EdgarClient` only, and folds it into one of twelve groups. The
+  SIC → group table is the module docstring; `_SIC_RANGES` is its code, and
+  the two must stay in step.
+- Two tables, schema 9: `issuers` is one row per CIK, `issuer_tickers` is
+  symbol → CIK **including symbols EDGAR does not list** (cik NULL), so an
+  unknown ticker is recorded as unknown and not looked up again before the
+  weekly refresh. Both dashboard joins are one-to-one; a CIK with several
+  symbols (BRK.A, BRK.B) is one issuer with two ticker rows.
+- **Unknown stays unknown.** No SIC (ETF trusts, funds) → NULL group, never
+  guessed from the name; an SIC outside every range → `Other`. Sector views
+  show the unclassified remainder as a row of its own so groups never sum
+  to more than they describe. A sector is a label on a row, never a figure:
+  it must not enter any volume arithmetic.
+- The fill runs **last** in `pipeline.run`, after the insider alerts, under
+  `issuers.budget_seconds`, never-fetched issuers first, committed per
+  issuer, and never raises; `whale classify-issuers --budget-seconds N` is
+  the manual form. A failed refresh keeps the earlier classification.
+- The dashboard reads whatever database the pipeline last committed, which
+  may predate the migration, so every sector query goes through
+  `hasIssuerTables` and reports nothing rather than "no such table".
 
 ## Insider alerts
 

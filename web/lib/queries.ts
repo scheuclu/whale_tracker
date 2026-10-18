@@ -1,3 +1,5 @@
+import type Database from "better-sqlite3";
+
 import { getDb } from "./db";
 
 /**
@@ -58,7 +60,42 @@ export type TransactionRow = {
   transcribed: number;
   /** The Clerk's document id — the key of the /scans inspection page. */
   doc_id: string;
+} & SectorFields;
+
+/**
+ * The issuer's industry group, from its EDGAR SIC code
+ * (src/whale/issuers.py, schema 9). All three NULL when the symbol is not
+ * classified: EDGAR lists no SIC for it (ETF trusts, funds), does not list
+ * the symbol, or the fill has not reached it yet. Unknown stays unknown.
+ */
+export type SectorFields = {
+  industry_group: string | null;
+  sic: string | null;
+  sic_description: string | null;
 };
+
+/**
+ * Whether the database carries the issuer tables. The dashboard reads
+ * whatever the pipeline last committed, and a database from before the
+ * schema-9 migration has none; every sector view then reports nothing
+ * rather than take its page down with "no such table".
+ */
+export function hasIssuerTables(db: Database.Database): boolean {
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM sqlite_master
+       WHERE type = 'table' AND name IN ('issuers', 'issuer_tickers')`
+    )
+    .get() as { n: number };
+  return row.n === 2;
+}
+
+/** A congressional row's issuer, one-to-one by symbol: `issuer_tickers`
+ *  resolves the printed ticker to a CIK, `issuers` carries that CIK's group. */
+export const SECTOR_JOIN = `LEFT JOIN issuer_tickers it ON it.ticker = t.ticker
+       LEFT JOIN issuers s ON s.cik = it.cik`;
+export const SECTOR_COLS = `s.industry_group, s.sic, s.sic_description`;
+export const NO_SECTOR_COLS = `NULL AS industry_group, NULL AS sic, NULL AS sic_description`;
 
 export type PoliticianRow = {
   member_name: string;
@@ -220,6 +257,7 @@ export async function getTransactions(opts: {
   if (opts.action === "buy") where.push("t.action = 'purchase'");
   if (opts.action === "sell") where.push("t.action IN ('sale','sale_partial')");
   params.push(opts.limit ?? 100);
+  const sectors = hasIssuerTables(db);
 
   return db
     .prepare(
@@ -234,10 +272,12 @@ export async function getTransactions(opts: {
               CASE WHEN julianday(t.notification_date) < julianday(t.tx_date)
                    THEN 1 ELSE 0 END AS dates_inconsistent,
               ${TRANSCRIBED} AS transcribed,
-              f.doc_id
+              f.doc_id,
+              ${sectors ? SECTOR_COLS : NO_SECTOR_COLS}
        FROM transactions t
        JOIN filings f ON f.id = t.filing_id
        LEFT JOIN politicians p ON p.id = t.politician_id
+       ${sectors ? SECTOR_JOIN : ""}
        WHERE ${where.join(" AND ")}
        ORDER BY t.tx_date DESC, t.id DESC
        LIMIT ?`
@@ -395,6 +435,75 @@ export async function getPoliticianTickers(member: string, limit = 40): Promise<
 export async function getTickerDetail(ticker: string) {
   const rows = await getTickers(undefined, 5000);
   return rows.find((r) => r.ticker === ticker.toUpperCase()) ?? null;
+}
+
+/**
+ * One industry group's slice of the congressional trades (#55). A NULL
+ * `industry_group` is the unclassified remainder — assets with no ticker
+ * (Treasuries, funds), symbols EDGAR lists no SIC for (ETF trusts), and
+ * issuers the fill has not reached — reported as a row of its own so the
+ * groups never sum to more than they describe. Volume is the usual bracket
+ * arithmetic: a floor, a ceiling that is NULL once any row is open-ended,
+ * and a midpoint estimate.
+ */
+export type SectorRow = {
+  industry_group: string | null;
+  politicians: number;
+  trades: number;
+  tickers: number;
+  buys: number;
+  sells: number;
+  volume_min: number;
+  volume_max: number | null;
+  volume_mid: number;
+  /** Rows transcribed from scans: in `trades`, not in any volume. */
+  transcribed: number;
+};
+
+const SECTOR_SELECT = `SELECT s.industry_group,
+              COUNT(DISTINCT t.politician_id) AS politicians,
+              COUNT(*) AS trades,
+              COUNT(DISTINCT t.ticker) AS tickers,
+              SUM(t.action='purchase') AS buys,
+              SUM(t.action IN ('sale','sale_partial')) AS sells,
+              SUM(COALESCE(${VOL_MIN},0)) AS volume_min,
+              ${VOLUME_MAX} AS volume_max,
+              SUM(COALESCE(${MID},0)) AS volume_mid,
+              SUM(${TRANSCRIBED}) AS transcribed
+       FROM transactions t
+       JOIN filings f ON f.id = t.filing_id
+       LEFT JOIN politicians p ON p.id = t.politician_id
+       ${SECTOR_JOIN}`;
+
+/** Every trade of one member, by industry group — the whole record, never a
+ *  page slice. Empty when the database predates the issuer tables. */
+export async function getPoliticianSectors(member: string): Promise<SectorRow[]> {
+  const db = await getDb();
+  if (!hasIssuerTables(db)) return [];
+  return db
+    .prepare(
+      `${SECTOR_SELECT}
+       WHERE f.status IN ${COUNTED} AND COALESCE(p.full_name, f.filer_name) = ?
+       GROUP BY s.industry_group
+       ORDER BY s.industry_group IS NULL, trades DESC, volume_mid DESC`
+    )
+    .all(member) as SectorRow[];
+}
+
+/** Members and trades per industry group inside the window, over rows that
+ *  carry a ticker — the same population as `getTickers`. */
+export async function getSectorLeaderboard(days?: number): Promise<SectorRow[]> {
+  const db = await getDb();
+  if (!hasIssuerTables(db)) return [];
+  return db
+    .prepare(
+      `${SECTOR_SELECT}
+       WHERE f.status IN ${COUNTED} AND t.ticker IS NOT NULL AND t.ticker != ''
+       ${sinceClause(days)}
+       GROUP BY s.industry_group
+       ORDER BY s.industry_group IS NULL, politicians DESC, trades DESC`
+    )
+    .all() as SectorRow[];
 }
 
 export type Pipeline = {
