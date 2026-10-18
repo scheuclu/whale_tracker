@@ -1,4 +1,10 @@
 import { getSectorLeaderboard, getTickers, getTransactions, type SectorRow } from "@/lib/queries";
+import {
+  getInsiderIssuer,
+  getIssuerInsiders,
+  type IssuerInsiderRow,
+  type IssuerRow,
+} from "@/lib/insider-queries";
 import { memberHref, memberLabel, range, shortDate, usd } from "@/lib/format";
 import {
   Card,
@@ -10,7 +16,8 @@ import {
   VOLUME_NOTE,
   VolumeRange,
 } from "../charts";
-import { ActionBadge, Amount, DelayTag, OptionBadge, OwnerTag, PartyBadge, ResponsiveTable, ScanTag, SectorTag } from "../ui";
+import { ExportLink } from "../feed-controls";
+import { ActionBadge, Amount, DelayTag, OptionBadge, OwnerTag, PartyBadge, ResponsiveTable, RoleTag, ScanTag, SectorTag } from "../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -285,7 +292,7 @@ async function TickerDetail({ ticker }: { ticker: string }) {
       </section>
 
       <section>
-        <SectionTitle>Every disclosed trade</SectionTitle>
+        <SectionTitle right={<ExportLink filters={{ ticker }} />}>Every disclosed trade</SectionTitle>
         <div className="space-y-1.5">
           {trades.map((r) => (
             <Card key={r.id} className="px-4 py-3">
@@ -316,6 +323,8 @@ async function TickerDetail({ ticker }: { ticker: string }) {
           ))}
         </div>
       </section>
+
+      <InsidersInIssuer ticker={ticker} />
 
       {optionTrades.length ? (
         <section>
@@ -386,5 +395,116 @@ async function TickerDetail({ ticker }: { ticker: string }) {
         </section>
       ) : null}
     </div>
+  );
+}
+
+/** Trade-date window for the cross-link, matching the insider page's own 90d view. */
+const CROSS_WINDOW_DAYS = 90;
+
+/**
+ * The SEC Form 4 side of this symbol, set beside the member figures and never
+ * added to them: distinct primary reporting owners, values as shares × the
+ * price as filed rather than a disclosed range. Fetches its own data so a
+ * fault in the insider tables cannot take the congressional page down.
+ */
+async function InsidersInIssuer({ ticker }: { ticker: string }) {
+  let issuer: IssuerRow | null, owners: IssuerInsiderRow[], allTime: IssuerRow | null;
+  try {
+    [issuer, owners, allTime] = await Promise.all([
+      getInsiderIssuer(ticker, CROSS_WINDOW_DAYS),
+      getIssuerInsiders(ticker, CROSS_WINDOW_DAYS),
+      getInsiderIssuer(ticker),
+    ]);
+  } catch (err) {
+    return (
+      <section>
+        <SectionTitle>Insiders in this issuer</SectionTitle>
+        <Empty>Insider data unavailable: {(err as Error).message}</Empty>
+      </section>
+    );
+  }
+  const href = `/insiders?t=${encodeURIComponent(ticker)}`;
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+  return (
+    <section>
+      <SectionTitle
+        right={
+          <span className="text-[11px] text-muted-foreground">
+            last {CROSS_WINDOW_DAYS} days · SEC Form 4
+          </span>
+        }
+      >
+        Insiders in this issuer
+      </SectionTitle>
+      <Card>
+        {issuer ? (
+          <>
+            <p className="text-[13px]">
+              <span className="font-medium">{plural(issuer.insiders, "insider")}</span> of{" "}
+              {issuer.issuer_name ?? ticker} filed {plural(issuer.filings, "Form 4")} —{" "}
+              {[
+                issuer.buy_insiders
+                  ? `${issuer.buy_insiders} bought${issuer.buy_value ? ` ${usd(issuer.buy_value)}` : ""}`
+                  : null,
+                issuer.sell_insiders
+                  ? `${issuer.sell_insiders} sold${issuer.sell_value ? ` ${usd(issuer.sell_value)}` : ""}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(", ")}
+              <span className="text-muted-foreground"> · last trade {shortDate(issuer.last_tx_date)}</span>
+            </p>
+            <div className="mt-3 space-y-2">
+              {owners.map((p) => (
+                <div key={p.cik} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
+                  <a href={`/insiders?cik=${encodeURIComponent(p.cik)}`} className="font-medium hover:text-primary">
+                    {p.name}
+                  </a>
+                  <RoleTag
+                    isDirector={p.is_director}
+                    isOfficer={p.is_officer}
+                    isTenPercentOwner={p.is_ten_percent_owner}
+                    officerTitle={p.officer_title}
+                  />
+                  <div className="flex-1" />
+                  <span className="tabular text-xs text-muted-foreground">
+                    {p.buys} buy / {p.sells} sell
+                  </span>
+                  <span className="tabular w-24 text-right text-xs">
+                    {p.bought ? `+${usd(p.bought)}` : ""}
+                    {p.bought && p.sold ? " " : ""}
+                    {p.sold ? `−${usd(p.sold)}` : ""}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 text-[11px] text-muted-foreground">
+              Primary reporting owners from stored Form 4s; values are shares × the price as
+              filed, not a disclosed range. Kept apart from the member figures above — nothing
+              here enters them.{" "}
+              <a href={href} className="underline-offset-2 hover:text-primary hover:underline">
+                every stored insider trade in {ticker} →
+              </a>
+            </p>
+          </>
+        ) : (
+          <Empty>
+            No stored Form 4 trade in {ticker} in the last {CROSS_WINDOW_DAYS} days.{" "}
+            {allTime ? (
+              <>
+                {plural(allTime.trades, "trade")} stored all-time —{" "}
+                <a href={href} className="underline-offset-2 hover:text-primary hover:underline">
+                  see the issuer
+                </a>
+                .
+              </>
+            ) : (
+              "No stored filing carries this symbol."
+            )}
+          </Empty>
+        )}
+      </Card>
+    </section>
   );
 }

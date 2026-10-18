@@ -1,5 +1,15 @@
 import { getDb } from "./db";
-import { COUNTED, DELAY, NO_SECTOR_COLS, SECTOR_COLS, hasIssuerTables, sinceClause, type SectorFields } from "./queries";
+import {
+  COUNTED,
+  DELAY,
+  NO_SECTOR_COLS,
+  SECTOR_COLS,
+  hasIssuerTables,
+  likePattern,
+  sinceClause,
+  type SectorFields,
+} from "./queries";
+import { dense, monthKeys, monthStart } from "./months";
 
 /**
  * SEC Form 4 insider trades — separate tables, separate queries (see
@@ -122,12 +132,13 @@ export async function getInsiderIssuers(days?: number, limit = 40): Promise<Issu
     .all(limit) as IssuerRow[];
 }
 
-export async function getInsiderIssuer(ticker: string): Promise<IssuerRow | null> {
+/** One issuer by listed symbol, over everything or a trade-date window. */
+export async function getInsiderIssuer(ticker: string, days?: number): Promise<IssuerRow | null> {
   const db = await getDb();
   const row = db
     .prepare(
       `${ISSUER_SELECT}
-       WHERE f.status IN ${COUNTED} AND f.ticker = ?
+       WHERE f.status IN ${COUNTED} AND f.ticker = ? ${sinceClause(days)}
        GROUP BY f.issuer_cik
        ORDER BY trades DESC
        LIMIT 1`
@@ -258,8 +269,9 @@ export type IssuerInsiderRow = {
   sold: number;
 };
 
-/** The primary reporting owners behind one issuer's stored filings. */
-export async function getIssuerInsiders(ticker: string): Promise<IssuerInsiderRow[]> {
+/** The primary reporting owners behind one issuer's stored filings, over
+ *  everything or a trade-date window. */
+export async function getIssuerInsiders(ticker: string, days?: number): Promise<IssuerInsiderRow[]> {
   const db = await getDb();
   return db
     .prepare(
@@ -275,6 +287,7 @@ export async function getIssuerInsiders(ticker: string): Promise<IssuerInsiderRo
               ${SELL_VALUE} AS sold
        ${FROM}
        WHERE f.status IN ${COUNTED} AND f.ticker = ? AND o.insider_cik IS NOT NULL
+       ${sinceClause(days)}
        GROUP BY i.cik
        ORDER BY bought + sold DESC`
     )
@@ -323,6 +336,48 @@ export async function getInsiderSectors(days?: number): Promise<InsiderSectorRow
     .all() as InsiderSectorRow[];
 }
 
+export type IssuerSearchRow = {
+  issuer_cik: string;
+  ticker: string | null;
+  issuer_name: string | null;
+  insiders: number;
+  filings: number;
+  trades: number;
+  last_tx_date: string | null;
+};
+
+/**
+ * Issuers by ticker or name; an exact ticker match ranks first. Counts
+ * primary reporting owners, like every insider figure. Kept apart from the
+ * congressional search: the two sets of tables are never joined.
+ */
+export async function searchInsiderIssuers(q: string, limit = 20): Promise<IssuerSearchRow[]> {
+  const db = await getDb();
+  const pattern = likePattern(q);
+  try {
+    return db
+      .prepare(
+        `SELECT f.issuer_cik,
+                MIN(f.ticker) AS ticker,
+                MIN(f.issuer_name) AS issuer_name,
+                COUNT(DISTINCT o.insider_cik) AS insiders,
+                COUNT(DISTINCT f.id) AS filings,
+                COUNT(*) AS trades,
+                MAX(t.tx_date) AS last_tx_date
+         ${FROM}
+         WHERE f.status IN ${COUNTED}
+           AND (f.ticker LIKE ? ESCAPE '\\' OR f.issuer_name LIKE ? ESCAPE '\\')
+         GROUP BY f.issuer_cik
+         ORDER BY (MIN(f.ticker) = ?) DESC, trades DESC, ticker
+         LIMIT ?`
+      )
+      .all(pattern, pattern, q.toUpperCase(), limit) as IssuerSearchRow[];
+  } catch {
+    // A database from before the insider source has no such tables.
+    return [];
+  }
+}
+
 export type InsiderPipeline = {
   byStatus: { status: string; source: string; n: number }[];
   totals: { filings: number; trades: number; issuers: number };
@@ -363,4 +418,60 @@ export async function getInsiderPipeline(): Promise<InsiderPipeline | null> {
   } catch {
     return null;
   }
+}
+
+export type InsiderMonthly = {
+  month: string;
+  filings: number;
+  trades: number;
+  buys: number;
+  sells: number;
+  buy_value: number;
+  sell_value: number;
+  /** Rows with no price: counted in `trades`, worth nothing to either value. */
+  unpriced: number;
+  /** Rows shown as filed and kept out of every value. */
+  implausible: number;
+};
+
+/**
+ * Buy and sell value per calendar month of TRADE date, for /trends. This is
+ * the one monthly series on the site that sums dollars: Form 4 values are
+ * exact (shares × price as filed), where congressional amounts are
+ * brackets. Form 4's two-business-day deadline means a month is complete
+ * within days of ending, so the series has no reporting lag to caveat —
+ * its coverage edge is where the daily-index backfill starts.
+ */
+export async function getInsiderMonthly(months = 12): Promise<InsiderMonthly[]> {
+  const keys = monthKeys(months);
+  const db = await getDb();
+  const rows = db
+    .prepare(
+      `SELECT substr(t.tx_date, 1, 7) AS month,
+              COUNT(DISTINCT f.id) AS filings,
+              COUNT(*) AS trades,
+              SUM(t.action = 'purchase') AS buys,
+              SUM(t.action = 'sale') AS sells,
+              ${BUY_VALUE} AS buy_value,
+              ${SELL_VALUE} AS sell_value,
+              COALESCE(SUM(t.amount_exact_cents IS NULL), 0) AS unpriced,
+              COALESCE(SUM(t.implausible = 1), 0) AS implausible
+       FROM insider_transactions t
+       JOIN insider_filings f ON f.id = t.filing_id
+       WHERE f.status IN ${COUNTED} AND t.tx_date >= ? AND t.tx_date <= date('now')
+       GROUP BY month
+       ORDER BY month`
+    )
+    .all(monthStart(keys[0])) as InsiderMonthly[];
+  return dense(keys, rows, (month) => ({
+    month,
+    filings: 0,
+    trades: 0,
+    buys: 0,
+    sells: 0,
+    buy_value: 0,
+    sell_value: 0,
+    unpriced: 0,
+    implausible: 0,
+  }));
 }

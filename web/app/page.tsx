@@ -1,7 +1,10 @@
 import { redirect } from "next/navigation";
-import { getConsensusTickers, getPipeline, getTransactions, getWeeklyActivity } from "@/lib/queries";
+import { getConsensusTickers, getPipeline, getTransactionTotals, getTransactions, getWeeklyActivity } from "@/lib/queries";
+import { getBothSides, getSharedTickers, type BothSidesRow, type SharedTickers } from "@/lib/crossover-queries";
+import { FILTER_KEYS, feedHref, parseOffset, parseTransactionFilters } from "@/lib/feed-filters";
 import { memberHref, memberLabel, shortDate, usd } from "@/lib/format";
 import { Card, DivergingSplit, Empty, SectionTitle, StatTile, type StatDelta } from "./charts";
+import { ExportLink, FilterBar, Pagination, ShownLine } from "./feed-controls";
 import {
   ActionBadge,
   Amount,
@@ -9,11 +12,15 @@ import {
   OptionBadge,
   OwnerTag,
   PartyBadge,
+  ResponsiveTable,
   ScanTag,
   TickerChip,
 } from "./ui";
 
 export const dynamic = "force-dynamic";
+
+/** Trades per page; `?offset=` pages through the rest, newest first. */
+const PAGE = 120;
 
 /** The stat tiles' trend window: rolling 7-day buckets back from today. */
 const WEEKS = 12;
@@ -44,16 +51,26 @@ function tradesDelta(current: number, prior: number | null): StatDelta | undefin
 export default async function FeedPage({
   searchParams,
 }: {
-  searchParams: Promise<{ action?: string; member?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
+  const memberParam = Array.isArray(params.member) ? params.member[0] : params.member;
+  const actionParam = Array.isArray(params.action) ? params.action[0] : params.action;
   // The feed used to double as the member view; the member page replaced it.
-  if (params.member) redirect(memberHref(params.member, params.action));
+  if (memberParam) redirect(memberHref(memberParam, actionParam));
 
-  let rows, consensus, pipeline, weekly;
+  const { filters, ignored } = parseTransactionFilters(params);
+  const offset = parseOffset(params.offset);
+  // The filter form submits every field, blank ones included; send the
+  // reader to the canonical URL so a copied link carries only the filters.
+  // Not when something was ignored: the notice about it must still render.
+  if (!ignored.length && FILTER_KEYS.some((k) => params[k] === "")) redirect(feedHref(filters, offset));
+
+  let rows, totals, consensus, pipeline, weekly;
   try {
-    [rows, consensus, pipeline, weekly] = await Promise.all([
-      getTransactions({ action: params.action, limit: 120 }),
+    [rows, totals, consensus, pipeline, weekly] = await Promise.all([
+      getTransactions({ ...filters, limit: PAGE, offset }),
+      getTransactionTotals(filters),
       getConsensusTickers(90, 6),
       getPipeline(),
       getWeeklyActivity(WEEKS),
@@ -62,16 +79,6 @@ export default async function FeedPage({
     return <Empty>{(err as Error).message}</Empty>;
   }
 
-  // Transcribed rows are listed but never summed: the amount is a box read
-  // off a scan. Mirrors `MID` in lib/queries.ts.
-  const totalMid = rows.reduce(
-    (a, r) =>
-      r.transcribed
-        ? a
-        : a + (r.amount_exact_cents ?? ((r.amount_min_cents ?? 0) + (r.amount_max_cents ?? r.amount_min_cents ?? 0)) / 2),
-    0
-  );
-  const transcribedShown = rows.filter((r) => r.transcribed).length;
   const weekLabels = rollingWeekLabels(WEEKS);
 
   return (
@@ -129,20 +136,20 @@ export default async function FeedPage({
         </section>
       ) : null}
 
-      <section>
+      <section id="trades">
         <SectionTitle
           right={
-            <div className="flex gap-1 text-[11px]">
+            <div className="flex items-center gap-1 text-[11px]">
               {[
                 { k: undefined, label: "All" },
-                { k: "buy", label: "Buys" },
-                { k: "sell", label: "Sells" },
+                { k: "buy" as const, label: "Buys" },
+                { k: "sell" as const, label: "Sells" },
               ].map((f) => (
                 <a
                   key={f.label}
-                  href={f.k ? `/?action=${f.k}` : "/"}
+                  href={feedHref({ ...filters, action: f.k })}
                   className={`rounded-full border px-2.5 py-1 transition-colors ${
-                    (params.action ?? undefined) === f.k
+                    filters.action === f.k
                       ? "border-primary/40 bg-primary/10 text-foreground"
                       : "border-border text-muted-foreground hover:bg-muted"
                   }`}
@@ -150,20 +157,19 @@ export default async function FeedPage({
                   {f.label}
                 </a>
               ))}
+              <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+              <ExportLink filters={filters} />
             </div>
           }
         >
           Recent trades
         </SectionTitle>
 
+        <FilterBar filters={filters} ignored={ignored} />
+
         {rows.length ? (
           <>
-            <p className="mb-3 text-xs text-muted-foreground">
-              {rows.length} trades shown · {usd(totalMid)} estimated total (bracket midpoints)
-              {transcribedShown
-                ? ` · ${transcribedShown} transcribed from scans, not in the total`
-                : ""}
-            </p>
+            <ShownLine offset={offset} shown={rows.length} totals={totals} />
             <div className="space-y-1.5">
               {rows.map((r) => (
                 <Card key={r.id} className="lift px-4 py-3">
@@ -202,11 +208,116 @@ export default async function FeedPage({
                 </Card>
               ))}
             </div>
+            <Pagination filters={filters} offset={offset} shown={rows.length} total={totals.trades} page={PAGE} />
           </>
+        ) : offset > 0 && totals.trades ? (
+          <Empty>
+            Nothing past trade {totals.trades.toLocaleString()}.{" "}
+            <a href={feedHref(filters)} className="underline underline-offset-2 hover:text-primary">
+              Back to the newest
+            </a>
+          </Empty>
         ) : (
           <Empty>No trades match this filter.</Empty>
         )}
       </section>
+
+      <BothSides />
     </div>
+  );
+}
+
+/** Trade-date window for the overlap. 30 days, not 90: this card wants both
+ *  sides moving at once, and Form 4's two-business-day deadline fills the
+ *  insider side immediately. */
+const BOTH_SIDES_DAYS = 30;
+
+/**
+ * Tickers a member of Congress and a corporate insider traded the same way
+ * inside the window. Two sets of books set beside each other — members from
+ * House and Senate disclosures, insiders from SEC Form 4s — and never summed:
+ * each count is that side's own aggregate, matched on the listed symbol alone.
+ * Fetches its own data so a fault in either set of tables stays in this card.
+ */
+async function BothSides() {
+  let rows: BothSidesRow[], shared: SharedTickers;
+  try {
+    [rows, shared] = await Promise.all([getBothSides(BOTH_SIDES_DAYS, 12), getSharedTickers(BOTH_SIDES_DAYS)]);
+  } catch (err) {
+    return (
+      <section>
+        <SectionTitle>Both sides</SectionTitle>
+        <Empty>{(err as Error).message}</Empty>
+      </section>
+    );
+  }
+  if (!rows.length) return null;
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+  return (
+    <section>
+      <SectionTitle
+        right={
+          <span className="text-[11px] text-muted-foreground">
+            last {BOTH_SIDES_DAYS} days · {plural(shared.tickers, "ticker")} traded by both,{" "}
+            {shared.same_direction} the same way
+          </span>
+        }
+      >
+        Both sides
+      </SectionTitle>
+      <ResponsiveTable>
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.06em] text-muted-foreground">
+              <th className="px-4 py-2.5 font-medium">Ticker</th>
+              <th className="px-4 py-2.5 font-medium">Direction</th>
+              <th className="px-4 py-2.5 text-right font-medium">Members</th>
+              <th className="px-4 py-2.5 text-right font-medium">Insiders</th>
+              <th className="px-4 py-2.5 font-medium">Issuer</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={`${r.ticker}-${r.direction}`} className="border-b border-border/50 last:border-0 hover:bg-muted/50">
+                <td className="px-4 py-2">
+                  <a
+                    href={`/tickers?t=${encodeURIComponent(r.ticker)}`}
+                    className="font-mono font-semibold hover:text-primary"
+                  >
+                    {r.ticker}
+                  </a>
+                </td>
+                <td className="px-4 py-2">
+                  <ActionBadge action={r.direction === "buy" ? "purchase" : "sale"} />
+                </td>
+                <td className="tabular px-4 py-2 text-right">
+                  <a href={`/tickers?t=${encodeURIComponent(r.ticker)}`} className="font-medium hover:text-primary">
+                    {plural(r.members, "member")}
+                  </a>
+                  <span className="text-muted-foreground"> · {plural(r.member_trades, "trade")}</span>
+                </td>
+                <td className="tabular px-4 py-2 text-right">
+                  <a href={`/insiders?t=${encodeURIComponent(r.ticker)}`} className="font-medium hover:text-primary">
+                    {plural(r.insiders, "insider")}
+                  </a>
+                  <span className="text-muted-foreground"> · {plural(r.insider_filings, "filing")}</span>
+                </td>
+                <td className="max-w-[18rem] truncate px-4 py-2 text-muted-foreground">
+                  {r.issuer_name ?? r.asset_name}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </ResponsiveTable>
+      <p className="mt-3 text-[11px] text-muted-foreground">
+        Two sets of books, never summed: members are distinct filers on House and Senate
+        disclosures, insiders are distinct primary reporting owners on SEC Form 4s, matched on
+        the listed symbol alone. Same direction, both inside the last {BOTH_SIDES_DAYS} days on
+        trade date. Form 4 is due in two business days and a member&apos;s report in 45, so the
+        member side of the most recent weeks is still arriving.
+      </p>
+    </section>
   );
 }
