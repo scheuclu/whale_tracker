@@ -1,19 +1,24 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-import { StatusScreen, primaryAction } from "./status-screen";
+import { Search } from "lucide-react";
+import { StatusScreen, primaryAction, secondaryAction } from "./status-screen";
 
 export const metadata: Metadata = { title: "Not found" };
 
 export default function NotFound() {
   return (
     <StatusScreen
-      code="404 · not found"
+      code="404 · Not found"
       title="Nothing surfaced here"
-      actions={
+      action={
         <Link href="/" className={primaryAction}>
-          <ArrowLeft className="size-3.5" aria-hidden />
           Back to the feed
+        </Link>
+      }
+      secondary={
+        <Link href="/search" className={secondaryAction}>
+          <Search className="size-3.5" aria-hidden />
+          Search members and tickers
         </Link>
       }
     >

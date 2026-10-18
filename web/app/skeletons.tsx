@@ -50,17 +50,17 @@ export function SkeletonPage({ label, children }: { label: string; children: Rea
   );
 }
 
-/** One `StatTile` (charts.tsx): caps label, value, hint line. */
+/** One `StatTile` (charts.tsx): label, figure, hint line. */
 export function TileSkeleton({ tall = false, trend = false }: { tall?: boolean; trend?: boolean }) {
   return (
-    <div className="glass flex h-full flex-col rounded-2xl border border-border bg-card px-4 py-3.5">
-      <Line h="h-[17px]" bone="h-2.5 w-16" />
-      <div className="mt-1.5 flex items-end justify-between gap-3">
-        <Bone className="h-[22px] w-16 sm:h-[26px] sm:w-20" />
-        {trend ? <Bone className="hidden h-6 w-20 rounded sm:block" /> : null}
+    <div className="glass flex h-full flex-col rounded-xl border border-border bg-card p-4 sm:px-5">
+      <Line h="h-5" bone="h-3 w-16" />
+      <div className="mt-2 flex items-end justify-between gap-3">
+        <Bone className="h-6 w-16 sm:h-7 sm:w-20" />
+        {trend ? <Bone className="hidden h-6 w-20 rounded-sm sm:block" /> : null}
       </div>
-      <Line h="h-[17px]" bone="h-2.5 w-28 max-w-full" className="mt-2" />
-      {tall ? <Line h="h-[17px]" bone="h-2.5 w-20" className="mt-1" /> : null}
+      <Line h="h-[16.5px]" bone="h-2.5 w-28 max-w-full" className="mt-2.5" />
+      {tall ? <Line h="h-[16.5px]" bone="h-2.5 w-20" className="mt-1" /> : null}
     </div>
   );
 }
@@ -85,13 +85,12 @@ export function TilesSkeleton({
   );
 }
 
-/** `SectionTitle` (charts.tsx): the heading, the fading rule, the meta. */
+/** `SectionTitle` (charts.tsx): the 14px heading, its meta on the right. */
 export function SectionTitleSkeleton({ width = "w-32", right = false }: { width?: string; right?: boolean }) {
   return (
-    <div className="mb-3 flex min-h-7 items-center gap-x-3">
-      <Bone className={cn("h-3", width)} />
-      <div className="rule-fade min-w-6 flex-1" />
-      {right ? <Bone className="h-2.5 w-20" /> : null}
+    <div className="mb-3 flex min-h-7 items-center justify-between gap-x-4">
+      <Bone className={cn("h-3.5", width)} />
+      {right ? <Bone className="h-2.5 w-24" /> : null}
     </div>
   );
 }
@@ -136,7 +135,7 @@ export function BarsSkeleton({ rows = 8, names = false }: { rows?: number; names
 /** The chart legend row (`Legend`): two keys and a right-aligned note. */
 function LegendSkeleton({ note = true }: { note?: boolean }) {
   return (
-    <div className="flex h-[17px] items-center gap-3">
+    <div className="flex h-4 items-center gap-4">
       <Bone className="h-2 w-14" />
       <Bone className="h-2 w-12" />
       <div className="flex-1" />
@@ -214,7 +213,7 @@ export function TableSkeleton({ rows = 8, cols = 6 }: { rows?: number; cols?: nu
  */
 export function FeedSkeleton({ days = 4 }: { days?: number }) {
   return (
-    <div className="glass overflow-hidden rounded-2xl border border-border bg-card">
+    <div className="glass overflow-hidden rounded-xl border border-border bg-card">
       <div className="flex h-[55px] items-center gap-3 border-b border-border px-3 sm:px-4">
         <Bone className="h-7 w-44 rounded-lg" />
         <Bone className="hidden h-7 w-16 rounded-full sm:block" />
@@ -406,45 +405,45 @@ export function ListSkeleton({ rows = 5, className }: { rows?: number; className
   );
 }
 
-/** A grid of small cards (the members trading one ticker). */
+/** `TickerMembers` (tickers/ticker-members.tsx): one card per member. */
 export function CardGridSkeleton({ count = 6 }: { count?: number }) {
   return (
     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
       {Array.from({ length: count }, (_, i) => (
-        <Card key={i} className="flex h-[83px] items-center gap-3 px-4 py-3 sm:px-4 sm:py-3">
-          <Bone className="size-9 shrink-0 rounded-full" />
-          <div className="min-w-0 flex-1 space-y-2">
-            <Bone className={cn("h-3.5", ["w-32", "w-40", "w-28"][i % 3])} />
-            <Bone className="h-2.5 w-24" />
+        <div key={i} className="glass flex items-center gap-3 rounded-xl border border-border bg-card px-3.5 py-3">
+          <Bone className="size-10 shrink-0 rounded-full" />
+          <div className="min-w-0 flex-1">
+            <Line h="h-5" bone={cn("h-3", ["w-32", "w-40", "w-28"][i % 3])} />
+            <Line h="h-4" bone="h-2.5 w-36 max-w-full" />
+            <Line h="h-4" bone="h-2.5 w-24" className="mt-1" />
           </div>
-          <Bone className="h-3 w-10" />
-        </Card>
+          <Bone className="h-3 w-16 shrink-0 self-start" />
+        </div>
       ))}
     </div>
   );
 }
 
-/** A page heading block: back link, title, meta line (detail views). */
+/** A detail page's heading: back link, title and subtitle, and (tickers) the bought/sold balance. */
 export function HeadingSkeleton({ split = false }: { split?: boolean }) {
   return (
     <div>
-      <Line h="h-[26px]" bone="h-2.5 w-20" className="pt-[5px]" />
-      <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
-        <div className="space-y-3">
-          <Bone className="h-10 w-40 sm:h-12" />
-          <Bone className="h-3.5 w-72 max-w-full" />
+      <Line h="h-6" bone="h-2.5 w-20" />
+      <div className="mt-3 flex flex-wrap items-end justify-between gap-x-10 gap-y-5">
+        <div className="min-w-0">
+          <Bone className="h-9 w-36 sm:h-12 sm:w-44" />
+          <Line h="h-6" bone="h-3.5 w-72 max-w-full" className="mt-1.5" />
         </div>
-        {/* The bought/sold balance bar beside a ticker's name. */}
         {split ? (
-          <div className="w-full space-y-2 sm:w-72">
-            <div className="flex justify-between">
+          <div className="w-full sm:w-72">
+            <div className="flex h-5 items-center justify-between">
+              <Bone className="h-3 w-20" />
               <Bone className="h-3 w-16" />
-              <Bone className="h-3 w-12" />
             </div>
-            <Bone className="h-2 w-full rounded-full" />
-            <div className="flex justify-between">
-              <Bone className="h-2.5 w-16" />
-              <Bone className="h-2.5 w-16" />
+            <Bone className="mt-2 h-2 w-full rounded-full" />
+            <div className="mt-2 flex h-4 items-center justify-between">
+              <Bone className="h-2.5 w-20" />
+              <Bone className="h-2.5 w-20" />
             </div>
           </div>
         ) : null}
@@ -456,9 +455,9 @@ export function HeadingSkeleton({ split = false }: { split?: boolean }) {
 /** The member page's header card: portrait, name, office, committee chips. */
 export function ProfileSkeleton() {
   return (
-    <div className="space-y-3">
-      <Line h="h-[16px]" bone="h-2.5 w-24" className="mt-[5px]" />
-      <div className="glass flex h-[270px] flex-col gap-5 rounded-3xl border border-border bg-card p-5 sm:flex-row sm:items-start sm:p-6">
+    <div>
+      <Line h="h-6" bone="h-2.5 w-24" />
+      <div className="glass flex h-[270px] flex-col gap-5 rounded-xl border border-border bg-card p-5 sm:flex-row sm:items-start sm:p-6">
         <Bone className="size-20 shrink-0 rounded-full sm:size-24" />
         <div className="min-w-0 flex-1 space-y-3">
           <Bone className="h-8 w-64 max-w-full" />

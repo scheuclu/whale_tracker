@@ -49,6 +49,9 @@ async function headlines(): Promise<{ stats: Headline[]; synced: string | null }
 
 export async function renderShareCard() {
   const { stats, synced } = await headlines();
+  // The dashboard's dark surfaces (globals.css): page, card hairline, three ink levels.
+  const ink = { 1: "#ededf0", 2: "#b9bcc6", 3: "#8d919d" };
+  const hairline = "rgba(255,255,255,0.09)";
   return new ImageResponse(
     (
       <div
@@ -57,61 +60,69 @@ export async function renderShareCard() {
           height: "100%",
           display: "flex",
           flexDirection: "column",
-          justifyContent: "space-between",
-          padding: "64px 72px",
-          backgroundColor: "#08080c",
+          padding: "60px 72px 56px",
+          backgroundColor: "#0b0c0f",
+          // One quiet indigo wash from the mark's corner; the rest is the flat page.
           backgroundImage:
-            "radial-gradient(900px 560px at 8% -18%, rgba(124,124,240,0.34), transparent 62%), radial-gradient(700px 480px at 100% 0%, rgba(56,189,248,0.14), transparent 60%), radial-gradient(800px 600px at 70% 120%, rgba(168,85,247,0.2), transparent 62%)",
-          color: "#f2f2f5",
+            "radial-gradient(820px 520px at 0% 0%, rgba(139,139,242,0.20), transparent 62%), radial-gradient(640px 420px at 100% 100%, rgba(139,139,242,0.07), transparent 60%)",
+          color: ink[1],
           fontSize: 28,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 22 }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={markDataUri({ size: 76 })} width={76} height={76} alt="" />
-          <div style={{ display: "flex", fontSize: 40, letterSpacing: "-0.02em" }}>
-            Whale<span style={{ color: "#9d9dff", marginLeft: 12 }}>Tracker</span>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={markDataUri({ size: 60 })} width={60} height={60} alt="" />
+            <div style={{ display: "flex", fontSize: 34, letterSpacing: "-0.01em" }}>
+              Whale<span style={{ color: "#a5a5f6", marginLeft: 10 }}>Tracker</span>
+            </div>
           </div>
+          {synced ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 21, color: ink[3] }}>
+              <div style={{ display: "flex", width: 9, height: 9, borderRadius: 9, backgroundColor: "#55b685" }} />
+              synced {synced}
+            </div>
+          ) : null}
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-          <div style={{ display: "flex", fontSize: 66, lineHeight: 1.08, letterSpacing: "-0.035em", maxWidth: 980 }}>
+        <div style={{ display: "flex", flexDirection: "column", marginTop: "auto", gap: 18 }}>
+          <div style={{ display: "flex", fontSize: 62, lineHeight: 1.1, letterSpacing: "-0.02em", maxWidth: 1000 }}>
             What members of Congress and corporate insiders are trading.
           </div>
-          <div style={{ display: "flex", fontSize: 28, lineHeight: 1.4, color: "#a3a3b8", maxWidth: 960 }}>
+          <div style={{ display: "flex", fontSize: 26, lineHeight: 1.45, color: ink[3], maxWidth: 960 }}>
             STOCK Act disclosures from the House and Senate, and SEC Form 4 open-market trades. Amounts
             are shown as the ranges members file.
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-end",
+            marginTop: 40,
+            paddingTop: 28,
+            borderTop: `1px solid ${hairline}`,
+          }}
+        >
           {stats.length ? (
-            <div style={{ display: "flex", gap: 18 }}>
-              {stats.map((s) => (
-                <div
-                  key={s.label}
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    padding: "18px 26px",
-                    borderRadius: 22,
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    backgroundColor: "rgba(255,255,255,0.045)",
-                  }}
-                >
-                  <div style={{ display: "flex", fontSize: 46, letterSpacing: "-0.03em" }}>{s.value}</div>
-                  <div style={{ display: "flex", fontSize: 22, color: "#9595a8" }}>{s.label}</div>
-                </div>
-              ))}
-            </div>
+            stats.map((s, i) => (
+              <div
+                key={s.label}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  paddingLeft: i ? 40 : 0,
+                  paddingRight: 40,
+                  borderLeft: i ? `1px solid ${hairline}` : "none",
+                }}
+              >
+                <div style={{ display: "flex", fontSize: 50, lineHeight: 1, letterSpacing: "-0.025em" }}>{s.value}</div>
+                <div style={{ display: "flex", marginTop: 10, fontSize: 21, color: ink[3] }}>{s.label}</div>
+              </div>
+            ))
           ) : (
-            <div style={{ display: "flex", fontSize: 26, color: "#9595a8" }}>
-              US House · US Senate · SEC EDGAR
-            </div>
+            <div style={{ display: "flex", fontSize: 24, color: ink[2] }}>US House · US Senate · SEC EDGAR</div>
           )}
-          {synced ? (
-            <div style={{ display: "flex", fontSize: 22, color: "#7a7a90" }}>synced {synced}</div>
-          ) : null}
         </div>
       </div>
     ),
