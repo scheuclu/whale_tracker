@@ -28,7 +28,7 @@ import {
   StatTile,
   VolumeRange,
 } from "../charts";
-import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, ScanTag, SectorTag, TickerChip } from "../ui";
+import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, ResponsiveTable, ScanTag, SectorTag, TickerChip } from "../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -125,7 +125,7 @@ export default async function PoliticiansPage({
         >
           All members
         </SectionTitle>
-        <Card className="overflow-x-auto p-0">
+        <ResponsiveTable>
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.06em] text-muted-foreground">
@@ -180,7 +180,7 @@ export default async function PoliticiansPage({
               ))}
             </tbody>
           </table>
-        </Card>
+        </ResponsiveTable>
         <p className="mt-3 text-[11px] text-muted-foreground">
           &ldquo;Delay&rdquo; is measured from the trade to the date the report reached
           the Clerk, and &ldquo;Late&rdquo; counts trades filed more than 45 days after
@@ -718,7 +718,7 @@ async function CommitteeView({ id }: { id: string }) {
           Members
         </SectionTitle>
         {members.length ? (
-          <Card className="overflow-x-auto p-0">
+          <ResponsiveTable>
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.06em] text-muted-foreground">
@@ -781,7 +781,7 @@ async function CommitteeView({ id }: { id: string }) {
                 ))}
               </tbody>
             </table>
-          </Card>
+          </ResponsiveTable>
         ) : (
           <Empty>No seats recorded for this committee.</Empty>
         )}
@@ -947,7 +947,9 @@ async function LateView() {
               detail: `${m.late_trades} of ${m.trades} trades in ${m.filings} filings`,
             }))}
           />
-          <table className="mt-4 w-full text-[12px]">
+        </Card>
+        <ResponsiveTable className="mt-4">
+          <table className="w-full text-[12px]">
             <thead>
               <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.06em] text-muted-foreground">
                 <th className="py-1.5 pr-3 font-medium">Month filed</th>
@@ -979,12 +981,12 @@ async function LateView() {
               ))}
             </tbody>
           </table>
-          <p className="mt-3 text-[11px] text-muted-foreground">
-            By month of filing, not of trade: a trade made last month cannot be late yet, and
-            the ones that will be are not in the database until they are filed. A month&rsquo;s
-            filings are complete once the month is over.
-          </p>
-        </Card>
+        </ResponsiveTable>
+        <p className="mt-3 text-[11px] text-muted-foreground">
+          By month of filing, not of trade: a trade made last month cannot be late yet, and
+          the ones that will be are not in the database until they are filed. A month&rsquo;s
+          filings are complete once the month is over.
+        </p>
       </section>
 
       <section>
@@ -997,7 +999,7 @@ async function LateView() {
         >
           All members with late trades
         </SectionTitle>
-        <Card className="overflow-x-auto p-0">
+        <ResponsiveTable>
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.06em] text-muted-foreground">
@@ -1043,7 +1045,7 @@ async function LateView() {
               ))}
             </tbody>
           </table>
-        </Card>
+        </ResponsiveTable>
         <p className="mt-3 text-[11px] text-muted-foreground">
           &ldquo;Worst delay&rdquo; is the longest gap from a trade to its filing;
           &ldquo;Mean late delay&rdquo; averages the late trades only. A trade whose dates

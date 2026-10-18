@@ -3,7 +3,7 @@ import { getScanFiling, parsePageNo, type ScanPage, type ScanRow } from "@/lib/s
 import { ACTION_LABEL, OWNER_LABEL, isBuy, isSell, memberLabel, range, shortDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Card, Empty, SectionTitle, StatTile } from "../../charts";
-import { PartyBadge, StatusBadge } from "../../ui";
+import { PartyBadge, StatusBadge, ResponsiveTable } from "../../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -95,7 +95,7 @@ export default async function ScanDetailPage({
           <span>· filed {shortDate(filing.filing_date)}</span>
           <StatusBadge value={filing.status} />
           <span className="font-mono text-[11px]">{filing.parse_method}</span>
-          {filing.last_error ? <span className="font-mono text-[11px]">{filing.last_error}</span> : null}
+          {filing.last_error ? <span className="break-all font-mono text-[11px]">{filing.last_error}</span> : null}
           <a
             href={filing.pdf_url}
             target="_blank"
@@ -155,12 +155,12 @@ export default async function ScanDetailPage({
           </SectionTitle>
           {page.error ? (
             <p className="mb-2 text-xs text-amber-600 dark:text-amber-400">
-              This page yielded no rows: <span className="font-mono">{page.error}</span>
+              This page yielded no rows: <span className="break-all font-mono">{page.error}</span>
             </p>
           ) : null}
           {/* An even split: the page is landscape, and the transcription column
               now carries the asset name, owner and any disagreement note. */}
-          <div className="grid gap-4 xl:grid-cols-2">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-2">
             <Card className="p-2">
               <div className="relative w-full">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -176,7 +176,7 @@ export default async function ScanDetailPage({
                 <Overlay width={page.width} height={page.height} rows={rows} />
               </div>
             </Card>
-            <Card className="overflow-x-auto p-0">
+            <ResponsiveTable wrap>
               {rows.length ? (
                 <table className="w-full text-[12px]">
                   <thead>
@@ -200,7 +200,7 @@ export default async function ScanDetailPage({
                   {page.error ? "No rows: the page yielded none." : "No transaction rows on this page."}
                 </p>
               )}
-            </Card>
+            </ResponsiveTable>
           </div>
         </section>
       ) : null}

@@ -9,7 +9,7 @@ import {
   StatTile,
   VolumeRange,
 } from "../charts";
-import { ActionBadge, Amount, DelayTag, OptionBadge, OwnerTag, PartyBadge, ScanTag, SectorTag } from "../ui";
+import { ActionBadge, Amount, DelayTag, OptionBadge, OwnerTag, PartyBadge, ResponsiveTable, ScanTag, SectorTag } from "../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +42,7 @@ export default async function TickersPage({
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center gap-1 text-[11px]">
+      <div className="flex flex-wrap items-center gap-1 text-[11px]">
         {WINDOWS.map((w) => {
           const key = w.days ? String(w.days) : "all";
           const active = (params.w ?? "90") === key;
@@ -103,7 +103,7 @@ export default async function TickersPage({
 
       <section>
         <SectionTitle>All tickers</SectionTitle>
-        <Card className="overflow-x-auto p-0">
+        <ResponsiveTable>
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.06em] text-muted-foreground">
@@ -143,7 +143,7 @@ export default async function TickersPage({
               ))}
             </tbody>
           </table>
-        </Card>
+        </ResponsiveTable>
       </section>
 
       <SectorLeaderboard sectors={sectors} />
@@ -322,7 +322,7 @@ async function TickerDetail({ ticker }: { ticker: string }) {
           >
             Options
           </SectionTitle>
-          <Card className="overflow-x-auto p-0">
+          <ResponsiveTable>
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.06em] text-muted-foreground">
@@ -371,12 +371,12 @@ async function TickerDetail({ ticker }: { ticker: string }) {
                 ))}
               </tbody>
             </table>
-            <p className="px-4 py-3 text-[11px] text-muted-foreground">
-              Kind, strike and expiry are read from each filing&apos;s own text and shown only when
-              printed; a put bought is listed as the purchase it was filed as. Amounts are the
-              disclosed brackets.
-            </p>
-          </Card>
+          </ResponsiveTable>
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            Kind, strike and expiry are read from each filing&apos;s own text and shown only when
+            printed; a put bought is listed as the purchase it was filed as. Amounts are the
+            disclosed brackets.
+          </p>
         </section>
       ) : null}
     </div>

@@ -9,6 +9,7 @@ import {
   isListedTicker,
 } from "@/lib/outcome-queries";
 import { Empty, SectionTitle } from "../charts";
+import { ResponsiveTable } from "../ui";
 
 /**
  * What the alerted ticker did next, per alert and per kind (#53).
@@ -114,8 +115,9 @@ export function OutcomeSummarySection({ summary: s }: { summary: OutcomeSummary 
           {degraded ? ` — the last price run reported: ${s.status}` : ""}.
         </Empty>
       ) : (
-        <div className="glass overflow-x-auto rounded-2xl border border-border bg-card">
-          <table className="w-full text-[13px]" data-outcome-summary>
+        <div>
+          <ResponsiveTable>
+            <table className="w-full text-[13px]" data-outcome-summary>
             <thead>
               <tr className="text-left text-[11px] font-medium uppercase tracking-[0.07em] text-muted-foreground">
                 <th scope="col" className="px-4 py-2.5 font-medium">
@@ -152,14 +154,15 @@ export function OutcomeSummarySection({ summary: s }: { summary: OutcomeSummary 
                 </tr>
               ))}
             </tbody>
-          </table>
+            </table>
+          </ResponsiveTable>
           {degraded ? (
-            <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
+            <p className="mt-2 text-[11px] text-muted-foreground">
               Last price run: {s.status}. Outcomes stop advancing until it recovers.
             </p>
           ) : null}
           {s.no_series.length ? (
-            <p className="border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
+            <p className="mt-2 text-[11px] text-muted-foreground">
               No price series at the source for {s.no_series.join(", ")}; those alerts are not measured.
             </p>
           ) : null}
