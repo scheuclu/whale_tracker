@@ -10,7 +10,7 @@ import { getDb } from "./db";
 export const COUNTED = `('parsed','notified','backfilled')`;
 
 /** Asset types eligible for the "conviction" views; mirrors config.yaml. */
-const CLUSTER_TYPES = `('ST','OP','EF','ET','CT','RS','SA')`;
+export const CLUSTER_TYPES = `('ST','OP','EF','ET','CT','RS','SA')`;
 
 export type Direction = "buy" | "sell" | "flat";
 

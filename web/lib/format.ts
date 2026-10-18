@@ -12,6 +12,7 @@
 export function usd(cents: number | null | undefined): string {
   if (cents == null) return "—";
   const d = cents / 100;
+  if (d >= 1_000_000_000) return `$${(d / 1_000_000_000).toFixed(1).replace(/\.0$/, "")}B`;
   if (d >= 1_000_000) return `$${(d / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
   if (d >= 10_000) return `$${Math.round(d / 1_000).toLocaleString()}k`;
   return `$${Math.round(d).toLocaleString()}`;
