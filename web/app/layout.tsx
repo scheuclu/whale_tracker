@@ -1,7 +1,11 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import Link from "next/link";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
-import { Landmark } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { WhaleMark, Wordmark } from "./brand";
+import { HeaderShell } from "./header-shell";
+import { SiteFooter } from "./site-footer";
 import { getPipeline } from "@/lib/queries";
 import { getInsiderTotals } from "@/lib/insider-queries";
 import { relativeTime } from "@/lib/format";
@@ -11,20 +15,45 @@ import "./globals.css";
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
+const DESCRIPTION =
+  "US congressional and corporate-insider stock trades: tickers, volume, and who is trading";
+
 export const metadata: Metadata = {
-  title: "Whale Tracker",
-  description:
-    "US congressional and corporate-insider stock trades: tickers, volume, and who is trading",
+  title: { default: "Whale Tracker", template: "%s · Whale Tracker" },
+  description: DESCRIPTION,
+  applicationName: "Whale Tracker",
+  openGraph: { type: "website", siteName: "Whale Tracker", title: "Whale Tracker", description: DESCRIPTION },
+  twitter: { card: "summary_large_image", title: "Whale Tracker", description: DESCRIPTION },
 };
+
+// Browser chrome follows the page surface (--background) in each scheme.
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#fbfbfd" },
+    { media: "(prefers-color-scheme: dark)", color: "#08080c" },
+  ],
+};
+
+/**
+ * Past this the sync pill turns amber. The poll is scheduled every 90
+ * minutes, but GitHub delivers scheduled runs late and unevenly (a ~5 h
+ * median gap), so a few hours without a write is normal, not stale.
+ */
+const STALE_AFTER_HOURS = 12;
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   let transactions = 0;
   let insiderTrades = 0;
   let synced = "unavailable";
+  let syncedAt: string | null = null;
+  let syncedHours: number | null = null;
   try {
     const p = await getPipeline();
     transactions = p.totals.transactions;
     synced = relativeTime(p.lastUpdated);
+    syncedAt = p.lastUpdated;
+    const t = p.lastUpdated ? Date.parse(p.lastUpdated.replace(" ", "T")) : NaN;
+    if (!Number.isNaN(t)) syncedHours = (Date.now() - t) / 3_600_000;
   } catch {
     /* header degrades to "unavailable" */
   }
@@ -33,6 +62,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   } catch {
     /* a database from before the insider source has no such tables */
   }
+  const syncTone =
+    syncedHours === null
+      ? "unknown"
+      : syncedHours > STALE_AFTER_HOURS
+        ? "stale"
+        : "fresh";
 
   return (
     <html
@@ -42,45 +77,60 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     >
       <body className="min-h-screen bg-background font-sans text-foreground antialiased">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          <header className="sticky top-0 z-30 border-b border-border/70 bg-background/60 backdrop-blur-xl">
-            <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 pt-4 sm:px-6">
-              <div className="brand-mark flex size-9 items-center justify-center rounded-xl">
-                <Landmark className="size-[18px] text-white" aria-hidden />
-              </div>
-              <div className="min-w-0">
-                <div className="text-[15px] font-semibold leading-tight tracking-tight">
-                  Whale <span className="text-primary">Tracker</span>
+          <HeaderShell>
+            <div className="site-header-top mx-auto flex max-w-6xl items-center gap-3 px-4 pt-4 sm:px-6">
+              <Link href="/" className="group flex min-w-0 items-center gap-3 rounded-xl" aria-label="Whale Tracker — feed">
+                <WhaleMark className="site-header-mark motion-safe:group-hover:-rotate-6" />
+                <div className="min-w-0">
+                  <Wordmark className="block" />
+                  {/* Each count stays whole; on a phone the second wraps under the first. */}
+                  <div className="site-header-sub tabular overflow-hidden text-xs leading-snug text-muted-foreground">
+                    <span className="whitespace-nowrap">
+                      {transactions.toLocaleString()} congressional{insiderTrades ? " ·" : " trades"}
+                    </span>
+                    {insiderTrades ? (
+                      <>
+                        {" "}
+                        <span className="whitespace-nowrap">{insiderTrades.toLocaleString()} insider trades</span>
+                      </>
+                    ) : null}
+                  </div>
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  {transactions.toLocaleString()} congressional
-                  {insiderTrades ? ` · ${insiderTrades.toLocaleString()} insider` : ""} trades
-                </div>
-              </div>
+              </Link>
               <div className="flex-1" />
-              <span className="hidden items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground sm:inline-flex">
-                <span className="relative flex size-1.5">
-                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-60" />
-                  <span className="relative inline-flex size-1.5 rounded-full bg-emerald-500" />
+              <Link
+                href="/pipeline"
+                title={syncedAt ? `Last pipeline write: ${syncedAt} — open Pipeline` : "Open Pipeline"}
+                className="inline-flex shrink-0 items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+              >
+                <span className="relative flex size-1.5" aria-hidden>
+                  {syncTone === "fresh" ? (
+                    <span className="absolute inline-flex size-full rounded-full bg-emerald-500 opacity-60 motion-safe:animate-ping" />
+                  ) : null}
+                  <span
+                    className={cn(
+                      "relative inline-flex size-1.5 rounded-full",
+                      syncTone === "fresh" && "bg-emerald-500",
+                      syncTone === "stale" && "bg-amber-500",
+                      syncTone === "unknown" && "bg-zinc-400"
+                    )}
+                  />
                 </span>
-                synced {synced}
-              </span>
+                <span className="tabular">
+                  <span className="sr-only sm:not-sr-only">synced </span>
+                  {synced}
+                  {syncTone === "stale" ? <span className="sr-only"> (stale)</span> : null}
+                </span>
+              </Link>
               <ThemeToggle />
             </div>
             <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
               <Tabs />
               <SearchForm className="ml-auto" />
             </div>
-          </header>
+          </HeaderShell>
           <main className="mx-auto max-w-6xl px-4 py-8 pb-28 sm:px-6">{children}</main>
-          <footer className="mx-auto max-w-6xl px-4 pb-10 text-xs sm:px-6 leading-relaxed text-muted-foreground">
-            Sources: US House Clerk and US Senate eFD periodic transaction reports
-            (STOCK Act disclosures) and SEC EDGAR Form 4 filings. Members disclose an{" "}
-            <strong>amount bracket</strong>, not an exact figure — every congressional
-            total here is a range, and any midpoint is an estimate. Insider values
-            are <strong>shares × the reported price</strong>, which the filer may state
-            as a weighted average. Paper filings in either chamber are not read; see
-            Pipeline.
-          </footer>
+          <SiteFooter />
         </ThemeProvider>
       </body>
     </html>
