@@ -7,9 +7,10 @@ import {
   getIssuerInsiders,
   type InsiderTradeRow,
 } from "@/lib/insider-queries";
-import { price, shares, shortDate, usd } from "@/lib/format";
+import { getTickerDetail, getTickerMembers, type TickerMemberRow, type TickerRow } from "@/lib/queries";
+import { memberHref, memberLabel, price, range, shares, shortDate, usd } from "@/lib/format";
 import { Card, DivergingSplit, Empty, MagnitudeBars, SectionTitle, StatTile } from "../charts";
-import { ActionBadge, Amount, InsiderDelayTag, PlanTag, RoleTag, TickerChip } from "../ui";
+import { ActionBadge, Amount, InsiderDelayTag, PartyBadge, PlanTag, RoleTag, TickerChip } from "../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -422,6 +423,117 @@ async function IssuerDetail({ ticker }: { ticker: string }) {
         </p>
         <TradeList trades={trades} showIssuer={false} />
       </section>
+
+      <MembersInTicker ticker={issuer.ticker ?? ticker} />
     </div>
+  );
+}
+
+/** Trade-date window for the cross-link, matching the ticker page's default view. */
+const CROSS_WINDOW_DAYS = 90;
+
+/**
+ * The congressional side of this symbol, set beside the Form 4 figures and
+ * never added to them. Members disclose brackets, so every figure here is a
+ * disclosed range (the sum of the floors to the sum of the ceilings, open-ended
+ * once a trade sits in the top bracket) — not a value like the ones above.
+ * Fetches its own data so a fault in the congressional tables cannot take the
+ * insider page down.
+ */
+async function MembersInTicker({ ticker }: { ticker: string }) {
+  let stat: TickerRow | null, members: TickerMemberRow[], allTime: TickerRow | null;
+  try {
+    [stat, members, allTime] = await Promise.all([
+      getTickerDetail(ticker, CROSS_WINDOW_DAYS),
+      getTickerMembers(ticker, CROSS_WINDOW_DAYS),
+      getTickerDetail(ticker),
+    ]);
+  } catch (err) {
+    return (
+      <section>
+        <SectionTitle>Members of Congress in this ticker</SectionTitle>
+        <Empty>Congressional data unavailable: {(err as Error).message}</Empty>
+      </section>
+    );
+  }
+  const href = `/tickers?t=${encodeURIComponent(ticker)}`;
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+  return (
+    <section>
+      <SectionTitle
+        right={
+          <span className="text-[11px] text-muted-foreground">
+            last {CROSS_WINDOW_DAYS} days · House &amp; Senate disclosures
+          </span>
+        }
+      >
+        Members of Congress in this ticker
+      </SectionTitle>
+      <Card>
+        {stat ? (
+          <>
+            <p className="text-[13px]">
+              <span className="font-medium">{plural(stat.politicians, "member")}</span> disclosed{" "}
+              {plural(stat.trades, "trade")} —{" "}
+              {[
+                stat.buy_politicians ? `${stat.buy_politicians} bought` : null,
+                stat.sell_politicians ? `${stat.sell_politicians} sold` : null,
+              ]
+                .filter(Boolean)
+                .join(", ")}
+              <span className="text-muted-foreground">
+                {" "}
+                · disclosed range {range(stat.volume_min, stat.volume_max)} · last trade{" "}
+                {shortDate(stat.last_tx_date)}
+                {stat.transcribed ? ` · ${stat.transcribed} transcribed from scans, not in the range` : ""}
+              </span>
+            </p>
+            <div className="mt-3 space-y-2">
+              {members.map((m) => (
+                <div key={m.member_name} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
+                  <PartyBadge party={m.party} />
+                  <a href={memberHref(m.member_name)} className="font-medium hover:text-primary">
+                    {memberLabel(m.member_name, null, m.state, m.district, m.chamber)}
+                  </a>
+                  <div className="flex-1" />
+                  <span className="tabular text-xs text-muted-foreground">
+                    {m.buys} buy / {m.sells} sell
+                  </span>
+                  <span className="tabular w-28 text-right text-xs">{range(m.volume_min, m.volume_max)}</span>
+                  <span className="tabular w-16 text-right text-xs text-muted-foreground">
+                    {shortDate(m.last_tx_date)}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 text-[11px] text-muted-foreground">
+              Distinct filers on periodic transaction reports; each figure is the disclosed
+              bracket range, never a computed value. Kept apart from the Form 4 figures above —
+              nothing here enters them. A report may take 45 days to reach the Clerk, so the
+              most recent weeks are still arriving.{" "}
+              <a href={href} className="underline-offset-2 hover:text-primary hover:underline">
+                every disclosed trade in {ticker} →
+              </a>
+            </p>
+          </>
+        ) : (
+          <Empty>
+            No disclosed member trade in {ticker} in the last {CROSS_WINDOW_DAYS} days.{" "}
+            {allTime ? (
+              <>
+                {plural(allTime.trades, "trade")} by {plural(allTime.politicians, "member")} all-time —{" "}
+                <a href={href} className="underline-offset-2 hover:text-primary hover:underline">
+                  see the ticker
+                </a>
+                .
+              </>
+            ) : (
+              "No member has disclosed a trade in this symbol."
+            )}
+          </Empty>
+        )}
+      </Card>
+    </section>
   );
 }

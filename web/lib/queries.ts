@@ -392,9 +392,60 @@ export async function getPoliticianTickers(member: string, limit = 40): Promise<
     .all(member, limit) as PoliticianTickerRow[];
 }
 
-export async function getTickerDetail(ticker: string) {
-  const rows = await getTickers(undefined, 5000);
+/** One ticker's congressional aggregate, over everything or a trade-date window. */
+export async function getTickerDetail(ticker: string, days?: number) {
+  const rows = await getTickers(days, 5000);
   return rows.find((r) => r.ticker === ticker.toUpperCase()) ?? null;
+}
+
+export type TickerMemberRow = {
+  member_name: string;
+  party: string | null;
+  state: string | null;
+  district: string | null;
+  chamber: string | null;
+  trades: number;
+  buys: number;
+  sells: number;
+  volume_min: number;
+  /** NULL when any trade sits in the open-ended top bracket. */
+  volume_max: number | null;
+  volume_mid: number;
+  transcribed: number;
+  last_tx_date: string | null;
+};
+
+/**
+ * The members behind one ticker's trades, each with their own disclosed
+ * range. Grouped on the display name like `getPoliticians`, so an unmatched
+ * filing still appears under the name printed on the PDF. This is the
+ * congressional side of the issuer page's cross-link and must stay a view of
+ * these tables alone — the Form 4 books are shown beside it, never in it.
+ */
+export async function getTickerMembers(ticker: string, days?: number, limit = 40): Promise<TickerMemberRow[]> {
+  const db = await getDb();
+  return db
+    .prepare(
+      `SELECT COALESCE(p.full_name, f.filer_name) AS member_name,
+              p.party, p.state, p.district, p.chamber,
+              COUNT(*) AS trades,
+              SUM(t.action='purchase') AS buys,
+              SUM(t.action IN ('sale','sale_partial')) AS sells,
+              SUM(COALESCE(${VOL_MIN},0)) AS volume_min,
+              ${VOLUME_MAX} AS volume_max,
+              SUM(COALESCE(${MID},0)) AS volume_mid,
+              SUM(${TRANSCRIBED}) AS transcribed,
+              MAX(t.tx_date) AS last_tx_date
+       FROM transactions t
+       JOIN filings f ON f.id = t.filing_id
+       LEFT JOIN politicians p ON p.id = t.politician_id
+       WHERE f.status IN ${COUNTED} AND t.ticker = ?
+       ${sinceClause(days)}
+       GROUP BY member_name
+       ORDER BY volume_mid DESC, trades DESC
+       LIMIT ?`
+    )
+    .all(ticker.toUpperCase(), limit) as TickerMemberRow[];
 }
 
 export type Pipeline = {

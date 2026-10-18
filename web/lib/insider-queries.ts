@@ -122,12 +122,13 @@ export async function getInsiderIssuers(days?: number, limit = 40): Promise<Issu
     .all(limit) as IssuerRow[];
 }
 
-export async function getInsiderIssuer(ticker: string): Promise<IssuerRow | null> {
+/** One issuer by listed symbol, over everything or a trade-date window. */
+export async function getInsiderIssuer(ticker: string, days?: number): Promise<IssuerRow | null> {
   const db = await getDb();
   const row = db
     .prepare(
       `${ISSUER_SELECT}
-       WHERE f.status IN ${COUNTED} AND f.ticker = ?
+       WHERE f.status IN ${COUNTED} AND f.ticker = ? ${sinceClause(days)}
        GROUP BY f.issuer_cik
        ORDER BY trades DESC
        LIMIT 1`
@@ -251,8 +252,9 @@ export type IssuerInsiderRow = {
   sold: number;
 };
 
-/** The primary reporting owners behind one issuer's stored filings. */
-export async function getIssuerInsiders(ticker: string): Promise<IssuerInsiderRow[]> {
+/** The primary reporting owners behind one issuer's stored filings, over
+ *  everything or a trade-date window. */
+export async function getIssuerInsiders(ticker: string, days?: number): Promise<IssuerInsiderRow[]> {
   const db = await getDb();
   return db
     .prepare(
@@ -268,6 +270,7 @@ export async function getIssuerInsiders(ticker: string): Promise<IssuerInsiderRo
               ${SELL_VALUE} AS sold
        ${FROM}
        WHERE f.status IN ${COUNTED} AND f.ticker = ? AND o.insider_cik IS NOT NULL
+       ${sinceClause(days)}
        GROUP BY i.cik
        ORDER BY bought + sold DESC`
     )
