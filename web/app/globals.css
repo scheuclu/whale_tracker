@@ -447,6 +447,124 @@ body::before {
 }
 
 /* ------------------------------------------------------------------
+   App shell (app/header-shell.tsx, app/skeletons.tsx, status screens).
+   Every motion here is opt-in under prefers-reduced-motion: no-preference;
+   with reduced motion the header still condenses and skeletons still
+   show, they just do not animate.
+   ------------------------------------------------------------------ */
+
+/* Sticky header: once scrolled, the brand row tightens and the subtitle
+   folds away so the tab strip costs less of a phone screen. */
+.site-header[data-condensed] {
+  background-color: color-mix(in oklab, var(--background) 82%, transparent);
+  box-shadow: 0 10px 30px -22px rgba(12, 12, 17, 0.45);
+}
+.dark .site-header[data-condensed] {
+  box-shadow: 0 12px 32px -20px rgba(0, 0, 0, 0.9);
+}
+.site-header-sub {
+  max-height: 2.5rem; /* two lines: the counts wrap on a phone */
+}
+.site-header[data-condensed] .site-header-top {
+  padding-top: 0.5rem;
+}
+.site-header[data-condensed] .site-header-top + div {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+.site-header[data-condensed] .site-header-mark {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+.site-header[data-condensed] .site-header-sub {
+  max-height: 0;
+  opacity: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .site-header {
+    transition:
+      background-color 200ms ease,
+      box-shadow 200ms ease;
+  }
+  .site-header-top,
+  .site-header-top + div {
+    transition: padding 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .site-header-mark {
+    transition:
+      width 200ms cubic-bezier(0.22, 1, 0.36, 1),
+      height 200ms cubic-bezier(0.22, 1, 0.36, 1),
+      transform 200ms ease;
+  }
+  .site-header-sub {
+    transition:
+      max-height 200ms ease,
+      opacity 150ms ease;
+  }
+
+  /* New page content (or its skeleton) eases in when it replaces the old.
+     `backwards` so no transform is left on the page once it has played. */
+  .site-header + main > * {
+    animation: page-in 260ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+}
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* Loading skeletons. One viewport-anchored sheen sweeps every bone at
+   once, so the page shimmers as a whole instead of bar by bar. Neutral
+   grey only: blue and red are reserved for buy and sell. */
+:root {
+  --skeleton: rgba(12, 12, 17, 0.085);
+  --skeleton-sheen: rgba(255, 255, 255, 0.7);
+}
+.dark {
+  --skeleton: rgba(255, 255, 255, 0.07);
+  --skeleton-sheen: rgba(255, 255, 255, 0.07);
+}
+.skeleton {
+  background-color: var(--skeleton);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton {
+    background-image: linear-gradient(
+      100deg,
+      transparent 40%,
+      var(--skeleton-sheen) 50%,
+      transparent 60%
+    );
+    background-size: 200vw 100%;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    animation: skeleton-sweep 1.8s ease-in-out infinite;
+  }
+}
+@keyframes skeleton-sweep {
+  from {
+    background-position: -140vw 0;
+  }
+  to {
+    background-position: 40vw 0;
+  }
+}
+
+/* The mark on the 404 / error screens bobs gently, like it is afloat. */
+@media (prefers-reduced-motion: no-preference) {
+  .status-mark {
+    animation: status-float 4.5s ease-in-out infinite;
+  }
+}
+@keyframes status-float {
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+/* ------------------------------------------------------------------
    Trade timeline (app/timeline.tsx). Axis text wears text tokens, never
    the series colour; a mark's 2px surface ring turns into the focus
    outline, so keyboard focus is visible without a box around the SVG.
