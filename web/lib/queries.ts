@@ -141,6 +141,10 @@ export type PoliticianRow = {
   tickers: number;
   buys: number;
   sells: number;
+  /** Disclosed floors summed, and ceilings (NULL once any counted row is in
+   *  the open-ended top bracket). Only where the query computes them. */
+  volume_min?: number;
+  volume_max?: number | null;
   volume_mid: number;
   /** Rows transcribed from scans: in `trades`, not in `volume_mid`. */
   transcribed: number;
@@ -544,6 +548,8 @@ export async function getPoliticians(days?: number, limit = 60): Promise<Politic
               COUNT(DISTINCT t.ticker) AS tickers,
               SUM(t.action='purchase') AS buys,
               SUM(t.action IN ('sale','sale_partial')) AS sells,
+              SUM(COALESCE(${VOL_MIN},0)) AS volume_min,
+              ${VOLUME_MAX} AS volume_max,
               SUM(COALESCE(${MID},0)) AS volume_mid,
               SUM(${TRANSCRIBED}) AS transcribed,
               AVG(${DELAY}) AS avg_delay,
@@ -650,6 +656,9 @@ export type PoliticianTickerRow = {
   trades: number;
   buys: number;
   sells: number;
+  volume_min: number;
+  /** NULL when any counted row is in the open-ended top bracket. */
+  volume_max: number | null;
   volume_mid: number;
   transcribed: number;
   last_tx_date: string | null;
@@ -666,6 +675,8 @@ export async function getPoliticianTickers(member: string, limit = 40): Promise<
               COUNT(*) AS trades,
               SUM(t.action='purchase') AS buys,
               SUM(t.action IN ('sale','sale_partial')) AS sells,
+              SUM(COALESCE(${VOL_MIN},0)) AS volume_min,
+              ${VOLUME_MAX} AS volume_max,
               SUM(COALESCE(${MID},0)) AS volume_mid,
               SUM(${TRANSCRIBED}) AS transcribed,
               MAX(t.tx_date) AS last_tx_date
@@ -1331,4 +1342,81 @@ export async function getCommitteeMembers(id: string): Promise<CommitteeMemberRo
        ORDER BY volume_mid DESC, trades DESC, s.side, s.rank, s.member_name`
     )
     .all(id.toUpperCase()) as CommitteeMemberRow[];
+}
+
+/* --------------------------------------------------------- weekly activity */
+//
+// The feed's stat tiles: what arrived per week, bucketed on FILING date in
+// rolling 7-day steps back from now (the same buckets as the alert tiles).
+// Filing date, not trade date, because the 45-day disclosure window leaves
+// the latest trade-date weeks only part-filled — a trade-date trend would
+// always appear to be falling off. Counts only: no volume is summed here.
+
+export type WeeklyActivity = {
+  weeks: number;
+  /** Oldest → newest; the last entry is the most recent 7 days. */
+  trades: number[];
+  filings: number[];
+  /** Over the whole window — distinct across it, never summed per week. */
+  window: { trades: number; filings: number; members: number; tickers: number };
+  /** Trades disclosed in the equal window before it, or null when the corpus
+   *  does not reach back that far: a part-covered period is no baseline. */
+  priorTrades: number | null;
+};
+
+export async function getWeeklyActivity(weeks = 12): Promise<WeeklyActivity> {
+  const db = await getDb();
+  const days = Math.floor(weeks) * 7;
+  const bucket = `CAST((julianday('now') - julianday(f.filing_date)) / 7 AS INTEGER)`;
+  const inRange = `julianday(f.filing_date) <= julianday('now')
+       AND julianday(f.filing_date) > julianday('now') - ?`;
+  type Bucket = { weeks_ago: number; n: number };
+  const tradeRows = db
+    .prepare(
+      `SELECT ${bucket} AS weeks_ago, COUNT(*) AS n
+       FROM transactions t JOIN filings f ON f.id = t.filing_id
+       WHERE f.status IN ${COUNTED} AND ${inRange}
+       GROUP BY weeks_ago`
+    )
+    .all(days * 2) as Bucket[];
+  const filingRows = db
+    .prepare(
+      `SELECT ${bucket} AS weeks_ago, COUNT(*) AS n
+       FROM filings f
+       WHERE f.status IN ${COUNTED} AND ${inRange}
+       GROUP BY weeks_ago`
+    )
+    .all(days) as Bucket[];
+  const distinct = db
+    .prepare(
+      `SELECT COUNT(DISTINCT t.politician_id) AS members,
+              COUNT(DISTINCT CASE WHEN t.ticker != '' THEN t.ticker END) AS tickers
+       FROM transactions t JOIN filings f ON f.id = t.filing_id
+       WHERE f.status IN ${COUNTED} AND ${inRange}`
+    )
+    .get(days) as { members: number; tickers: number };
+  const covered = db
+    .prepare(
+      `SELECT MIN(f.filing_date) <= date('now', '-${days * 2} day') AS ok
+       FROM filings f WHERE f.status IN ${COUNTED}`
+    )
+    .get() as { ok: number | null };
+
+  const series = (rows: Bucket[]) => {
+    const out = new Array<number>(weeks).fill(0);
+    for (const r of rows) if (r.weeks_ago >= 0 && r.weeks_ago < weeks) out[weeks - 1 - r.weeks_ago] = r.n;
+    return out;
+  };
+  const trades = series(tradeRows);
+  const filings = series(filingRows);
+  const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+  const prior = sum(tradeRows.filter((r) => r.weeks_ago >= weeks && r.weeks_ago < weeks * 2).map((r) => r.n));
+
+  return {
+    weeks,
+    trades,
+    filings,
+    window: { trades: sum(trades), filings: sum(filings), ...distinct },
+    priorTrades: covered?.ok ? prior : null,
+  };
 }
