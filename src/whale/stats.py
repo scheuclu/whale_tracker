@@ -36,6 +36,41 @@ DEFAULT_CLUSTER_REFIRE_GROWTH = 1.5
 BUY_ACTIONS = ("purchase",)
 SELL_ACTIONS = ("sale", "sale_partial")
 
+
+def trade_direction(action: str, option_kind: str | None = None,
+                    count_options: bool | None = None) -> str | None:
+    """Which way a row moves a ticker: 'buy', 'sell', or None for neither.
+
+    An exchange is neither. For a stock the action says it all. For a row
+    whose option contract was parsed (`transactions.option_kind`) the action
+    alone misleads — buying a put is a bet against the stock, and the cluster
+    finder would have read it as a buy — so `count_options` decides:
+
+    * None   as filed: the action's own direction (every view that is not
+             the cluster finder reproduces the filing);
+    * True   by exposure: a call keeps the action's direction and a put
+             reverses it, so a bought put is a sell and a sold put a buy
+             (`alerts.cluster_count_options`);
+    * False  neither: the row counts toward no direction at all.
+
+    A row typed OP whose text named no contract has no `option_kind` and is
+    counted as filed under every setting: nothing more is known about it.
+    """
+    if action in BUY_ACTIONS:
+        base = "buy"
+    elif action in SELL_ACTIONS:
+        base = "sell"
+    else:
+        return None
+    if option_kind is None or count_options is None:
+        return base
+    if not count_options:
+        return None
+    if option_kind == "put":
+        return "sell" if base == "buy" else "buy"
+    return base
+
+
 # Filings read by transcribing a scanned paper form (`filings.parse_method`).
 # Their rows count as trades and toward member and ticker lists, but add
 # nothing to any volume sum, cluster volume or per-member floor: the amount
@@ -152,8 +187,14 @@ def _rows(conn: sqlite3.Connection, since: str | None, tickers_only: bool,
 
 def ticker_stats(conn: sqlite3.Connection, window_days: int | None = None,
                  asset_types: list[str] | None = None,
-                 today: date | None = None) -> dict[str, TickerStat]:
-    """Roll transactions up per ticker: volume, participation, buy/sell split."""
+                 today: date | None = None,
+                 count_options: bool | None = None) -> dict[str, TickerStat]:
+    """Roll transactions up per ticker: volume, participation, buy/sell split.
+
+    `count_options` is how a row with a parsed option contract joins the
+    buy/sell split — see `trade_direction`. The default reproduces the
+    filing; only the cluster finder passes the configured setting.
+    """
     since = _window_start(window_days, today) if window_days else None
     stats: dict[str, TickerStat] = {}
 
@@ -171,13 +212,14 @@ def ticker_stats(conn: sqlite3.Connection, window_days: int | None = None,
         if priced:
             s.volume.add(*amounts)
 
-        if r["action"] in BUY_ACTIONS:
+        direction = trade_direction(r["action"], r["option_kind"], count_options)
+        if direction == "buy":
             s.buy_count += 1
             s.buy_politicians.add(member)
             if priced:
                 s.buy_volume.add(*amounts)
                 s.buy_floors[member] = s.buy_floors.get(member, 0) + _floor_cents(*amounts)
-        elif r["action"] in SELL_ACTIONS:
+        elif direction == "sell":
             s.sell_count += 1
             s.sell_politicians.add(member)
             if priced:
@@ -245,9 +287,15 @@ def find_clusters(conn: sqlite3.Connection, settings: AlertSettings,
     Only asset types configured as cluster-eligible are considered: members
     roll Treasury bills over constantly, and including them would bury real
     equity conviction under housekeeping.
+
+    An option row whose contract was parsed joins a direction only as
+    `alerts.cluster_count_options` says: by exposure (a call a buy, a put a
+    sell) when on, not at all when off. Either way a bought put is never
+    read as a buy, which is what the action alone used to say.
     """
     stats = ticker_stats(conn, settings.window_days,
-                         asset_types=settings.cluster_asset_types, today=today)
+                         asset_types=settings.cluster_asset_types, today=today,
+                         count_options=settings.cluster_count_options)
     floor = settings.min_member_floor_cents
     clusters = []
     for s in stats.values():
@@ -278,6 +326,12 @@ def find_clusters(conn: sqlite3.Connection, settings: AlertSettings,
 
 CLUSTER_KIND = "cluster"
 INSIDER_CLUSTER_KIND = "insider_cluster"
+# One row per filing whose every trade was disclosed past the deadline. The
+# `alerts` table has no filing column, so the row is keyed the way `filings`
+# is unique: `ticker` holds the Clerk's document id and `direction` the
+# chamber. `window_days` is the deadline it was judged by and
+# `politician_count` the number of late trades. See `is_new_late_filing`.
+LATE_FILING_KIND = "late_filing"
 
 
 def is_new_cluster(conn: sqlite3.Connection, cluster: Cluster,
@@ -330,6 +384,42 @@ def is_new_insider_cluster(conn: sqlite3.Connection, cluster: InsiderCluster,
     # At least one more insider, and at least `growth`× the reported size.
     # ceil() so a fractional threshold rounds towards fewer messages.
     return cluster.insider_count >= max(before + 1, math.ceil(before * growth))
+
+
+def filing_late_by_days(delays, deadline_days: int) -> int | None:
+    """How late a filing is when every trade in it is past the deadline.
+
+    The report was due `deadline_days` after its earliest trade, so the
+    figure is the longest delay minus the deadline: how many days past its
+    due date the report reached the Clerk. The per-trade delays are each
+    row's own clock; this is the filing's.
+
+    None when the feature is off (`deadline_days` 0), when any trade is
+    inside the deadline — the filing is then partly on time, and the
+    per-trade lines say which rows were not — or when any delay is unknown:
+    a filing whose dates contradict each other cannot be called all-late.
+    """
+    if deadline_days <= 0:
+        return None
+    delays = list(delays)
+    if not delays or any(d is None for d in delays):
+        return None
+    if min(delays) <= deadline_days:
+        return None
+    return max(delays) - deadline_days
+
+
+def is_new_late_filing(conn: sqlite3.Connection, chamber: str, doc_id: str) -> bool:
+    """Whether no `late_filing` alert has been recorded for this filing.
+
+    Deduped per filing, and keyed on the filing itself (document id and
+    chamber: what `filings` is unique on), so a late filing is recorded once
+    however many times its message is rebuilt. Kind-scoped, like every other
+    dedupe: a cluster row on the same key must not suppress it.
+    """
+    from . import db as _db
+
+    return _db.last_alert(conn, doc_id, chamber, LATE_FILING_KIND) is None
 
 
 def politician_stats(conn: sqlite3.Connection, window_days: int | None = None,

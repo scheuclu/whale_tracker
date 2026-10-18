@@ -6,6 +6,7 @@ import {
   OWNER_LABEL,
   isBuy,
   isSell,
+  optionLabel,
   range,
 } from "@/lib/format";
 import { Card } from "./charts";
@@ -240,6 +241,59 @@ export function ScanTag({
   return (
     <span className={cls} title={title}>
       transcribed from scan
+    </span>
+  );
+}
+
+/**
+ * The issuer's industry group, folded from its EDGAR SIC code
+ * (src/whale/issuers.py). Nothing is rendered for an unclassified row: an
+ * issuer EDGAR gives no SIC — an ETF trust, a fund — stays unknown rather
+ * than being guessed at from its name.
+ */
+export function SectorTag({
+  group,
+  sic,
+  description,
+}: {
+  group: string | null | undefined;
+  sic?: string | null;
+  description?: string | null;
+}) {
+  if (!group) return null;
+  const detail = [description, sic ? `SIC ${sic}` : null].filter(Boolean).join(" · ");
+  return (
+    <span
+      className="rounded bg-muted px-1.5 py-px text-[10px] text-muted-foreground"
+      title={detail ? `${detail} — industry group from the issuer's EDGAR SIC code` : "Industry group from the issuer's EDGAR SIC code"}
+    >
+      {group}
+    </span>
+  );
+}
+
+/**
+ * The option contract a row's own text named: kind, strike, expiry. Neutral
+ * on purpose — the action badge already carries the buy/sell colour, and a
+ * sold call coloured "buy" would contradict it. The words carry the meaning.
+ */
+export function OptionBadge({
+  kind,
+  strikeCents,
+  expiry,
+}: {
+  kind: string | null | undefined;
+  strikeCents: number | null | undefined;
+  expiry: string | null | undefined;
+}) {
+  const label = optionLabel(kind ?? null, strikeCents ?? null, expiry ?? null);
+  if (!label) return null;
+  return (
+    <span
+      className="whitespace-nowrap rounded border border-border bg-muted px-1.5 py-px font-mono text-[10px] font-medium tracking-tight"
+      title="Option contract as the filing's own text describes it: kind, strike and expiry are shown only when printed"
+    >
+      {label}
     </span>
   );
 }

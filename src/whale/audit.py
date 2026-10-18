@@ -27,7 +27,8 @@ from pathlib import Path
 
 from .amounts import BRACKETS
 from .db import COUNTED_STATUSES, connect
-from .stats import TRANSCRIBED_METHOD
+from .ptr import TICKER_FROM_NAME_NOTE
+from .stats import STOCK_ACT_DEADLINE_DAYS, TRANSCRIBED_METHOD, disclosure_delay_days
 
 # Severity ordering, worst first.
 ERROR, WARN, INFO = "error", "warning", "info"
@@ -157,6 +158,37 @@ def check_ticker_sanity(conn, today: date | None = None) -> list[Finding]:
         "ST is Sensata, AB is AllianceBernstein, BA is Boeing.",
         [f"{r['ticker']!r}  type={r['asset_type']}  filing {r['doc_id']}  {r['asset_name'][:40]}"
          for r in suspicious],
+    )]
+
+
+def check_tickers_from_asset_names(conn, today: date | None = None) -> list[Finding]:
+    """Tickers read off the asset name because the ticker column was empty (#50).
+
+    Informational: the symbol is the one the filer typed, just in the wrong
+    cell. The evidence lists every such symbol with its row and member
+    counts, because this is where a parenthesised word that is not a ticker
+    would surface. Silent when no row carries the provenance note.
+    """
+    rows = _rows(conn, f"""
+        SELECT t.ticker, COUNT(*) AS n, COUNT(DISTINCT t.politician_id) AS members
+        FROM transactions t JOIN filings f ON f.id = t.filing_id
+        WHERE f.status IN {_counted()} AND t.ticker IS NOT NULL AND t.description LIKE ?
+        GROUP BY t.ticker ORDER BY n DESC, t.ticker
+    """, (f"%{TICKER_FROM_NAME_NOTE}%",))
+    if not rows:
+        return []
+    total = sum(r["n"] for r in rows)
+    return [Finding(
+        INFO, "tickers_from_asset_names",
+        f"{total} transaction(s) carry a ticker read from the asset name "
+        f"({len(rows)} distinct symbol(s))",
+        "The ticker column was empty and the asset name carried exactly one "
+        "symbol in parentheses — \"BHP Group Limited (BHP)\" — so the parser "
+        "took it and marked the row in `description`; the name is kept "
+        "verbatim. On a House row only the form's own \"(SYM) [XX]\" slot "
+        "counts. A symbol colliding with an asset-type code is not a defect "
+        "(SE is Sea Limited); a plain word in this list would be.",
+        [f"{r['ticker']:<8}{r['n']:>5} row(s)  {r['members']} member(s)" for r in rows],
     )]
 
 
@@ -361,6 +393,64 @@ def check_date_anomalies(conn, today: date | None = None) -> list[Finding]:
     return out
 
 
+# The weekly review runs on Monday; this is the week it reviews.
+LATE_FILING_LOOKBACK_DAYS = 7
+
+
+def check_late_filings(conn, today: date | None = None) -> list[Finding]:
+    """Filings of the last week that disclose trades past the 45-day deadline.
+
+    Informational: a late disclosure is a reporting fact the filing proves,
+    not an allegation. The delay is trade date → filing date, never the
+    report's notification column, and it is computed by the same
+    `stats.disclosure_delay_days` as the statistics and the Telegram prefix,
+    so this line cannot drift from either.
+    """
+    now = today or date.today()
+    since = (now - timedelta(days=LATE_FILING_LOOKBACK_DAYS)).isoformat()
+    rows = _rows(conn, f"""
+        SELECT f.chamber, f.doc_id, f.filing_date, t.tx_date,
+               COALESCE(p.full_name, f.filer_name) AS member_name
+        FROM transactions t
+        JOIN filings f ON f.id = t.filing_id
+        LEFT JOIN politicians p ON p.id = f.politician_id
+        WHERE f.status IN {_counted()} AND f.filing_date >= ?
+        ORDER BY f.filing_date DESC, f.id, t.id
+    """, (since,))
+
+    per: dict[tuple[str, str], dict] = {}
+    for r in rows:
+        entry = per.setdefault((r["chamber"], r["doc_id"]), {
+            "doc_id": r["doc_id"], "filed": r["filing_date"],
+            "member": r["member_name"], "trades": 0, "late": 0, "worst": 0,
+        })
+        entry["trades"] += 1
+        delay = disclosure_delay_days(r["tx_date"], r["filing_date"])
+        if delay is not None and delay > STOCK_ACT_DEADLINE_DAYS:
+            entry["late"] += 1
+            entry["worst"] = max(entry["worst"], delay)
+
+    late = [e for e in per.values() if e["late"]]
+    if not late:
+        return []
+    trades = sum(e["late"] for e in late)
+    return [Finding(
+        INFO, "late_filings",
+        f"{len(late)} filing(s) in the last {LATE_FILING_LOOKBACK_DAYS} days disclose "
+        f"{trades} trade(s) past the {STOCK_ACT_DEADLINE_DAYS}-day deadline",
+        "Delay is measured from the trade to the date the report reached the "
+        "Clerk — never the report's notification column, which reads 0 for a "
+        "member trading their own account. A late disclosure is a reporting "
+        "fact, not an allegation. \"all\" marks a filing whose every trade was "
+        "late: those led with the late-by prefix in Telegram and hold a "
+        "late_filing alert row.",
+        [f"{e['filed']}  filing {e['doc_id']}  {e['member']}  "
+         f"{e['late']}/{e['trades']} trades late · worst {e['worst']}d"
+         + ("  · all" if e["late"] == e["trades"] else "")
+         for e in late],
+    )]
+
+
 def check_parse_coverage(conn, today: date | None = None) -> list[Finding]:
     """How much of the corpus is actually readable."""
     row = conn.execute("""
@@ -438,6 +528,66 @@ def check_vision_rows(conn, today: date | None = None) -> list[Finding]:
     )]
 
 
+def check_vision_join(conn, today: date | None = None) -> list[Finding]:
+    """What the page-by-page join set aside this week: pages that yielded no
+    rows, and rows whose type the model disputed.
+
+    A scan is joined page by page (vision.join). A page whose grid could not
+    be decomposed, or whose row count disagreed with the model's, yields
+    nothing and the filing is parsed from its other pages, with the page on
+    record (`scan_pages.error`, the note in `filings.last_error`): rows the
+    member filed are then missing from the knowledge base, which is worth a
+    look at /scans. A row whose model type contradicted the grid keeps the
+    grid's type and is stored `type_disputed`; by the measurement in #1 the
+    model misreads about a quarter of boxes, so a few of these are the
+    expected shape of the data. Both are INFO for the week's transcribed
+    filings. It becomes a warning when more than a quarter of the week's
+    transcribed rows are disputed: at that rate the join is out of step
+    rather than the model slipping, and the grid-kept types on those rows
+    deserve a check by eye.
+    """
+    since = ((today or date.today()) - timedelta(days=7)).isoformat()
+    rows = _rows(conn, f"""
+        SELECT f.doc_id, f.filer_name, f.last_error,
+               (SELECT COUNT(*) FROM transactions t WHERE t.filing_id = f.id) n,
+               (SELECT COUNT(*) FROM scan_rows r WHERE r.filing_id = f.id
+                  AND r.status = 'type_disputed') disputed,
+               (SELECT COUNT(*) FROM scan_rows r WHERE r.filing_id = f.id
+                  AND r.status = 'page_refused') refused_rows,
+               (SELECT COUNT(*) FROM scan_pages s WHERE s.filing_id = f.id
+                  AND s.error IS NOT NULL AND s.error != 'no table on this page') unread
+        FROM filings f
+        WHERE f.chamber = 'house' AND f.status IN {_counted()}
+          AND f.parse_method = '{TRANSCRIBED_METHOD}'
+          AND substr(f.updated_at, 1, 10) >= ?
+        ORDER BY f.filing_date DESC
+    """, (since,))
+    flagged = [r for r in rows if r["disputed"] or r["refused_rows"] or r["unread"]
+               or (r["last_error"] or "").startswith("partially read")]
+    if not flagged:
+        return []
+    total = sum(r["n"] for r in rows)
+    disputed = sum(r["disputed"] for r in rows)
+    unread = sum(r["unread"] for r in flagged)
+    severity = WARN if total and disputed > 0.25 * total else INFO
+    return [Finding(
+        severity, "vision_join",
+        f"{len(flagged)} transcribed filing(s) this week with pages set aside or rows "
+        f"disputed — {unread} page(s) yielded no rows, {disputed} of {total} row(s) "
+        f"type-disputed",
+        "A scan is joined page by page: a page whose grid could not be read, or "
+        "whose row count disagreed with the model's, yields no transactions and "
+        "the filing is parsed from the rest, so rows the member filed are "
+        "missing until the page is read; the /scans page shows which. A "
+        "type-disputed row keeps the grid's type and is flagged — the model "
+        "misreads about a quarter of boxes, so a few are expected; more than a "
+        "quarter of the week's rows means the join is out of step.",
+        [f"{r['doc_id']}  {r['filer_name']}  {r['n']} rows, {r['disputed']} disputed, "
+         f"{r['unread']} page(s) unread ({r['refused_rows']} grid rows unjoined)"
+         + (f"  {r['last_error'][:90]}" if r["last_error"] else "") for r in flagged],
+    )]
+
+
 def check_transaction_density(conn, today: date | None = None) -> list[Finding]:
     """Transactions per filing over time — a template-change detector.
 
@@ -470,6 +620,78 @@ def check_transaction_density(conn, today: date | None = None) -> list[Finding]:
     return [Finding(INFO, "transaction_density",
                     f"Rows per filing stable around {baseline:.1f}",
                     "No sign of a template change.", [detail])]
+
+
+def check_issuer_classification(conn, today: date | None = None) -> list[Finding]:
+    """How much of the corpus carries an industry group (#55).
+
+    Coverage, not correctness: the sector views on the dashboard aggregate
+    only the rows whose issuer EDGAR has classified, so the share that is
+    unclassified is the share those views are silent about. Measured on
+    equity-like congressional rows — the ones that can have a sector — and
+    on insider filings by issuer. An issuer EDGAR gives no SIC (ETF trusts,
+    funds) is unclassified by design and counted, never guessed. INFO on a
+    healthy database; a warning only when the last run itself reported a
+    throttle or error, which is the step going dark rather than the data
+    being what it is.
+    """
+    from .config import DEFAULT_CLUSTER_ASSET_TYPES
+    from .db import get_state
+
+    equity_types = "(" + ", ".join(f"'{t}'" for t in DEFAULT_CLUSTER_ASSET_TYPES) + ")"
+    status = get_state(conn, "issuers_status")
+    row = conn.execute(f"""
+        SELECT COUNT(*) rows_,
+               SUM(s.industry_group IS NOT NULL) classified,
+               COUNT(DISTINCT t.ticker) tickers,
+               COUNT(DISTINCT CASE WHEN s.industry_group IS NOT NULL THEN t.ticker END)
+                 classified_tickers
+        FROM transactions t JOIN filings f ON f.id = t.filing_id
+        LEFT JOIN issuer_tickers it ON it.ticker = t.ticker
+        LEFT JOIN issuers s ON s.cik = it.cik
+        WHERE f.status IN {_counted()} AND t.ticker IS NOT NULL AND t.ticker != ''
+          AND t.asset_type IN {equity_types}
+    """).fetchone()
+    insider = conn.execute(f"""
+        SELECT COUNT(DISTINCT f.issuer_cik) issuers,
+               COUNT(DISTINCT CASE WHEN s.industry_group IS NOT NULL THEN f.issuer_cik END)
+                 classified
+        FROM insider_filings f LEFT JOIN issuers s ON s.cik = f.issuer_cik
+        WHERE f.status IN {_counted()} AND f.issuer_cik IS NOT NULL
+    """).fetchone()
+    fetched = conn.execute("SELECT COUNT(*) n FROM issuers WHERE fetched_at IS NOT NULL").fetchone()["n"]
+    if status is None and not fetched:
+        return [Finding(
+            INFO, "issuer_classification_not_run",
+            "Issuer classification has not run",
+            "No sector is known for any ticker or Form 4 issuer. The step runs in the "
+            "poll run after the insider sync and needs EDGAR_USER_AGENT; the sector "
+            "views on the dashboard stay empty until it has.",
+        )]
+
+    rows, classified = row["rows_"] or 0, row["classified"] or 0
+    tickers, classified_tickers = row["tickers"] or 0, row["classified_tickers"] or 0
+    issuers_n, issuers_classified = insider["issuers"] or 0, insider["classified"] or 0
+    pct = 100 * classified / rows if rows else 0.0
+    evidence = [
+        f"congressional equity rows with a sector: {classified} of {rows} ({pct:.0f}%)",
+        f"tickers classified: {classified_tickers} of {tickers}",
+        f"Form 4 issuers classified: {issuers_classified} of {issuers_n}",
+        f"last run: {status or '—'}",
+    ]
+    degraded = bool(status) and not status.startswith(("ok", "skipped"))
+    return [Finding(
+        WARN if degraded else INFO, "issuer_classification",
+        f"{pct:.0f}% of congressional equity rows carry an industry group; "
+        f"{issuers_classified} of {issuers_n} Form 4 issuers classified"
+        + (f" — last run: {status}" if degraded else ""),
+        "Sector views aggregate only classified rows, so this is the share they "
+        "describe. Unclassified means EDGAR lists no SIC for the issuer (ETF "
+        "trusts, funds), the symbol is not in EDGAR's company list, or the fill "
+        "has not reached it yet — the last run's status line says which. A "
+        "throttle or error is the step going dark, not the data being what it is.",
+        evidence,
+    )]
 
 
 def check_alert_health(conn, today: date | None = None) -> list[Finding]:
@@ -584,6 +806,77 @@ def check_senate_parse_coverage(conn, today: date | None = None) -> list[Finding
              f"{r['last_error'] or ''}  {r['pdf_url']}" for r in rows],
         ))
     return findings
+
+
+# --- pipeline runs ----------------------------------------------------------
+
+
+def check_pipeline_runs(conn, today: date | None = None) -> list[Finding]:
+    """What the last pipeline runs did, from the run log `pipeline.run` keeps.
+
+    The CI digest in the weekly review sees the Actions history: which jobs
+    went green. This sees the other half — what each run actually parsed,
+    sent and stored — from `sync_state.recent_runs`, newest first. Silent
+    on a database no run has written yet (expected until the first run with
+    the log), so a fresh checkout says nothing. A failed run warns with its
+    error; a log whose newest run is more than a day old warns too, because
+    the poll is scheduled every 90 minutes and the database only reaches the
+    repository through a run — a day of silence is a broken schedule, not a
+    quiet one. The run log is bounded, so this never grows with the corpus.
+    """
+    import json
+
+    from .db import get_state
+
+    raw = get_state(conn, "recent_runs")
+    if raw is None:
+        return []
+    # A log that no longer parses must surface as `check_failed`, not as a
+    # pass: json.loads raising is the intended behaviour.
+    runs = [r for r in json.loads(raw) if isinstance(r, dict)]
+    if not runs:
+        return []
+
+    def line(r: dict) -> str:
+        return (f"{r.get('started', '?')}  {r.get('duration_s', '?')}s  "
+                f"parsed {r.get('filings_parsed', '?')}  alerts {r.get('alerts_sent', '?')}  "
+                f"scans {r.get('scans_transcribed', '?')}  insiders {r.get('insiders_stored', '?')}  "
+                f"{r.get('outcome', '?')}" + (f"  {r['error']}" if r.get("error") else ""))
+
+    failed = [r for r in runs if r.get("outcome") != "ok"]
+    out = [Finding(
+        INFO, "pipeline_runs",
+        f"{len(runs)} pipeline run(s) logged, {len(failed)} failed; "
+        f"newest started {runs[0].get('started', '?')}",
+        "One line per run, newest first: when it started, how long it took, "
+        "and what it parsed, sent and stored. Dry runs and runs the job "
+        "timeout killed leave no entry; the Actions history has those.",
+        [line(r) for r in runs[:10]],
+    )]
+    if failed:
+        out.append(Finding(
+            WARN, "pipeline_run_failed",
+            f"{len(failed)} of the last {len(runs)} pipeline run(s) failed",
+            "A run that raised still logged what it managed before it broke; "
+            "every step commits its own work, so the next run resumed from "
+            "there. Read the error, then the run's log in Actions.",
+            [line(r) for r in failed],
+        ))
+
+    newest = str(runs[0].get("started") or "")
+    if newest:
+        age_days = ((today or date.today()) - date.fromisoformat(newest[:10])).days
+        if age_days > 1:
+            out.append(Finding(
+                WARN, "pipeline_runs_stale",
+                f"No pipeline run logged in {age_days} days (newest {newest})",
+                "The poll workflow is scheduled every 90 minutes and GitHub "
+                "delivers it hours late at worst, never days. Either the "
+                "schedule stopped, every run since has been killed before "
+                "its `finally`, or the database being audited is not the one "
+                "the pipeline writes.",
+            ))
+    return out
 
 
 
@@ -821,8 +1114,14 @@ def check_insider_feed_health(conn, today: date | None = None) -> list[Finding]:
             ERROR, "insider_feed_gap",
             f"The insider feed advanced past a gap ({gap})",
             "Filings in this range were published while the pipeline was not "
-            "watching and the feed has since forgotten them. They will never "
-            "arrive on their own.",
+            "watching and the feed has since forgotten them. The poll run "
+            "repairs this itself: after each live-feed sync it walks EDGAR's "
+            "daily index for the gap, oldest day first, inside "
+            "`insiders.gap_repair_budget_seconds`, and the range narrows as "
+            "days are covered — `edgar_status` reports each run's progress. "
+            "This stays an error until the gap clears. If the range is not "
+            "shrinking between runs (the budget is 0, or the status reports "
+            "a repair error) walk it by hand:",
             [f"python -m whale backfill-insiders --from {start} --to {end}"],
         ))
 
@@ -916,14 +1215,19 @@ CHECKS = (
     check_house_age_cutoff,
     check_missing_transaction_fields,
     check_ticker_sanity,
+    check_tickers_from_asset_names,
     check_unmatched_filers,
     check_date_anomalies,
+    check_late_filings,
     check_parse_coverage,
     check_vision_rows,
+    check_vision_join,
     check_transaction_density,
+    check_issuer_classification,
     check_alert_health,
     check_senate,
     check_senate_parse_coverage,
+    check_pipeline_runs,
     check_insider_empty_filings,
     check_insider_primary_owner,
     check_insider_values,

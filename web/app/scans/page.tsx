@@ -167,5 +167,8 @@ export default async function ScansPage({
 const METHOD_LABEL: Record<string, string> = {
   scanned: "scan — not transcribed",
   vision: "transcribed (quarantined)",
+  // A captured scan whose later transcription attempt crashed rather than
+  // being refused; it stays listed because its capture is the record.
+  error: "transcription errored",
   vision_failed: "transcription refused",
 };

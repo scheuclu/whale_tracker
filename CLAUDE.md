@@ -117,6 +117,21 @@ parser stays faithful to the PDF and the UI flags the row rather than
   the commit step is last, so an uncapped backlog is killed and commits
   nothing: the first run with vision on did exactly that with 53 scans
   (2026-10-17), and every scheduled run after it would have repeated it.
+- The hybrid join (`vision.join`) is **per page** (#51): the model gives
+  every row a page number, the grid knows its rows per page, and a page whose
+  counts disagree is refused alone — its grid rows stored `page_refused`, its
+  transcription dropped — while the rest of the filing is parsed, with a
+  "partially read" note in `last_error` and the page's reason in
+  `scan_pages.error`. A page the grid cannot decompose yields nothing the same
+  way. A row whose model type contradicts the grid keeps the grid's type and is
+  stored `type_disputed`; a page or filing is refused for disputes only past
+  `MAX_DISPUTED_SHARE` with `MIN_DISPUTED_ROWS` (a quarter, and three: the
+  model misreads a quarter of boxes, so fewer is noise — the three filings
+  refused on day one had 2 of 6, 2 of 3 and 3 of 98, all the grid's call right
+  by eye). `transactions` are linked to `scan_rows` by `row_index`, not by
+  count. Refused scans (`vision_failed`) are re-queued **once per
+  `vision.JOIN_VERSION`** (stamped in `sync_state`), so bump it when the join
+  learns something and never retry them every run.
 - Scanned paper filings are **captured for inspection** in the same database
   (`scan_pages`: one 1-bit PNG per page at 110 dpi, oriented the way
   `paper_form.py` turned it; `scan_rows`: every row the grid reader found,
@@ -135,6 +150,25 @@ parser stays faithful to the PDF and the UI flags the row rather than
   deliberately no shape check on `insider_filings.ticker`: it comes from an XML
   element rather than a column split, and real values include exchange-prefixed
   foreign symbols like `ASX:LNW`.
+- A ticker read from the asset name — `(BHP)` on a row whose ticker column
+  is empty (#50) — is marked by appending `ptr.TICKER_FROM_NAME_NOTE` to
+  `description`; that is the only provenance (no schema column) and
+  `audit.check_tickers_from_asset_names` counts on it. On a House row only
+  the form's own `(SYM) [XX]` slot counts, wherever it sits in the cell —
+  `(THE)` and `(AMI) Labs` are not tickers; the Senate name column has no
+  slot, so any single parenthesised symbol counts. Two different symbols
+  mean no ticker. `pipeline._derive_tickers_from_names` re-derives stored
+  rows on every sync and backfill, idempotently.
+- Committee seats (`committees`, `committee_members`) come from the same
+  congress-legislators dataset as the roster and are refreshed inside
+  `roster.sync`. They are a snapshot of the *current* Congress with no
+  history, so a refresh replaces both tables wholesale in one transaction
+  that rolls back on a bad fetch, keeping the previous snapshot; a seat whose
+  bioguide id is not in `politicians` is dropped and counted, never invented.
+  Subcommittees are `committees` rows with `parent_id`, keyed
+  `<parent><two-digit code>` (`HSIF16`) the way the membership file keys
+  them. The web queries guard on the tables existing: the committed database
+  gains a new schema version only on the pipeline's next run after a merge.
 - Tests: `.venv/bin/python -m pytest -q` (run before every PR).
 
 ## Watchlist (per-member alerting)
@@ -194,7 +228,33 @@ parser stays faithful to the PDF and the UI flags the row rather than
   deadline, so there is no reporting lag to absorb.
 - `4/A`, Forms 3/5 and the derivative table are not ingested yet (counted in
   `sync_state.edgar_skipped`).
-- `insiders.sync` runs **last** in `pipeline.run` and must never raise into it.
+- `insiders.sync` runs after every House and Senate step in `pipeline.run`
+  and must never raise into it. Only issuer classification runs after it.
+
+## Issuer classification (SIC sectors)
+
+- `src/whale/issuers.py` (#55) resolves every ticker in `transactions` and
+  every issuer CIK in `insider_filings` to an EDGAR SIC code, through
+  `edgar.EdgarClient` only, and folds it into one of twelve groups. The
+  SIC → group table is the module docstring; `_SIC_RANGES` is its code, and
+  the two must stay in step.
+- Two tables, schema 9: `issuers` is one row per CIK, `issuer_tickers` is
+  symbol → CIK **including symbols EDGAR does not list** (cik NULL), so an
+  unknown ticker is recorded as unknown and not looked up again before the
+  weekly refresh. Both dashboard joins are one-to-one; a CIK with several
+  symbols (BRK.A, BRK.B) is one issuer with two ticker rows.
+- **Unknown stays unknown.** No SIC (ETF trusts, funds) → NULL group, never
+  guessed from the name; an SIC outside every range → `Other`. Sector views
+  show the unclassified remainder as a row of its own so groups never sum
+  to more than they describe. A sector is a label on a row, never a figure:
+  it must not enter any volume arithmetic.
+- The fill runs **last** in `pipeline.run`, after the insider alerts, under
+  `issuers.budget_seconds`, never-fetched issuers first, committed per
+  issuer, and never raises; `whale classify-issuers --budget-seconds N` is
+  the manual form. A failed refresh keeps the earlier classification.
+- The dashboard reads whatever database the pipeline last committed, which
+  may predate the migration, so every sector query goes through
+  `hasIssuerTables` and reports nothing rather than "no such table".
 
 ## Insider alerts
 
@@ -266,3 +326,26 @@ skill before changing any palette value.
 - Summary stat tiles must aggregate over the whole dataset, not the rendered
   page slice (see `getPoliticianTotals`) — summing a truncated list understates
   the total it claims to report.
+
+## Late-filing compliance
+
+- A filing is "late" for the prefix and the `late_filing` alert only when
+  **every** trade is past `alerts.late_filing_days` (`stats.filing_late_by_days`).
+  N is the longest delay minus the deadline — the report was due that many days
+  after its earliest trade. A row with an unknown delay (contradictory dates)
+  disqualifies the filing rather than being skipped; 0 turns both off.
+- The prefix is the first line of the existing filing message, never a second
+  message, and survives every degradation step of `format_filing` and
+  `format_filing_summary`. Watched filings are split per transaction and do not
+  carry it.
+- The `alerts` table has no filing column, so a `late_filing` row is keyed the
+  way `filings` is unique: `ticker` = document id, `direction` = chamber,
+  `window_days` = the deadline used, `politician_count` = late trades. It is
+  recorded only after delivery, once per filing (`stats.is_new_late_filing`,
+  kind-scoped), and never on a dry run.
+- The dashboard's `?view=late` queries (`LATE` in `web/lib/queries.ts`) must
+  reconcile with `getPoliticianTotals` — `web/lib/late.test.ts` asserts it on
+  the committed DB. The monthly series is by month of *filing*: by trade month
+  the recent months always look cleaner than they are.
+- `audit.check_late_filings` (INFO) lists the week's filings with late trades;
+  it reuses `stats.disclosure_delay_days` so it cannot drift from the prefix.

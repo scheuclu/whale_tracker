@@ -44,6 +44,11 @@ def main(argv: list[str] | None = None) -> int:
     p_backfill.add_argument("--chamber", choices=("house", "senate", "all"), default="all",
                             help="which chamber's indexed filings to parse (default: all)")
 
+    sub.add_parser(
+        "backfill-options",
+        help="re-derive each stored row's option contract (kind, strike, expiry) "
+             "from its asset name and description")
+
     p_capture = sub.add_parser(
         "capture-scans",
         help="store every scanned filing's pages and the grid reader's rows for the "
@@ -84,6 +89,13 @@ def main(argv: list[str] | None = None) -> int:
                        help="only rebuild the derived late flag, then exit")
     p_bfi.add_argument("--recompute-implausible", action="store_true",
                        help="only re-judge the derived implausible-value flag, then exit")
+
+    p_classify = sub.add_parser(
+        "classify-issuers",
+        help="fetch EDGAR SIC codes for every traded ticker and Form 4 issuer, "
+             "and fold them into industry groups (resumable; needs EDGAR_USER_AGENT)")
+    p_classify.add_argument("--budget-seconds", type=float, default=600,
+                            help="stop after this long; the next run continues (default 600)")
 
     p_ins = sub.add_parser("insiders", help="issuer leaderboard for insider trades")
     p_ins.add_argument("--since", type=_parse_since, default=None, metavar="30d")
@@ -151,6 +163,18 @@ def main(argv: list[str] | None = None) -> int:
         print(f"parsed {count} filing(s) into the knowledge base (no notifications sent)")
         return 0
 
+    if args.command == "backfill-options":
+        from . import options
+
+        conn = db.connect(config.db_path)
+        try:
+            seen, structured = options.backfill(conn)
+            conn.commit()
+        finally:
+            conn.close()
+        print(f"options: {structured} of {seen} row(s) carry a parsed contract")
+        return 0
+
     if args.command == "capture-scans":
         from . import scan_capture
 
@@ -196,6 +220,17 @@ def main(argv: list[str] | None = None) -> int:
         finally:
             conn.close()
         print(f"insiders backfill: {result.summary()}")
+        return 0
+
+    if args.command == "classify-issuers":
+        from . import issuers
+
+        conn = db.connect(config.db_path)
+        try:
+            result = issuers.classify(conn, config, budget_seconds=args.budget_seconds)
+        finally:
+            conn.close()
+        print(f"issuers: {result.summary()}")
         return 0
 
     from . import query

@@ -2,14 +2,16 @@ import {
   getInsiderClusters,
   getInsiderIssuer,
   getInsiderIssuers,
+  getInsiderSectors,
   getInsiderTotals,
   getInsiderTrades,
   getIssuerInsiders,
+  type InsiderSectorRow,
   type InsiderTradeRow,
 } from "@/lib/insider-queries";
 import { price, shares, shortDate, usd } from "@/lib/format";
 import { Card, DivergingSplit, Empty, MagnitudeBars, SectionTitle, StatTile } from "../charts";
-import { ActionBadge, Amount, InsiderDelayTag, PlanTag, RoleTag, TickerChip, ResponsiveTable } from "../ui";
+import { ActionBadge, Amount, InsiderDelayTag, PlanTag, ResponsiveTable, RoleTag, SectorTag, TickerChip } from "../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -66,13 +68,14 @@ export default async function InsidersPage({
     return s ? `/insiders?${s}` : "/insiders";
   };
 
-  let totals, issuers, clusters, trades;
+  let totals, issuers, clusters, trades, sectors;
   try {
-    [totals, issuers, clusters, trades] = await Promise.all([
+    [totals, issuers, clusters, trades, sectors] = await Promise.all([
       getInsiderTotals(),
       getInsiderIssuers(days, 40),
       getInsiderClusters(30, 3, 12),
       getInsiderTrades({ action: params.action, cik: params.cik, days, limit: 120 }),
+      getInsiderSectors(days),
     ]);
   } catch (err) {
     return <Empty>{(err as Error).message}</Empty>;
@@ -276,7 +279,82 @@ export default async function InsidersPage({
           <Empty>No insider trades match this filter.</Empty>
         )}
       </section>
+
+      <InsiderSectors sectors={sectors} />
     </div>
+  );
+}
+
+/**
+ * Value bought and sold per industry group inside the window (#55). Two
+ * directions, two lists — the page's own "Most bought / Most sold" shape —
+ * and the unclassified remainder closes each, so a sector list never claims
+ * value it cannot place.
+ */
+function InsiderSectors({ sectors }: { sectors: InsiderSectorRow[] }) {
+  const classified = sectors.filter((s) => s.industry_group);
+  const unclassified = sectors.find((s) => !s.industry_group);
+  const list = (key: "buy_value" | "sell_value") => [
+    ...[...classified].filter((s) => s[key] > 0).sort((a, b) => b[key] - a[key]),
+    ...(unclassified && unclassified[key] > 0 ? [unclassified] : []),
+  ];
+  const bars = (key: "buy_value" | "sell_value") =>
+    list(key).map((s) => {
+      const n = key === "buy_value" ? s.buys : s.sells;
+      return {
+        key: s.industry_group ?? "unclassified",
+        label: s.industry_group ?? "Unclassified",
+        sublabel: `${s.issuers} issuer${s.issuers === 1 ? "" : "s"} · ${n} trade${n === 1 ? "" : "s"}`,
+        value: s[key],
+        valueLabel: usd(s[key]),
+      };
+    });
+  const issuersTotal = sectors.reduce((n, s) => n + s.issuers, 0);
+  const issuersKnown = classified.reduce((n, s) => n + s.issuers, 0);
+  return (
+    <section>
+      <SectionTitle right={<span className="text-[11px] text-muted-foreground">same window as above</span>}>
+        By sector
+      </SectionTitle>
+      {classified.length ? (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card>
+            <h3 className="mb-3 text-[11px] font-medium uppercase tracking-[0.07em] text-muted-foreground">
+              Bought
+            </h3>
+            {list("buy_value").length ? (
+              <MagnitudeBars variant="name" data={bars("buy_value")} />
+            ) : (
+              <Empty>No priced insider purchase in this window.</Empty>
+            )}
+            <p className="mt-3 text-[11px] text-muted-foreground">{VALUE_NOTE}</p>
+          </Card>
+          <Card>
+            <h3 className="mb-3 text-[11px] font-medium uppercase tracking-[0.07em] text-muted-foreground">
+              Sold
+            </h3>
+            {list("sell_value").length ? (
+              <MagnitudeBars variant="name" data={bars("sell_value")} />
+            ) : (
+              <Empty>No priced insider sale in this window.</Empty>
+            )}
+            <p className="mt-3 text-[11px] text-muted-foreground">{VALUE_NOTE}</p>
+          </Card>
+        </div>
+      ) : (
+        <Card>
+          <Empty>
+            No sector is known for any issuer yet. The pipeline classifies issuers from their
+            EDGAR SIC codes after each run.
+          </Empty>
+        </Card>
+      )}
+      <p className="mt-3 text-[11px] text-muted-foreground">
+        Industry groups fold each issuer&rsquo;s EDGAR SIC code into twelve sectors.{" "}
+        {issuersKnown} of {issuersTotal} issuers in this window are classified; the rest are
+        issuers EDGAR lists no SIC for, or ones the fill has not reached yet.
+      </p>
+    </section>
   );
 }
 
@@ -310,6 +388,9 @@ function TradeList({ trades, showIssuer }: { trades: InsiderTradeRow[]; showIssu
             <span className="tabular text-xs text-muted-foreground">
               {shares(r.shares)} sh @ {price(r.price_per_share)}
             </span>
+            {showIssuer ? (
+              <SectorTag group={r.industry_group} sic={r.sic} description={r.sic_description} />
+            ) : null}
             <PlanTag value={r.aff_10b5_one} />
             <div className="flex-1" />
             <span
@@ -374,8 +455,15 @@ async function IssuerDetail({ ticker }: { ticker: string }) {
           ← all insiders
         </a>
         <h1 className="mt-2 font-mono text-3xl font-semibold tracking-tight">{issuer.ticker ?? ticker}</h1>
-        <p className="text-sm text-muted-foreground">
-          {issuer.issuer_name} · CIK {issuer.issuer_cik}
+        <p className="flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
+          <span>
+            {issuer.issuer_name} · CIK {issuer.issuer_cik}
+          </span>
+          <SectorTag
+            group={trades[0]?.industry_group}
+            sic={trades[0]?.sic}
+            description={trades[0]?.sic_description}
+          />
         </p>
       </div>
 

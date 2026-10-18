@@ -35,7 +35,7 @@ from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 11
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS politicians (
@@ -96,7 +96,10 @@ CREATE TABLE IF NOT EXISTS transactions (
   amount_exact_cents INTEGER,
   cap_gains_over_200 INTEGER,
   description TEXT,
-  raw_text TEXT
+  raw_text TEXT,
+  option_kind TEXT,                    -- call | put, as the text above names it; see options.py
+  strike_cents INTEGER,                -- only a figure the text calls the strike
+  expiry TEXT                          -- ISO; all three NULL when the text does not say
 );
 CREATE INDEX IF NOT EXISTS idx_tx_ticker ON transactions(ticker);
 CREATE INDEX IF NOT EXISTS idx_tx_date ON transactions(tx_date);
@@ -269,10 +272,78 @@ CREATE TABLE IF NOT EXISTS scan_rows (
   amount_margin REAL,                  -- strongest cell's lead over the row median
   action TEXT,
   type_margin REAL,
-  status TEXT NOT NULL,                -- read | unknown_amount | unknown_type | unknown
+  status TEXT NOT NULL,                -- read | unknown_amount | unknown_type | unknown (the reader's verdict)
+                                       -- | type_disputed | page_refused (the join's; scan_capture.py)
   transaction_id INTEGER REFERENCES transactions(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_scan_rows_filing ON scan_rows(filing_id, page_no, row_index);
+"""
+
+# Industry classification from EDGAR's SIC codes (`issuers.py`, #55). One
+# `issuers` row per CIK — the EDGAR entity — and one `issuer_tickers` row per
+# symbol as it appears in `transactions.ticker` or `insider_filings.ticker`,
+# including symbols EDGAR does not list (cik NULL), so an unknown ticker is
+# recorded as unknown rather than looked up every run. Both dashboard joins
+# are one-to-one: transactions → issuer_tickers → issuers, and
+# insider_filings.issuer_cik → issuers. A CIK with several symbols (BRK.A and
+# BRK.B) is one issuer with two ticker rows. Never joined into any politician
+# aggregate's volume: a sector is a label on a row, not a figure.
+_ISSUER_DDL = """
+CREATE TABLE IF NOT EXISTS issuers (
+  cik TEXT PRIMARY KEY,                -- 10-digit zero-padded, as in insider_filings.issuer_cik
+  ticker TEXT,                         -- EDGAR's first listed symbol, in its hyphen form (BRK-B)
+  name TEXT,
+  sic TEXT,                            -- as EDGAR gives it ('3571'); NULL when none is assigned (funds, trusts)
+  sic_description TEXT,
+  industry_group TEXT,                 -- issuers.sic_group(sic); NULL when unknown. `group` is a keyword.
+  fetched_at TEXT,                     -- last submissions fetch, success or recorded failure; NULL = never
+  last_error TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_issuers_group ON issuers(industry_group);
+
+CREATE TABLE IF NOT EXISTS issuer_tickers (
+  ticker TEXT PRIMARY KEY,             -- as it appears in transactions.ticker / insider_filings.ticker
+  cik TEXT,                            -- NULL: not in EDGAR's company list when last looked up
+  looked_up_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_issuer_tickers_cik ON issuer_tickers(cik);
+"""
+
+# Committee assignments (#56), from the same congress-legislators dataset as
+# the roster and refreshed with it (`roster.sync_committees`). Both tables are
+# a snapshot of the *current* Congress — the source publishes no history —
+# so a refresh replaces them wholesale rather than upserting: a member who
+# leaves a committee must leave the table too.
+#
+# Subcommittees are rows of `committees` with `parent_id` set; their id is
+# the parent's thomas_id followed by the subcommittee's two-digit code
+# ('HSIF16'), which is how the membership file keys them.
+_COMMITTEE_DDL = """
+CREATE TABLE IF NOT EXISTS committees (
+  thomas_id TEXT PRIMARY KEY,            -- 'HSIF'; 'HSIF16' for a subcommittee
+  parent_id TEXT REFERENCES committees(thomas_id) ON DELETE CASCADE,
+  chamber TEXT NOT NULL,                 -- house | senate | joint
+  name TEXT NOT NULL,
+  house_committee_id TEXT,               -- the Clerk's own code ('IF'), where the source has one
+  senate_committee_id TEXT,
+  url TEXT,
+  jurisdiction TEXT,                     -- prose from the committee's site, where the source has it
+  jurisdiction_source TEXT,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_committees_parent ON committees(parent_id);
+
+CREATE TABLE IF NOT EXISTS committee_members (
+  committee_id TEXT NOT NULL REFERENCES committees(thomas_id) ON DELETE CASCADE,
+  politician_id INTEGER NOT NULL REFERENCES politicians(id) ON DELETE CASCADE,
+  rank INTEGER,                          -- seniority within the member's side; 1 is the chair / ranking member
+  party TEXT,                            -- majority | minority: the side, not D/R (independents caucus)
+  title TEXT,                            -- Chairman, Ranking Member, Vice Chair, Ex Officio ...
+  chamber TEXT,                          -- only joint committees say which chamber a member sits for
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (committee_id, politician_id)
+);
+CREATE INDEX IF NOT EXISTS idx_committee_members_politician ON committee_members(politician_id);
 """
 
 # Statuses whose transactions count toward statistics. A filing that failed to
@@ -333,6 +404,27 @@ def _migrate(conn: sqlite3.Connection) -> None:
         # Scan capture tables. Empty until `whale capture-scans` runs or the
         # pipeline meets a scan; nothing to backfill at migration time.
         conn.executescript(_SCAN_DDL)
+    if version < 9:
+        # Issuer classification tables (#55). Empty until the poll run's
+        # `issuers.classify` step or `whale classify-issuers` fills them;
+        # the fill needs EDGAR, so there is nothing to do at migration time.
+        conn.executescript(_ISSUER_DDL)
+    if version < 10:
+        # Committee tables (#56). Numbered past concurrent migrations so they
+        # can be reconciled at merge; idempotent, so running it on either side
+        # is safe. Empty until the next roster refresh fills them.
+        conn.executescript(_COMMITTEE_DDL)
+    if version < 11:
+        # Options as structured data (#58). A fresh DB has the columns from
+        # the DDL and no rows; an existing one gains them here and has them
+        # filled from the asset names and descriptions it already stores, so
+        # production needs no manual replay.
+        added = [_add_column(conn, "transactions", definition)
+                 for definition in ("option_kind TEXT", "strike_cents INTEGER", "expiry TEXT")]
+        if any(added):
+            from . import options
+
+            options.backfill(conn)
     if version < SCHEMA_VERSION:
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         conn.commit()
@@ -398,6 +490,70 @@ def upsert_politician(conn: sqlite3.Connection, **fields) -> int:
 
 def all_politicians(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     return conn.execute("SELECT * FROM politicians").fetchall()
+
+
+def politician_ids_by_bioguide(conn: sqlite3.Connection) -> dict[str, int]:
+    return {
+        r["bioguide_id"]: r["id"]
+        for r in conn.execute("SELECT bioguide_id, id FROM politicians WHERE bioguide_id IS NOT NULL")
+    }
+
+
+# --- committees -------------------------------------------------------------
+
+
+COMMITTEE_COLUMNS = ("thomas_id", "parent_id", "chamber", "name", "house_committee_id",
+                     "senate_committee_id", "url", "jurisdiction", "jurisdiction_source")
+COMMITTEE_MEMBER_COLUMNS = ("committee_id", "politician_id", "rank", "party", "title", "chamber")
+
+
+def replace_committees(conn: sqlite3.Connection, committees: Iterable[dict],
+                       members: Iterable[dict]) -> tuple[int, int]:
+    """Replace both committee tables with the given rows, in one transaction.
+
+    The source is a snapshot of the current Congress, so the old rows are not
+    reconciled, they are dropped: a committee or seat missing from the new
+    snapshot no longer exists. Parents must precede their subcommittees in
+    `committees`. The caller commits — or rolls back, leaving the previous
+    snapshot in place.
+    """
+    ts = now_iso()
+    conn.execute("DELETE FROM committee_members")
+    conn.execute("DELETE FROM committees")
+    cols = ", ".join(COMMITTEE_COLUMNS) + ", updated_at"
+    marks = ", ".join("?" for _ in COMMITTEE_COLUMNS) + ", ?"
+    n_committees = 0
+    for row in committees:
+        conn.execute(
+            f"INSERT INTO committees ({cols}) VALUES ({marks})",
+            [row.get(c) for c in COMMITTEE_COLUMNS] + [ts],
+        )
+        n_committees += 1
+    cols = ", ".join(COMMITTEE_MEMBER_COLUMNS) + ", updated_at"
+    marks = ", ".join("?" for _ in COMMITTEE_MEMBER_COLUMNS) + ", ?"
+    n_members = 0
+    for row in members:
+        conn.execute(
+            f"INSERT INTO committee_members ({cols}) VALUES ({marks})",
+            [row.get(c) for c in COMMITTEE_MEMBER_COLUMNS] + [ts],
+        )
+        n_members += 1
+    return n_committees, n_members
+
+
+def committee_counts(conn: sqlite3.Connection) -> dict[str, int]:
+    """Row counts for logs and status: full committees, subcommittees, seats."""
+    row = conn.execute(
+        """SELECT SUM(parent_id IS NULL) AS committees,
+                  SUM(parent_id IS NOT NULL) AS subcommittees,
+                  (SELECT COUNT(*) FROM committee_members) AS memberships
+           FROM committees"""
+    ).fetchone()
+    return {
+        "committees": row["committees"] or 0,
+        "subcommittees": row["subcommittees"] or 0,
+        "memberships": row["memberships"] or 0,
+    }
 
 
 # --- filings ----------------------------------------------------------------
@@ -468,14 +624,15 @@ def replace_transactions(conn: sqlite3.Connection, filing_id: int,
                (filing_id, politician_id, tx_date, notification_date, owner,
                 asset_name, ticker, asset_type, action, amount_min_cents,
                 amount_max_cents, amount_exact_cents, cap_gains_over_200,
-                description, raw_text)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                description, raw_text, option_kind, strike_cents, expiry)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 filing_id, politician_id, r.get("tx_date"), r.get("notification_date"),
                 r.get("owner"), r["asset_name"], r.get("ticker"), r.get("asset_type"),
                 r["action"], r.get("amount_min_cents"), r.get("amount_max_cents"),
                 r.get("amount_exact_cents"), r.get("cap_gains_over_200"),
                 r.get("description"), r.get("raw_text"),
+                r.get("option_kind"), r.get("strike_cents"), r.get("expiry"),
             ),
         )
     return len(rows)
@@ -542,26 +699,39 @@ def replace_scan_rows(conn: sqlite3.Connection, filing_id: int, rows: list[dict]
     return len(rows)
 
 
-def link_scan_rows(conn: sqlite3.Connection, filing_id: int) -> int:
-    """Point a filing's scan rows at its transactions, by order.
+def link_scan_rows(conn: sqlite3.Connection, filing_id: int,
+                   row_indexes: list[int] | None = None) -> int:
+    """Point a filing's scan rows at its transactions.
 
     `vision.join` builds transactions from the reader's rows in page order,
-    and `replace_transactions` inserts them in that order, so the n-th scan
-    row is the n-th transaction. Returns how many were linked; none when the
-    counts differ (a filing re-read since capture) or there are no
-    transactions (a scan vision never read).
+    and `replace_transactions` inserts them in that order. With
+    `row_indexes` — the join's own record of which grid row each
+    transaction came from — the n-th transaction is linked to that row,
+    which is what a filing with a refused page needs. Without it the n-th
+    scan row is the n-th transaction, and nothing is linked when the counts
+    differ (a filing re-read since capture) or there are no transactions (a
+    scan vision never read). Returns how many were linked.
     """
     rows = conn.execute(
-        "SELECT id FROM scan_rows WHERE filing_id = ? ORDER BY row_index", (filing_id,)
-    ).fetchall()
+        "SELECT id, row_index FROM scan_rows WHERE filing_id = ? ORDER BY row_index",
+        (filing_id,)).fetchall()
     txs = conn.execute(
         "SELECT id FROM transactions WHERE filing_id = ? ORDER BY id", (filing_id,)
     ).fetchall()
-    if not rows or len(rows) != len(txs):
-        return 0
-    for r, t in zip(rows, txs):
-        conn.execute("UPDATE scan_rows SET transaction_id = ? WHERE id = ?", (t["id"], r["id"]))
-    return len(rows)
+    if row_indexes is None:
+        if not rows or len(rows) != len(txs):
+            return 0
+        pairs = [(r["id"], t["id"]) for r, t in zip(rows, txs)]
+    else:
+        if len(row_indexes) != len(txs):
+            return 0
+        by_index = {r["row_index"]: r["id"] for r in rows}
+        if any(i not in by_index for i in row_indexes):
+            return 0
+        pairs = [(by_index[i], t["id"]) for i, t in zip(row_indexes, txs)]
+    for row_id, tx_id in pairs:
+        conn.execute("UPDATE scan_rows SET transaction_id = ? WHERE id = ?", (tx_id, row_id))
+    return len(pairs)
 
 
 def scan_page_png(conn: sqlite3.Connection, filing_id: int, page_no: int) -> bytes | None:
@@ -739,6 +909,49 @@ def replace_insider_owners(conn: sqlite3.Connection, filing_id: int,
                 int(bool(o.get("is_other"))), o.get("officer_title"), o.get("other_text"),
             ),
         )
+
+
+# --- issuers (industry classification) --------------------------------------
+
+
+def upsert_issuer_ticker(conn: sqlite3.Connection, ticker: str, cik: str | None) -> None:
+    """Record what EDGAR's listing said about a symbol — including that it
+    said nothing (cik None), so the symbol is not asked about again before
+    the refresh."""
+    conn.execute(
+        "INSERT INTO issuer_tickers (ticker, cik, looked_up_at) VALUES (?,?,?) "
+        "ON CONFLICT(ticker) DO UPDATE SET cik=excluded.cik, looked_up_at=excluded.looked_up_at",
+        (ticker, cik, now_iso()),
+    )
+
+
+def upsert_issuer(conn: sqlite3.Connection, cik: str, ticker: str | None = None,
+                  name: str | None = None, sic: str | None = None,
+                  sic_description: str | None = None, industry_group: str | None = None,
+                  error: str | None = None) -> None:
+    """Store one issuer's classification, or the error that stood in for it.
+
+    An error keeps whatever an earlier fetch stored: a refresh that fails
+    must not blank a classification the dashboard was already showing.
+    """
+    if error is not None:
+        conn.execute(
+            "INSERT INTO issuers (cik, fetched_at, last_error) VALUES (?,?,?) "
+            "ON CONFLICT(cik) DO UPDATE SET fetched_at=excluded.fetched_at, "
+            "last_error=excluded.last_error",
+            (cik, now_iso(), error),
+        )
+        return
+    conn.execute(
+        """INSERT INTO issuers (cik, ticker, name, sic, sic_description, industry_group,
+                                fetched_at, last_error)
+           VALUES (?,?,?,?,?,?,?,NULL)
+           ON CONFLICT(cik) DO UPDATE SET
+             ticker=excluded.ticker, name=excluded.name, sic=excluded.sic,
+             sic_description=excluded.sic_description, industry_group=excluded.industry_group,
+             fetched_at=excluded.fetched_at, last_error=NULL""",
+        (cik, ticker, name, sic, sic_description, industry_group, now_iso()),
+    )
 
 
 def replace_insider_transactions(conn: sqlite3.Connection, filing_id: int,

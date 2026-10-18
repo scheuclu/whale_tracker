@@ -15,10 +15,16 @@ work, each on what it is good at:
   the rules and the ink inside each is measured. The grid is authoritative
   for amount and type; the model's own reading of them is only a check.
 
-The join is by row order across pages. If the two readers disagree on how
-many transactions there are, or the model's type contradicts the grid on
-more than one row, the filing is unreadable and the reason is recorded —
-a half-matched filing would put one row's amount on another's asset.
+The join is by row order, page by page. Each page is matched on its own:
+the model says which page every row is on, the grid knows how many rows it
+found there, and a page whose counts disagree is refused alone — its grid
+rows are stored unjoined and its transcription dropped — while the other
+pages keep their rows. A page whose grid could not be decomposed yields no
+rows and carries the reason. A row whose model type contradicts the grid's
+keeps the grid's type and is flagged (`scan_rows.status = 'type_disputed'`);
+only when the disputed share of a filing passes `MAX_DISPUTED_SHARE` is
+the whole filing refused, since at that rate the rows are not aligned and a
+half-matched filing would put one row's amount on another's asset.
 
 Transcribed rows are stored with the filing marked `parse_method =
 'vision'`, which `stats.py` and the dashboard quarantine from every volume
@@ -32,6 +38,7 @@ import json
 import logging
 import re
 from collections.abc import Callable
+from dataclasses import dataclass, field
 
 from .ptr import ParsedFiling, Transaction
 
@@ -60,6 +67,7 @@ Return JSON only:
   "amount_letters": "the first and last letters printed over the amount columns, e.g. A-K",
   "transactions": [
     {
+      "page": 1,
       "asset_name": "the full asset name exactly as written",
       "ticker": null,
       "owner": "SP, DC, JT, or null if blank",
@@ -75,6 +83,9 @@ Rules:
 - List EVERY transaction row, in the order printed, page by page, top to
   bottom. Do not merge, reorder or skip rows, and do not add rows: the rows
   are matched one-to-one with the grid by position.
+- "page" is the 1-based page of this PDF the row is printed on. Give it on
+  every row: the rows are matched to the grid page by page, and a page
+  whose count disagrees is set aside on its own.
 - A row is a transaction if it has an asset name AND a transaction date. A
   line that only names an account, trust or sub-holding, with no date and
   no ticks, is a heading, not a transaction: leave it out. A name that
@@ -116,11 +127,86 @@ AMOUNT_COLUMNS: dict[str, str | None] = {
 
 ACTIONS = {"purchase", "sale", "sale_partial", "exchange"}
 
-# How many rows the model's type reading may contradict the grid's before
-# the join is not trusted. One is a model slip; two is a misaligned join.
-MAX_TYPE_DISAGREEMENTS = 1
+# A row whose model type contradicts the grid's keeps the grid's type and is
+# flagged. A page is refused on its own, and a filing as a whole, only when
+# the disputed rows are at least MIN_DISPUTED_ROWS *and* more than
+# MAX_DISPUTED_SHARE of the rows joined. The model misreads about a quarter
+# of boxes (issue #1; the prompt tells it not to be careful with them), so a
+# quarter is what an aligned join looks like, and one or two disputes are
+# slips whatever the size: the first day's refusals (#51) were 2 of 6, 2 of
+# 3 and 3 of 98 rows, and on every one the grid was right by eye. Rows out
+# of step — a wrapped name split and a row merged on the same page, which
+# the per-page count check cannot see — dispute several rows in a run on
+# that page, well past a quarter of it; that is what refuses it. Two was
+# the limit when counts were only checked filing-wide, because a shift on
+# one page could then hide behind a miscount on another; per-page counts
+# catch that case before the types are compared.
+MAX_DISPUTED_SHARE = 0.25
+MIN_DISPUTED_ROWS = 3
+
+# Bumped when the join learns to read something it refused before. The
+# pipeline (`retry_scanned`) re-queues every `vision_failed` filing once per
+# version, so a refusal is retried exactly when the rule that refused it
+# changed, never every run.
+JOIN_VERSION = 2
 
 Transcriber = Callable[[bytes, str], dict]
+
+
+@dataclass
+class PageJoin:
+    """How one page of the PDF was joined."""
+    page_no: int                   # 1-based
+    grid_rows: int                 # transaction rows the grid found on the page
+    model_rows: int                # rows the model placed on the page
+    error: str | None = None       # why the page yielded no rows, if it did not
+    joined: int = 0                # transactions made from the page
+    disputed: int = 0              # of those, with the model's type contradicting the grid's
+
+
+@dataclass
+class ScannedFiling(ParsedFiling):
+    """A `ParsedFiling` read from a scan, with the join's page-by-page
+    account: which grid row (`scan_rows.row_index`) each transaction came
+    from, which pages yielded nothing, and which rows are disputed."""
+    pages: list[PageJoin] = field(default_factory=list)
+    row_indexes: list[int] = field(default_factory=list)     # per transaction
+    disputed_rows: list[int] = field(default_factory=list)   # grid row indexes
+    grid: object = None                                      # the GridReading joined
+
+    @property
+    def unread_pages(self) -> list[PageJoin]:
+        return [p for p in self.pages if p.error]
+
+    @property
+    def lost_rows(self) -> int:
+        """Rows the model transcribed on pages that yielded none."""
+        return sum(p.model_rows for p in self.pages if p.error)
+
+    def note(self) -> str | None:
+        """A one-line account of what the join left out, for `last_error`.
+        Each page's reason is cut to its first clause; the whole of it is on
+        the page itself (`scan_pages.error`)."""
+        if not self.unread_pages:
+            return None
+        parts = [f"page {p.page_no}: {_brief(p.error)}" for p in self.unread_pages]
+        return (f"partially read: {len(self.unread_pages)} page(s) yielded no rows "
+                f"({self.lost_rows} transcribed row(s) dropped) — " + "; ".join(parts))
+
+
+def _brief(reason: str) -> str:
+    """The first clause of a page's reason: the grid reader lists every
+    orientation it tried, and a refused page every disputed row."""
+    first = reason.split(";", 1)[0]
+    if "(" in first and ")" not in first:
+        first = first[:first.index("(")].rstrip()
+    return first.strip()
+
+
+def _page_error(page) -> str:
+    """A grid page's reason without the `page N: ` the reader prefixes —
+    the join names the page itself."""
+    return re.sub(rf"^page {page.index + 1}: ", "", page.error or "")
 
 
 def amount_from_column(letter: str | None) -> str | None:
@@ -131,7 +217,7 @@ def amount_from_column(letter: str | None) -> str | None:
 
 
 def parse_scanned(pdf_bytes: bytes, api_key: str | None,
-                  transcribe: Transcriber | None = None) -> ParsedFiling:
+                  transcribe: Transcriber | None = None) -> ScannedFiling:
     """Read a scanned PTR. Raises VisionUnavailable without a key or the
     `vision` extra, ScanUnreadable when the readings cannot be reconciled.
 
@@ -146,16 +232,20 @@ def parse_scanned(pdf_bytes: bytes, api_key: str | None,
 
 
 def read_grid(pdf_bytes: bytes):
-    """The printed grid's reading of every page; ScanUnreadable if any page
-    with a table could not be decomposed."""
+    """The printed grid's reading of every page. A page that could not be
+    decomposed is carried with its reason; ScanUnreadable only when no page
+    at all could be, so there is nothing to join and no model call to make."""
     from . import paper_form
 
     try:
-        return paper_form.read_pdf(pdf_bytes)
+        grid = paper_form.read_pdf(pdf_bytes)
     except ImportError as exc:
         raise VisionUnavailable(f"grid reader dependency missing: {exc}") from exc
     except paper_form.GridNotFound as exc:
         raise ScanUnreadable(f"grid: {exc}") from exc
+    if grid.unread and not grid.readable:
+        raise ScanUnreadable("grid: " + "; ".join(p.error for p in grid.unread))
+    return grid
 
 
 def _transcribe(pdf_bytes: bytes, api_key: str) -> dict:
@@ -196,70 +286,173 @@ def json_object(text: str) -> dict:
     return json.loads(text[start:end + 1])
 
 
-def join(data: dict, grid) -> ParsedFiling:
-    """Marry the model's text to the grid's ticks, row by row.
+def join(data: dict, grid) -> ScannedFiling:
+    """Marry the model's text to the grid's ticks, row by row, page by page.
 
     The grid supplies amount and type. The model's own readings of them are
-    compared and counted: a contradiction on the type in more than one row
-    means the rows are not aligned, and the filing is refused rather than
-    joined wrongly. Amount disagreements are logged only — that the model
-    gets them wrong is the measured reason the grid reader exists.
+    compared: a contradiction on the type flags the row (the grid's type is
+    kept), and a page — or the filing — with disputes past the threshold
+    above is refused rather than joined wrongly. Amount disagreements are
+    logged only — that the model gets them wrong is the measured reason the
+    grid reader exists.
+
+    Pages are matched on their own counts. A page the grid could not
+    decompose yields no transactions, whatever the model read there; a page
+    where the two counts differ is refused alone, its grid rows left
+    unjoined. If the model gave no page numbers at all the rows are matched
+    in order across the filing, as before, and a count mismatch cannot be
+    localised, so it refuses the filing.
     """
     model_rows = [r for r in (data.get("transactions") or []) if r.get("asset_name")]
-    grid_rows = grid.rows
-    if len(model_rows) != len(grid_rows):
-        raise ScanUnreadable(
-            f"the grid has {len(grid_rows)} transaction rows but the model "
-            f"transcribed {len(model_rows)}")
-    if grid_rows:
-        _check_headers(data, grid_rows[0].layout)
+    paged = _by_page(model_rows)
+    grid_pages = list(grid.pages)
+    layouts = [p.layout for p in grid_pages if p.layout is not None]
+    if layouts:
+        _check_headers(data, layouts[0])
 
-    result = ParsedFiling(
+    result = ScannedFiling(
         filer_name=(data.get("filer_name") or "").strip() or None,
         state_district=(data.get("state_district") or "").strip() or None,
+        grid=grid,
     )
+
+    # The grid's rows per page, each with its filing-wide index: the order
+    # `scan_capture` stores them in, so a transaction can point at its row.
+    per_page: list[list[tuple[int, object]]] = []
+    row_index = 0
+    for page in grid_pages:
+        rows = []
+        for g in page.rows:
+            if g.populated:
+                rows.append((row_index, g))
+                row_index += 1
+        per_page.append(rows)
+
+    if paged is None:
+        # No page numbers: one sequence against the whole grid.
+        total = sum(len(rows) for rows in per_page)
+        if len(model_rows) != total:
+            raise ScanUnreadable(
+                f"the grid has {total} transaction rows but the model "
+                f"transcribed {len(model_rows)}")
+        paged, cursor = {}, 0
+        for index, rows in enumerate(per_page):
+            paged[index + 1] = model_rows[cursor:cursor + len(rows)]
+            cursor += len(rows)
+
     type_conflicts: list[str] = []
     amount_conflicts = 0
-    for index, (m, g) in enumerate(zip(model_rows, grid_rows), start=1):
-        model_action = str(m.get("action") or "").strip().lower() or None
-        if model_action in ACTIONS and g.action and _direction(model_action) != _direction(g.action):
-            type_conflicts.append(f"row {index}: model {model_action}, grid {g.action}")
-        model_letter = (str(m.get("amount_column") or "").strip().upper()[:1]) or None
-        if model_letter and g.amount and model_letter != g.amount:
-            amount_conflicts += 1
+    for index, page in enumerate(grid_pages):
+        page_no = index + 1
+        rows = per_page[index]
+        m_rows = paged.pop(page_no, [])
+        pj = PageJoin(page_no, len(rows), len(m_rows))
+        result.pages.append(pj)
+        if page.error:
+            pj.error = _page_error(page)
+            continue
+        if len(rows) != len(m_rows):
+            pj.error = (f"the grid found {len(rows)} transaction row(s) on this page "
+                        f"but the model placed {len(m_rows)} here")
+            continue
+        page_txs, page_disputed = [], []
+        for (ri, g), m in zip(rows, m_rows):
+            tx, disputed, conflict = _join_row(m, g, ri)
+            page_txs.append((ri, tx))
+            if disputed:
+                page_disputed.append((ri, disputed))
+            amount_conflicts += conflict
+        if _too_disputed(len(page_disputed), len(page_txs)):
+            pj.error = (f"the model's transaction type contradicts the grid on "
+                        f"{len(page_disputed)} of {len(page_txs)} rows on this page "
+                        f"({'; '.join(d for _, d in page_disputed)})")
+            continue
+        pj.joined = len(page_txs)
+        pj.disputed = len(page_disputed)
+        for ri, tx in page_txs:
+            result.transactions.append(tx)
+            result.row_indexes.append(ri)
+        for ri, disputed in page_disputed:
+            result.disputed_rows.append(ri)
+            type_conflicts.append(disputed)
+    for page_no, m_rows in sorted(paged.items()):
+        # Rows the model put on a page the PDF does not have.
+        result.pages.append(PageJoin(
+            page_no, 0, len(m_rows),
+            error=f"the model placed {len(m_rows)} row(s) on page {page_no}, "
+                  f"which the PDF does not have"))
 
-        amount_raw = amount_from_column(g.amount)
-        if g.amount is None:
-            log.info("no single amount tick for %r (ticks %s); row kept without one",
-                     m.get("asset_name"), g.amount_marks)
-        result.transactions.append(Transaction(
-            asset_name=str(m["asset_name"]).strip(),
-            action=g.action or "unknown",
-            ticker=None,
-            asset_type=None,
-            owner=(str(m.get("owner") or "").strip().upper() or None),
-            tx_date=m.get("tx_date"),
-            notification_date=m.get("notification_date"),
-            amount_raw=amount_raw,
-            cap_gains_over_200=g.cap_gains,
-            raw_text=(
-                f"(scanned filing: text transcribed by {MODEL}; "
-                f"amount column {g.amount or '?'} and type {g.action or '?'} read "
-                f"from the printed grid, page {g.page + 1}; model read "
-                f"{model_letter or '?'} / {model_action or '?'})"
-            ),
-        ))
-
-    if len(type_conflicts) > MAX_TYPE_DISAGREEMENTS:
+    joined = len(result.transactions)
+    if _too_disputed(len(type_conflicts), joined):
         raise ScanUnreadable(
             f"the model's transaction type contradicts the grid on "
-            f"{len(type_conflicts)} rows ({'; '.join(type_conflicts)})")
+            f"{len(type_conflicts)} of {joined} rows ({'; '.join(type_conflicts)})")
     if type_conflicts:
-        log.info("one type disagreement, grid kept: %s", type_conflicts[0])
+        log.info("type disagreement on %d of %d rows, grid kept: %s",
+                 len(type_conflicts), joined, "; ".join(type_conflicts))
     if amount_conflicts:
         log.info("model's amount letter differed from the grid on %d of %d rows; "
-                 "grid kept", amount_conflicts, len(grid_rows))
+                 "grid kept", amount_conflicts, joined)
+    unread = result.unread_pages
+    if unread and not joined:
+        raise ScanUnreadable("no page could be joined: " + "; ".join(
+            f"page {p.page_no}: {p.error}" for p in unread))
+    if unread:
+        log.warning("%s", result.note())
     return result
+
+
+def _too_disputed(disputed: int, joined: int) -> bool:
+    """Whether this many disputed rows among this many joined ones is past
+    the threshold at the top of the module."""
+    return disputed >= MIN_DISPUTED_ROWS and disputed > MAX_DISPUTED_SHARE * joined
+
+
+def _by_page(model_rows: list[dict]) -> dict[int, list[dict]] | None:
+    """The model's rows grouped by the page it put them on, in order; None
+    when any row lacks a page number (then the rows are one sequence)."""
+    pages: dict[int, list[dict]] = {}
+    for m in model_rows:
+        try:
+            page_no = int(m.get("page"))
+        except (TypeError, ValueError):
+            return None
+        pages.setdefault(page_no, []).append(m)
+    return pages or None
+
+
+def _join_row(m: dict, g, row_index: int) -> tuple[Transaction, str | None, int]:
+    """One transaction from a model row and its grid row. Returns it, the
+    type dispute (a description, or None), and whether the amount differed."""
+    model_action = str(m.get("action") or "").strip().lower() or None
+    disputed = None
+    if model_action in ACTIONS and g.action and _direction(model_action) != _direction(g.action):
+        disputed = f"row {row_index + 1}: model {model_action}, grid {g.action}"
+    model_letter = (str(m.get("amount_column") or "").strip().upper()[:1]) or None
+    amount_conflict = int(bool(model_letter and g.amount and model_letter != g.amount))
+
+    if g.amount is None:
+        log.info("no single amount tick for %r (ticks %s); row kept without one",
+                 m.get("asset_name"), g.amount_marks)
+    tx = Transaction(
+        asset_name=str(m["asset_name"]).strip(),
+        action=g.action or "unknown",
+        ticker=None,
+        asset_type=None,
+        owner=(str(m.get("owner") or "").strip().upper() or None),
+        tx_date=m.get("tx_date"),
+        notification_date=m.get("notification_date"),
+        amount_raw=amount_from_column(g.amount),
+        cap_gains_over_200=g.cap_gains,
+        raw_text=(
+            f"(scanned filing: text transcribed by {MODEL}; "
+            f"amount column {g.amount or '?'} and type {g.action or '?'} read "
+            f"from the printed grid, page {g.page + 1}; model read "
+            f"{model_letter or '?'} / {model_action or '?'}"
+            + ("; type disputed, grid kept" if disputed else "") + ")"
+        ),
+    )
+    return tx, disputed, amount_conflict
 
 
 def _direction(action: str) -> str:
