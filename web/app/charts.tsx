@@ -257,7 +257,7 @@ export function MagnitudeBars({
 export const VOLUME_NOTE = "estimate: sum of bracket midpoints";
 
 /** A bar row: the hit target is the whole row, with a visible focus ring. */
-const BAR_ROW =
+export const BAR_ROW =
   "block rounded-lg px-1 py-1 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-foreground/50 focus-visible:ring-offset-1 focus-visible:ring-offset-card";
 
 /**
@@ -266,7 +266,7 @@ const BAR_ROW =
  * name and notes follow. Kept out of the accessibility tree and referenced
  * by the row's aria-describedby, so a screen reader hears it once.
  */
-function BarTip({
+export function BarTip({
   id,
   at,
   value,
