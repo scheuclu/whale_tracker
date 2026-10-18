@@ -31,8 +31,24 @@ import {
 } from "../charts";
 import { ExportLink } from "../feed-controls";
 import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, ResponsiveTable, ScanTag, SectorTag, TickerChip } from "../ui";
+import { POLITICIAN_SORT, isDefaultSort, parseSort, type PoliticianSortKey } from "@/lib/table-sort";
+import { BODY_ROW, BarCell, DATA_TABLE, HEAD_ROW, LateCell, SortHeader, SplitCell, sortHref } from "../sortable-table";
+import { RowLinkBody, StickyThead } from "../table-client";
 
 export const dynamic = "force-dynamic";
+
+/** Every member, not a top slice: "All members" is the whole roster that has traded. */
+const MEMBER_LIMIT = 2000;
+
+// Header tooltips, in the words of the footnote under the table.
+const BUYSELL_HINT = "Purchases / sales. Sorts by the share that are purchases; exchanges count as neither.";
+const VOLUME_HINT =
+  "Sum of disclosed bracket midpoints — an estimate, not a reported figure. An open-ended top bracket counts at its floor.";
+const DELAY_HINT = "Mean days from the trade to the date the report reached the Clerk.";
+const LATE_HINT =
+  "Trades filed more than 45 days after the trade — the STOCK Act's deadline. A reporting fact, not an allegation of wrongdoing.";
+const LAG_HINT =
+  "Mean days until the member learned of the trade. A nonzero lag means someone else placed it — a spouse, a trust or a managed account — and carries no compliance meaning.";
 
 /**
  * Trades rendered on one member's page. The stat tiles above the list are
@@ -44,22 +60,45 @@ const TRADE_PAGE = 300;
 export default async function PoliticiansPage({
   searchParams,
 }: {
-  searchParams: Promise<{ m?: string; action?: string; committee?: string; view?: string }>;
+  searchParams: Promise<{ m?: string; action?: string; committee?: string; view?: string; sort?: string; dir?: string }>;
 }) {
   const params = await searchParams;
   if (params.m) return <MemberDetail member={params.m} action={params.action} />;
   if (params.view === "late") return <LateView />;
   if (params.committee) return <CommitteeView id={params.committee} />;
 
-  let rows, totals;
+  const sort = parseSort(POLITICIAN_SORT, params);
+  const standing = isDefaultSort(POLITICIAN_SORT, sort);
+  let rows, totals, table;
   try {
-    [rows, totals] = await Promise.all([getPoliticians(undefined, 80), getPoliticianTotals()]);
+    // The charts always rank by their own measure; the table follows the
+    // URL's sort, applied in SQL over every member.
+    [rows, totals, table] = await Promise.all([
+      getPoliticians(undefined, MEMBER_LIMIT),
+      getPoliticianTotals(),
+      standing ? null : getPoliticians(undefined, MEMBER_LIMIT, sort),
+    ]);
   } catch (err) {
     return <Empty>{(err as Error).message}</Empty>;
   }
   if (!rows.length) return <Empty>No transactions yet.</Empty>;
+  table ??= rows;
 
   const byTrades = [...rows].sort((a, b) => b.trades - a.trades);
+  const maxVolume = Math.max(0, ...rows.map((r) => r.volume_mid));
+  const maxTrades = Math.max(0, ...rows.map((r) => r.trades));
+  const header = (column: PoliticianSortKey, label: string, opts: { align?: "left" | "right"; hint?: string } = {}) => (
+    <SortHeader
+      spec={POLITICIAN_SORT}
+      sort={sort}
+      column={column}
+      href={sortHref(POLITICIAN_SORT, sort, column, { path: "/politicians", hash: "all-members" })}
+      align={opts.align}
+      hint={opts.hint}
+    >
+      {label}
+    </SortHeader>
+  );
 
   return (
     <div className="space-y-8">
@@ -122,37 +161,37 @@ export default async function PoliticiansPage({
         </div>
       </section>
 
-      <section>
+      <section id="all-members" className="table-anchor">
         <SectionTitle
           right={
             <span className="text-[11px] text-muted-foreground">
-              delay = mean days from trade to filing
+              {table.length} members · sort by any column
             </span>
           }
         >
           All members
         </SectionTitle>
         <ResponsiveTable>
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.06em] text-muted-foreground">
-                <th className="px-4 py-2.5 font-medium">Member</th>
-                <th className="px-4 py-2.5 text-right font-medium">Trades</th>
-                <th className="px-4 py-2.5 text-right font-medium">Tickers</th>
-                <th className="px-4 py-2.5 text-right font-medium">Buy / Sell</th>
-                <th className="px-4 py-2.5 text-right font-medium">Volume (est.)</th>
-                <th className="px-4 py-2.5 text-right font-medium">Delay</th>
-                <th className="px-4 py-2.5 text-right font-medium">Late</th>
-                <th className="px-4 py-2.5 text-right font-medium">Notify lag</th>
+          <table className={DATA_TABLE}>
+            <StickyThead>
+              <tr className={HEAD_ROW}>
+                {header("member", "Member", { align: "left" })}
+                {header("trades", "Trades")}
+                {header("tickers", "Tickers")}
+                {header("buysell", "Buy / Sell", { hint: BUYSELL_HINT })}
+                {header("volume", "Volume (est.)", { hint: VOLUME_HINT })}
+                {header("delay", "Delay", { hint: DELAY_HINT })}
+                {header("late", "Late", { hint: LATE_HINT })}
+                {header("lag", "Notify lag", { hint: LAG_HINT })}
               </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.member_name} className="border-b border-border/50 last:border-0 hover:bg-muted/50">
-                  <td className="px-4 py-2">
+            </StickyThead>
+            <RowLinkBody>
+              {table.map((r) => (
+                <tr key={r.member_name} className={BODY_ROW} data-href={memberHref(r.member_name)}>
+                  <td className="px-3 py-2">
                     <div className="flex items-center gap-2">
                       <PartyBadge party={r.party} />
-                      <a href={memberHref(r.member_name)} className="font-medium hover:text-primary">
+                      <a href={memberHref(r.member_name)} className="row-name font-medium hover:text-primary">
                         {r.member_name}
                       </a>
                       <span className="text-[11px] text-muted-foreground">
@@ -161,31 +200,33 @@ export default async function PoliticiansPage({
                       </span>
                     </div>
                   </td>
-                  <td className="tabular px-4 py-2 text-right">{r.trades}</td>
-                  <td className="tabular px-4 py-2 text-right text-muted-foreground">{r.tickers}</td>
-                  <td className="tabular px-4 py-2 text-right text-muted-foreground">
-                    {r.buys} / {r.sells}
-                  </td>
-                  <td className="tabular px-4 py-2 text-right">{usd(r.volume_mid)}</td>
-                  <td className="tabular px-4 py-2 text-right text-muted-foreground">
+                  <BarCell value={r.trades} max={maxTrades}>
+                    {r.trades}
+                  </BarCell>
+                  <td className="tabular px-3 py-2 text-right text-muted-foreground">{r.tickers}</td>
+                  <SplitCell buys={r.buys} sells={r.sells} />
+                  <BarCell
+                    value={r.volume_mid}
+                    max={maxVolume}
+                    className={r.transcribed && !r.volume_mid ? "text-muted-foreground" : undefined}
+                    title={
+                      r.transcribed
+                        ? `${r.transcribed} trade${r.transcribed === 1 ? "" : "s"} transcribed from scanned filings, not counted in this estimate`
+                        : undefined
+                    }
+                  >
+                    {usd(r.volume_mid)}
+                  </BarCell>
+                  <td className="tabular px-3 py-2 text-right text-muted-foreground">
                     {r.avg_delay == null ? "—" : `${Math.round(r.avg_delay)}d`}
                   </td>
-                  <td
-                    className={`tabular px-4 py-2 text-right ${
-                      r.late_count > 0 ? "font-medium text-red-600 dark:text-red-400" : "text-muted-foreground"
-                    }`}
-                  >
-                    {r.late_count || "—"}
-                  </td>
-                  <td
-                    className="tabular px-4 py-2 text-right text-muted-foreground"
-                    title="Days until the member was notified of their own trade. A nonzero lag means someone else placed it."
-                  >
+                  <LateCell count={r.late_count} of={r.trades} />
+                  <td className="tabular px-3 py-2 text-right text-muted-foreground">
                     {r.avg_lag == null ? "—" : `${Math.round(r.avg_lag)}d`}
                   </td>
                 </tr>
               ))}
-            </tbody>
+            </RowLinkBody>
           </table>
         </ResponsiveTable>
         <p className="mt-3 text-[11px] text-muted-foreground">

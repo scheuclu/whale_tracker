@@ -1,4 +1,5 @@
 import { getDb } from "./db";
+import { ISSUER_SORT, orderBy, type IssuerSortKey, type Sort } from "./table-sort";
 import {
   COUNTED,
   DELAY,
@@ -102,6 +103,10 @@ export type IssuerRow = {
   buy_value: number;
   sell_value: number;
   last_tx_date: string | null;
+  /** Issuers in the whole result before LIMIT — set by `getInsiderIssuers` only. */
+  total_rows?: number;
+  /** The largest bought or sold value in the whole result — `getInsiderIssuers` only. */
+  max_value?: number;
 };
 
 const ISSUER_SELECT = `SELECT f.issuer_cik,
@@ -119,14 +124,27 @@ const ISSUER_SELECT = `SELECT f.issuer_cik,
        MAX(t.tx_date) AS last_tx_date
   ${FROM}`;
 
-export async function getInsiderIssuers(days?: number, limit = 40): Promise<IssuerRow[]> {
+/**
+ * Issuers in the window by `sort` (default: value bought + sold), ordered
+ * over the whole result before the LIMIT, with the result's size on every
+ * row. The subquery makes `ticker` and `issuer_name` name the aggregates,
+ * not the same-named `insider_filings` columns.
+ */
+export async function getInsiderIssuers(
+  days?: number,
+  limit = 40,
+  sort?: Sort<IssuerSortKey>
+): Promise<IssuerRow[]> {
   const db = await getDb();
+  const order = orderBy(ISSUER_SORT, sort ?? { key: ISSUER_SORT.default, dir: "desc" });
   return db
     .prepare(
-      `${ISSUER_SELECT}
+      `SELECT *, COUNT(*) OVER () AS total_rows,
+              MAX(MAX(buy_value, sell_value)) OVER () AS max_value FROM (
+       ${ISSUER_SELECT}
        WHERE f.status IN ${COUNTED} ${sinceClause(days)}
-       GROUP BY f.issuer_cik
-       ORDER BY buy_value + sell_value DESC
+       GROUP BY f.issuer_cik)
+       ${order}
        LIMIT ?`
     )
     .all(limit) as IssuerRow[];
