@@ -9,7 +9,7 @@ import {
   StatTile,
   VolumeRange,
 } from "../charts";
-import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, ScanTag } from "../ui";
+import { ActionBadge, Amount, DelayTag, OptionBadge, OwnerTag, PartyBadge, ScanTag } from "../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -150,14 +150,17 @@ export default async function TickersPage({
 }
 
 async function TickerDetail({ ticker }: { ticker: string }) {
-  const [all, trades] = await Promise.all([
+  const [all, trades, optionTrades] = await Promise.all([
     getTickers(undefined, 5000),
     getTransactions({ ticker, limit: 200 }),
+    getTransactions({ ticker, options: true, limit: 500 }),
   ]);
   const stat = all.find((r) => r.ticker === ticker);
   if (!stat) return <Empty>No disclosed trades for {ticker}.</Empty>;
 
   const scaleMax = stat.volume_max ?? stat.volume_min * 2;
+  const calls = optionTrades.filter((r) => r.option_kind === "call").length;
+  const puts = optionTrades.filter((r) => r.option_kind === "put").length;
 
   return (
     <div className="space-y-8">
@@ -200,6 +203,7 @@ async function TickerDetail({ ticker }: { ticker: string }) {
             <Card key={r.id} className="px-4 py-3">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <ActionBadge action={r.action} />
+                <OptionBadge kind={r.option_kind} strikeCents={r.strike_cents} expiry={r.expiry} />
                 <Amount min={r.amount_min_cents} max={r.amount_max_cents} exact={r.amount_exact_cents} />
                 <PartyBadge party={r.party} />
                 <a href={memberHref(r.member_name)} className="text-[13px] font-medium hover:text-primary">
@@ -223,6 +227,75 @@ async function TickerDetail({ ticker }: { ticker: string }) {
           ))}
         </div>
       </section>
+
+      {optionTrades.length ? (
+        <section>
+          <SectionTitle
+            right={
+              <span className="text-[11px] text-muted-foreground">
+                {calls} call{calls === 1 ? "" : "s"} · {puts} put{puts === 1 ? "" : "s"}
+              </span>
+            }
+          >
+            Options
+          </SectionTitle>
+          <Card className="overflow-x-auto p-0">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.06em] text-muted-foreground">
+                  <th className="px-4 py-2.5 font-medium">Contract</th>
+                  <th className="px-4 py-2.5 font-medium">Action</th>
+                  <th className="px-4 py-2.5 font-medium">Member</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Disclosed range</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Traded</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Expires</th>
+                  <th className="px-4 py-2.5 text-right font-medium"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {optionTrades.map((r) => (
+                  <tr key={r.id} className="border-b border-border/50 last:border-0 hover:bg-muted/50">
+                    <td className="px-4 py-2">
+                      <OptionBadge kind={r.option_kind} strikeCents={r.strike_cents} expiry={null} />
+                    </td>
+                    <td className="px-4 py-2">
+                      <ActionBadge action={r.action} />
+                    </td>
+                    <td className="px-4 py-2">
+                      <a href={memberHref(r.member_name)} className="font-medium hover:text-primary">
+                        {memberLabel(r.member_name, r.party, r.state, r.district, r.chamber)}
+                      </a>
+                      <OwnerTag owner={r.owner} />
+                    </td>
+                    <td className="tabular px-4 py-2 text-right">
+                      <Amount min={r.amount_min_cents} max={r.amount_max_cents} exact={r.amount_exact_cents} />
+                    </td>
+                    <td className="tabular px-4 py-2 text-right text-muted-foreground">{shortDate(r.tx_date)}</td>
+                    <td className="tabular px-4 py-2 text-right text-muted-foreground">
+                      {r.expiry ? shortDate(r.expiry) : <span title="The filing did not print an expiry">—</span>}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <a
+                        href={r.pdf_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
+                      >
+                        filing
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="px-4 py-3 text-[11px] text-muted-foreground">
+              Kind, strike and expiry are read from each filing&apos;s own text and shown only when
+              printed; a put bought is listed as the purchase it was filed as. Amounts are the
+              disclosed brackets.
+            </p>
+          </Card>
+        </section>
+      ) : null}
     </div>
   );
 }

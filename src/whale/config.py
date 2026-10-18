@@ -38,6 +38,15 @@ class AlertSettings:
     cluster_asset_types: list[str] = field(
         default_factory=lambda: list(DEFAULT_CLUSTER_ASSET_TYPES)
     )
+    # Every options trade by any member is its own alert, split per
+    # transaction like a watched member's filing and sent ahead of the
+    # routine digests. Off by default: it is a firehose by design.
+    options_every_trade: bool = False
+    # Whether a parsed option counts toward a ticker's direction in the
+    # cluster finder: a call as a buy, a put as a sell, and selling the
+    # contract the reverse. Off, a row with a parsed contract counts toward
+    # neither direction — a bought put is not a "buy". See stats.trade_direction.
+    cluster_count_options: bool = False
 
     @property
     def min_volume_cents(self) -> int:
@@ -56,6 +65,14 @@ class IngestSettings:
     # never announced. See config.yaml for the measurements.
     max_filing_age_days: int = 14
 
+
+# What the alerts block may say. Same contract as the rules and the
+# watchlist below: `options_every_trades: true` would otherwise sit in
+# config.yaml looking like a setting while alerting on nothing.
+ALERT_KEYS = frozenset({
+    "window_days", "min_politicians", "min_volume_usd", "min_member_floor_usd",
+    "cluster_asset_types", "options_every_trade", "cluster_count_options",
+})
 
 # What a rule may say. Anything else is a typo, and a typo that silently
 # never matches is worse than a crash at startup.
@@ -191,6 +208,19 @@ def _member_floor(raw) -> int:
         raise ConfigError(
             f"alerts.min_member_floor_usd is {value}; it must be 0 (off) or more")
     return value
+
+
+def _flag(raw, key: str) -> bool:
+    """A true/false switch, and nothing else.
+
+    `bool("false")` is True: a quoted or misspelt value would turn a feature
+    on while config.yaml reads as if it were off. That is the silent
+    misconfiguration this project refuses to ship, so anything but a YAML
+    boolean raises.
+    """
+    if isinstance(raw, bool):
+        return raw
+    raise ConfigError(f"{key} must be true or false, not {raw!r}")
 
 
 def _refire_days(raw) -> int:
@@ -417,6 +447,11 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
         raw = yaml.safe_load(config_file.read_text()) or {}
 
     a = raw.get("alerts") or {}
+    unknown_alert_keys = set(a) - ALERT_KEYS
+    if unknown_alert_keys:
+        raise ConfigError(
+            f"alerts has unknown key(s) {sorted(unknown_alert_keys)}; "
+            f"allowed: {sorted(ALERT_KEYS)}")
     alerts = AlertSettings(
         window_days=int(a.get("window_days", 90)),
         min_politicians=int(a.get("min_politicians", 3)),
@@ -427,6 +462,10 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
             str(t).upper()
             for t in (a.get("cluster_asset_types") or DEFAULT_CLUSTER_ASSET_TYPES)
         ],
+        options_every_trade=_flag(a.get("options_every_trade", False),
+                                  "alerts.options_every_trade"),
+        cluster_count_options=_flag(a.get("cluster_count_options", False),
+                                    "alerts.cluster_count_options"),
     )
 
     i = raw.get("ingest") or {}
