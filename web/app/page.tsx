@@ -9,7 +9,7 @@ import { ExportLink, FilterBar, Pagination, ShownLine } from "./feed-controls";
 import { DirectionFilter, FeedList } from "./feed-list";
 import { ActionBadge, ResponsiveTable } from "./ui";
 import { Disclosure } from "./disclosure";
-import { PAGE_STACK, PageHeader } from "./page-header";
+import { DataError, PAGE_STACK, PageHeader } from "./page-header";
 import { AgentAlternates } from "./agent-alternates";
 
 export const dynamic = "force-dynamic";
@@ -71,7 +71,7 @@ export default async function FeedPage({
       getWeeklyActivity(WEEKS),
     ]);
   } catch (err) {
-    return <Empty>{(err as Error).message}</Empty>;
+    return <DataError error={err} />;
   }
 
   const weekLabels = rollingWeekLabels(WEEKS);
@@ -194,7 +194,7 @@ async function BothSides() {
     return (
       <section>
         <SectionTitle>Both sides</SectionTitle>
-        <Empty>{(err as Error).message}</Empty>
+        <DataError error={err} />
       </section>
     );
   }

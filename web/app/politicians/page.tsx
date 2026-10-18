@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { assetLabel } from "@/lib/asset-label";
 import {
   STOCK_ACT_DEADLINE_DAYS,
@@ -36,7 +37,7 @@ import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, ResponsiveTable, S
 import { AssetName, TradeList, TradeRow } from "../trade-row";
 import { MemberAvatar } from "../avatar";
 import { Disclosure, RangeCaption } from "../disclosure";
-import { PAGE_STACK, PageHeader, Quiet } from "../page-header";
+import { DataError, PAGE_STACK, PageHeader, Quiet } from "../page-header";
 import { MemberBars } from "./member-bars";
 import { MemberHero } from "./member-hero";
 import { AgentAlternates } from "../agent-alternates";
@@ -72,9 +73,26 @@ export default async function PoliticiansPage({
   searchParams: Promise<{ m?: string; action?: string; committee?: string; view?: string; sort?: string; dir?: string }>;
 }) {
   const params = await searchParams;
-  if (params.m) return <MemberDetail member={params.m} action={params.action} />;
-  if (params.view === "late") return <LateView />;
-  if (params.committee) return <CommitteeView id={params.committee} />;
+  // Keyed so list -> detail (a search-param change) remounts instead of
+  // morphing the list DOM; the direction filter stays inside one member.
+  if (params.m)
+    return (
+      <Fragment key={`m:${params.m}`}>
+        <MemberDetail member={params.m} action={params.action} />
+      </Fragment>
+    );
+  if (params.view === "late")
+    return (
+      <Fragment key="late">
+        <LateView />
+      </Fragment>
+    );
+  if (params.committee)
+    return (
+      <Fragment key={`c:${params.committee}`}>
+        <CommitteeView id={params.committee} />
+      </Fragment>
+    );
 
   const sort = parseSort(POLITICIAN_SORT, params);
   const standing = isDefaultSort(POLITICIAN_SORT, sort);
@@ -88,7 +106,7 @@ export default async function PoliticiansPage({
       standing ? null : getPoliticians(undefined, MEMBER_LIMIT, sort),
     ]);
   } catch (err) {
-    return <Empty>{(err as Error).message}</Empty>;
+    return <DataError error={err} />;
   }
   if (!rows.length) return <Empty>No transactions yet.</Empty>;
   table ??= rows;
@@ -289,7 +307,7 @@ async function MemberDetail({ member, action }: { member: string; action?: strin
       getPoliticianCommittees(member),
     ]);
   } catch (err) {
-    return <Empty>{(err as Error).message}</Empty>;
+    return <DataError error={err} />;
   }
   if (!detail) {
     return (
@@ -625,7 +643,7 @@ async function CommitteeView({ id }: { id: string }) {
       getSubcommittees(id),
     ]);
   } catch (err) {
-    return <Empty>{(err as Error).message}</Empty>;
+    return <DataError error={err} />;
   }
   if (!committee) {
     return (
@@ -880,7 +898,7 @@ async function LateView() {
       getLateFilings(LATE_FILING_PAGE),
     ]);
   } catch (err) {
-    return <Empty>{(err as Error).message}</Empty>;
+    return <DataError error={err} />;
   }
   if (!members.length) {
     return (

@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { MoneyText } from "../money";
 import { getSectorLeaderboard, getTickerMembers, getTickers, getTransactions, type SectorRow } from "@/lib/queries";
 import {
@@ -24,7 +25,7 @@ import { ASSET_TYPE_LABEL } from "@/lib/format";
 import { getTimelineTrades, type TimelineTrade } from "@/lib/timeline-queries";
 import { TradeTimeline } from "../timeline";
 import { Disclosure, RangeCaption } from "../disclosure";
-import { PAGE_STACK, PageHeader, PillLinks, Quiet } from "../page-header";
+import { DataError, PAGE_STACK, PageHeader, PillLinks, Quiet } from "../page-header";
 import { TradeList, TradeRow } from "../trade-row";
 import { assetLabel } from "@/lib/asset-label";
 import { TickerMembers } from "./ticker-members";
@@ -78,7 +79,16 @@ export default async function TickersPage({
   const params = await searchParams;
   const days = params.w === "all" ? undefined : Number(params.w) || 90;
 
-  if (params.t) return <TickerDetail ticker={params.t.toUpperCase()} />;
+  // Keyed so list -> detail (a search-param change) remounts instead of
+  // morphing the list DOM into the detail page, which measured as layout shift.
+  if (params.t) {
+    const t = params.t.toUpperCase();
+    return (
+      <Fragment key={`t:${t}`}>
+        <TickerDetail ticker={t} />
+      </Fragment>
+    );
+  }
 
   const sort = parseSort(TICKER_SORT, params);
   const { n, limit } = parseLimit(params.n);
@@ -93,7 +103,7 @@ export default async function TickersPage({
       isDefaultTable ? null : getTickers(days, limit, sort),
     ]);
   } catch (err) {
-    return <Empty>{(err as Error).message}</Empty>;
+    return <DataError error={err} />;
   }
   if (!rows.length) return <Empty>No transactions in this window.</Empty>;
   table ??= rows;
@@ -323,13 +333,20 @@ function SectorLeaderboard({ sectors }: { sectors: SectorRow[] }) {
 }
 
 async function TickerDetail({ ticker }: { ticker: string }) {
-  const [all, trades, optionTrades, timeline, members] = await Promise.all([
-    getTickers(undefined, 5000),
-    getTransactions({ ticker, limit: 200 }),
-    getTransactions({ ticker, options: true, limit: 500 }),
-    getTimelineTrades({ ticker }),
-    getTickerMembers(ticker, undefined, 1000),
-  ]);
+  // Caught like every other detail page: uncaught, a failed fetch threw out
+  // of the server component instead of rendering the data-error state.
+  let all, trades, optionTrades, timeline, members;
+  try {
+    [all, trades, optionTrades, timeline, members] = await Promise.all([
+      getTickers(undefined, 5000),
+      getTransactions({ ticker, limit: 200 }),
+      getTransactions({ ticker, options: true, limit: 500 }),
+      getTimelineTrades({ ticker }),
+      getTickerMembers(ticker, undefined, 1000),
+    ]);
+  } catch (err) {
+    return <DataError error={err} />;
+  }
   const stat = all.find((r) => r.ticker === ticker);
   if (!stat) return <Empty>No disclosed trades for {ticker}.</Empty>;
 
@@ -603,7 +620,7 @@ async function InsidersInIssuer({ ticker }: { ticker: string }) {
     return (
       <section>
         <SectionTitle>Insiders in this issuer</SectionTitle>
-        <Empty>Insider data unavailable: {(err as Error).message}</Empty>
+        <DataError error={err} context="Insider data unavailable" />
       </section>
     );
   }
