@@ -7,6 +7,8 @@ import { Card, DivergingSplit, Empty, SectionTitle, StatTile, type StatDelta } f
 import { ExportLink, FilterBar, Pagination, ShownLine } from "./feed-controls";
 import { DirectionFilter, FeedList } from "./feed-list";
 import { ActionBadge, ResponsiveTable } from "./ui";
+import { Disclosure } from "./disclosure";
+import { PAGE_STACK, PageHeader } from "./page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -73,8 +75,12 @@ export default async function FeedPage({
   const weekLabels = rollingWeekLabels(WEEKS);
 
   return (
-    <div className="space-y-8">
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div className={PAGE_STACK}>
+      <PageHeader
+        title="Congressional trades"
+        subtitle="Stock trades members of the House and Senate disclose under the STOCK Act, reproduced as filed. Amounts are the disclosed bracket, never one exact figure."
+      >
+      <section aria-label="All disclosed trades" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile
           label="Trades"
           value={pipeline.totals.transactions.toLocaleString()}
@@ -105,6 +111,7 @@ export default async function FeedPage({
           trendLabel={`Filings parsed per week, last ${WEEKS} weeks, by filing date`}
         />
       </section>
+      </PageHeader>
 
       {consensus.length ? (
         <section>
@@ -251,13 +258,25 @@ async function BothSides() {
           </tbody>
         </table>
       </ResponsiveTable>
-      <p className="mt-3 text-[11px] text-muted-foreground">
-        Two sets of books, never summed: members are distinct filers on House and Senate
-        disclosures, insiders are distinct primary reporting owners on SEC Form 4s, matched on
-        the listed symbol alone. Same direction, both inside the last {BOTH_SIDES_DAYS} days on
-        trade date. Form 4 is due in two business days and a member&apos;s report in 45, so the
-        member side of the most recent weeks is still arriving.
-      </p>
+      <Disclosure
+        size="sm"
+        className="mt-3"
+        lead={
+          <>
+            Two sets of books, never summed: members are distinct filers on House and Senate disclosures,
+            insiders are distinct primary reporting owners on SEC Form 4s.
+          </>
+        }
+      >
+        <p>
+          Matched on the listed symbol alone. Same direction, both inside the last {BOTH_SIDES_DAYS} days on
+          trade date.
+        </p>
+        <p>
+          Form 4 is due in two business days and a member&apos;s report in 45, so the member side of the most
+          recent weeks is still arriving.
+        </p>
+      </Disclosure>
     </section>
   );
 }

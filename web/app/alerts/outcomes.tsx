@@ -8,7 +8,9 @@ import {
   MIN_SAMPLE,
   isListedTicker,
 } from "@/lib/outcome-queries";
-import { Empty, SectionTitle } from "../charts";
+import { SectionTitle } from "../charts";
+import { Disclosure } from "../disclosure";
+import { Quiet } from "../page-header";
 import { ResponsiveTable } from "../ui";
 
 /**
@@ -44,15 +46,15 @@ export function OutcomeLine({
   if (!isListedTicker(a.ticker)) return null;
   if (!o) {
     return (
-      <p className="mt-2 text-[11px] text-muted-foreground" data-outcome="none">
+      <span data-outcome="none">
         Move after the alert:{" "}
         {noSeries.has(a.ticker) ? `no price series for ${a.ticker} at the source.` : "no prices yet."}
-      </p>
+      </span>
     );
   }
   return (
     <div
-      className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground"
+      className="flex basis-full flex-wrap items-center gap-x-3 gap-y-1"
       data-outcome={a.id}
     >
       <span title={`${a.ticker}'s close-to-close move minus ${BENCHMARK}'s over the same trading days, from the ${o.t0_date} close of ${o.t0_close.toFixed(2)}. The ticker's move, not a trade's return.`}>
@@ -66,7 +68,7 @@ export function OutcomeLine({
           const pending = o.days_elapsed < h;
           return (
             <span key={h} className="tabular" title={pending ? `${o.days_elapsed} of ${h} trading days elapsed` : `no close for ${a.ticker} on that day`}>
-              +{h}d <span className="text-muted-foreground/80">{pending ? `pending ${o.days_elapsed}/${h}` : "n/a"}</span>
+              +{h}d <span className="text-muted-foreground">{pending ? `pending ${o.days_elapsed}/${h}` : "n/a"}</span>
             </span>
           );
         }
@@ -96,24 +98,36 @@ export function OutcomeSummarySection({ summary: s }: { summary: OutcomeSummary 
       >
         <span id="outcomes-title">Price move after the alert</span>
       </SectionTitle>
-      <p className="mb-3 max-w-3xl text-xs text-muted-foreground">
-        The alerted ticker&rsquo;s own close-to-close move at +5, +20 and +60 trading days after the alert,
-        minus {BENCHMARK} over the same days, read the way the alert pointed: a sell alert&rsquo;s hit is a
-        fall. This is what the ticker did, not what anyone earned &mdash; congressional amounts are
-        disclosed brackets and none enters these figures &mdash; and the prices are an unofficial external
-        series kept for this description only, not advice. n counts alerts with that horizon reached;
-        fewer than {MIN_SAMPLE} is reported as insufficient data. Alerts with no one direction are left out.
-      </p>
+      <Disclosure
+        size="sm"
+        className="mb-3"
+        lead={
+          <>
+            The alerted ticker&rsquo;s own close-to-close move at +5, +20 and +60 trading days after the
+            alert, minus {BENCHMARK} over the same days &mdash; what the ticker did, not what anyone earned.
+          </>
+        }
+      >
+        <p>
+          Read the way the alert pointed: a sell alert&rsquo;s hit is a fall. Congressional amounts are
+          disclosed brackets and none enters these figures, and the prices are an unofficial external
+          series kept for this description only, not advice.
+        </p>
+        <p>
+          n counts alerts with that horizon reached; fewer than {MIN_SAMPLE} is reported as insufficient
+          data. Alerts with no one direction are left out.
+        </p>
+      </Disclosure>
       {!s.available ? (
-        <Empty>
+        <Quiet>
           No prices in this database yet. The pipeline fetches them after the alert step; this section
           fills in once the committed database carries the price tables.
-        </Empty>
+        </Quiet>
       ) : !s.byKind.length ? (
-        <Empty>
+        <Quiet>
           No alert has a measurable outcome yet
           {degraded ? ` — the last price run reported: ${s.status}` : ""}.
-        </Empty>
+        </Quiet>
       ) : (
         <div>
           <ResponsiveTable>

@@ -16,6 +16,8 @@ import {
   type Texture,
 } from "../charts";
 import { DataTable } from "../data-table";
+import { Disclosure } from "../disclosure";
+import { PAGE_STACK, PageHeader, PillLinks, Quiet } from "../page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -49,13 +51,6 @@ const GREY = "var(--viz-axis)";
 const num = (n: number) => n.toLocaleString();
 const days = (d: number | null) => (d == null ? "—" : `${Number.isInteger(d) ? d : d.toFixed(1)}d`);
 
-function pill(active: boolean) {
-  return `rounded-full border px-2.5 py-1 transition-colors ${
-    active
-      ? "border-primary/40 bg-primary/10 text-foreground"
-      : "border-border text-muted-foreground hover:bg-muted"
-  }`;
-}
 
 export default async function TrendsPage({
   searchParams,
@@ -169,19 +164,43 @@ export default async function TrendsPage({
   const risingMonths = keys.slice(-6);
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-wrap items-center gap-1 text-[11px]">
-        {WINDOWS.map((w) => (
-          <a key={w.months} href={query({ w: w.months })} className={pill(months === w.months)}>
-            {w.label}
-          </a>
-        ))}
-        <span className="ml-2 text-muted-foreground">
-          calendar months, measured on trade date · the newest one or two are still filling in
-        </span>
-      </div>
-
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className={PAGE_STACK}>
+      <PageHeader
+        title="Trends"
+        subtitle="Change over time, by calendar month: trading, filing delay, insiders and scans."
+        aside={
+          <PillLinks
+            label="Window"
+            items={WINDOWS.map((w) => ({ href: query({ w: w.months }), label: w.label, active: months === w.months }))}
+          />
+        }
+      >
+        <Disclosure
+          lead={
+            <>
+              Every congressional series is bucketed on the <strong className="font-medium text-foreground">trade date</strong>,
+              so the newest month or two are incomplete by construction: members have 45 days to file.
+            </>
+          }
+        >
+          <p>
+            Every congressional series on this page is bucketed on the <strong>trade date</strong>, never the
+            filing date, so the newest month or two are incomplete by construction: members have 45 days
+            to file.{" "}
+            {delay.overall.median != null && delay.overall.p90 != null
+              ? `Across this window the median trade reached the Clerk ${days(delay.overall.median)} after it was made and nine in ten within ${days(delay.overall.p90)}, so a month keeps filling for about two months after it ends. `
+              : ""}
+            A drop at the right-hand edge is usually filings that have not arrived yet, not a change in
+            behaviour.
+          </p>
+          <p>
+            Trades disclosed with a trade date outside the window — some 2026 filings report trades from
+            years earlier — are not shown. Insider series are on trade date too but complete within days,
+            as Form 4 is due two business days after the trade. Scans are on filing date, the only date a
+            scan carries until it is transcribed.
+          </p>
+        </Disclosure>
+      <section aria-label="Last complete month" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile
           label={`Trades · ${monthLabel(lastComplete, "short")}`}
           value={t1 ? num(t1.trades) : "—"}
@@ -212,6 +231,7 @@ export default async function TrendsPage({
           hint={i1 ? `${usd(i1.buy_value)} bought · shares × reported price` : "no insider tables"}
         />
       </section>
+      </PageHeader>
 
       <section>
         <SectionTitle right={<span className="text-[11px] text-muted-foreground">rows disclosed, by trade month</span>}>
@@ -229,12 +249,17 @@ export default async function TrendsPage({
           <div className="mt-4">
             <MonthlyColumns data={tradeColumns} />
           </div>
-          <p className="mt-3 text-[11px] text-muted-foreground">
-            Bought columns rise from the baseline, sold columns fall from it; the fill pattern inside
-            each marks the party (solid Democrat, hatched Republican). Exchanges are in the month&rsquo;s
-            total but in neither direction. This counts disclosed rows, not dollars: members disclose
-            a bracket, and a column of bracket midpoints would be a column of estimates.
-          </p>
+          <Disclosure
+            size="sm"
+            className="mt-3"
+            lead="This counts disclosed rows, not dollars: members disclose a bracket, and a column of bracket midpoints would be a column of estimates."
+          >
+            <p>
+              Bought columns rise from the baseline, sold columns fall from it; the fill pattern inside
+              each marks the party (solid Democrat, hatched Republican). Exchanges are in the month&rsquo;s
+              total but in neither direction.
+            </p>
+          </Disclosure>
           <DataTable
             caption="Trades per month by direction and party"
             columns={["Month", "Trades", "Bought", "D", "R", "Other", "Sold", "D", "R", "Other", "From scans"]}
@@ -288,13 +313,22 @@ export default async function TrendsPage({
               )}
             />
           </div>
-          <p className="mt-3 text-[11px] text-muted-foreground">
-            Trade date to the report reaching the Clerk — never the report&rsquo;s own
-            &ldquo;notification date&rdquo;, which reads zero for a member trading their own account.
+          <Disclosure
+            size="sm"
+            className="mt-3"
+            lead={
+              <>
+                Trade date to the report reaching the Clerk — never the report&rsquo;s own
+                &ldquo;notification date&rdquo;, which reads zero for a member trading their own account.
+              </>
+            }
+          >
+            <p>
             A month&rsquo;s delay can only grow as its late filings arrive, so the right-hand end of
             both lines is a floor. A trade whose dates contradict each other is left out rather than
             counted as a negative delay.
-          </p>
+            </p>
+          </Disclosure>
           <DataTable
             caption="Disclosure delay per month"
             columns={["Month", "Trades", "Median", "p90", "Past 45 days"]}
@@ -311,21 +345,20 @@ export default async function TrendsPage({
 
       <section className="grid gap-6 lg:grid-cols-2">
         <div>
-          <SectionTitle
-            right={
-              <div className="flex gap-1 text-[11px]">
-                {risingMonths.map((k) => (
-                  <a key={k} href={query({ t: k })} className={pill(k === pick)}>
-                    {axisLabel(k, k === risingMonths[0])}
-                  </a>
-                ))}
-              </div>
-            }
-          >
+          <SectionTitle right={<span className="text-[12px] text-muted-foreground">members gained, month on month</span>}>
             Rising tickers
           </SectionTitle>
           <Card>
-            <p className="mb-3 text-[11px] text-muted-foreground">
+            <PillLinks
+              label="Month"
+              className="mb-3"
+              items={risingMonths.map((k) => ({
+                href: query({ t: k }),
+                label: axisLabel(k, k === risingMonths[0]),
+                active: k === pick,
+              }))}
+            />
+            <p className="mb-3 text-[12px] text-muted-foreground">
               Members trading each ticker in {monthLabel(pick)} against {monthLabel(previousMonth(pick))},
               equity-like assets only. The bar is the gain.
             </p>
@@ -342,7 +375,7 @@ export default async function TrendsPage({
                 }))}
               />
             ) : (
-              <Empty>No ticker gained members in {monthLabel(pick)} over {monthLabel(previousMonth(pick))}.</Empty>
+              <Quiet>No ticker gained members in {monthLabel(pick)} over {monthLabel(previousMonth(pick))}.</Quiet>
             )}
             <DataTable
               caption={`Tickers that gained members in ${monthLabel(pick)}`}
@@ -378,12 +411,17 @@ export default async function TrendsPage({
                 <div className="mt-4">
                   <MonthlyColumns data={insiderColumns} />
                 </div>
-                <p className="mt-3 text-[11px] text-muted-foreground">
-                  Form 4 values are exact but computed — shares × the price as filed, which may be a
-                  weighted average. Only filings with open-market trades of $50k or more in one direction
+                <Disclosure
+                  size="sm"
+                  className="mt-3"
+                  lead="Form 4 values are exact but computed — shares × the price as filed, which may be a weighted average."
+                >
+                  <p>
+                  Only filings with open-market trades of $50k or more in one direction
                   are stored, and the series starts where the daily-index history does. A row whose
                   as-filed value is implausible is counted as a trade and in no value.
-                </p>
+                  </p>
+                </Disclosure>
                 <DataTable
                   caption="Insider buy and sell value per month"
                   columns={["Month", "Filings", "Bought", "Buys", "Sold", "Sells", "Unpriced"]}
@@ -399,7 +437,7 @@ export default async function TrendsPage({
                 />
               </>
             ) : (
-              <Empty>No insider tables in this database yet.</Empty>
+              <Quiet>No insider tables in this database yet.</Quiet>
             )}
           </Card>
         </div>
@@ -420,17 +458,22 @@ export default async function TrendsPage({
           <div className="mt-4">
             <MonthlyColumns data={scanColumns} height={96} />
           </div>
-          <p className="mt-3 text-[11px] text-muted-foreground">
+          <Disclosure
+            size="sm"
+            className="mt-3"
+            lead="Transcribed rows count as trades on this site and enter no total."
+          >
+            <p>
             A paper filing — a House scan or a Senate paper report — has no text layer and no trade
-            dates until a vision model transcribes it, so this series is on filing date. Transcribed
-            rows count as trades on this site and enter no total. Transcription is off by default
+            dates until a vision model transcribes it, so this series is on filing date. Transcription is off by default
             (<code className="font-mono">vision.enabled</code>); not transcribed means unread or refused
             by the grid reader. Inspect any scan on the{" "}
             <a href="/scans" className="underline underline-offset-2 hover:text-primary">
               Scans
             </a>{" "}
             page.
-          </p>
+            </p>
+          </Disclosure>
           <DataTable
             caption="Paper filings per month"
             columns={["Month", "Filings", "Transcribed", "Rows read", "Refused", "Unread"]}
@@ -446,19 +489,6 @@ export default async function TrendsPage({
         </Card>
       </section>
 
-      <p className="text-[11px] leading-relaxed text-muted-foreground">
-        Every congressional series above is bucketed on the <strong>trade date</strong>, never the
-        filing date, so the newest month or two are incomplete by construction: members have 45 days
-        to file.{" "}
-        {delay.overall.median != null && delay.overall.p90 != null
-          ? `Across this window the median trade reached the Clerk ${days(delay.overall.median)} after it was made and nine in ten within ${days(delay.overall.p90)}, so a month keeps filling for about two months after it ends. `
-          : ""}
-        A drop at the right-hand edge is usually filings that have not arrived yet, not a change in
-        behaviour. Trades disclosed with a trade date outside the window — some 2026 filings report
-        trades from years earlier — are not shown. Insider series are on trade date too but complete
-        within days, as Form 4 is due two business days after the trade. Scans are on filing date, the
-        only date a scan carries until it is transcribed.
-      </p>
     </div>
   );
 }

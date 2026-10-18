@@ -28,7 +28,7 @@ export function MemberHero({
   const sameDay = detail.first_tx_date === detail.last_tx_date;
 
   return (
-    <section className="glass relative overflow-hidden rounded-3xl border border-border bg-card p-5 sm:p-7">
+    <section className="glass relative overflow-hidden rounded-xl border border-border bg-card p-5 sm:p-6">
       {/* A soft wash behind the portrait; neutral, so it never reads as a party. */}
       <div
         aria-hidden
@@ -43,14 +43,14 @@ export function MemberHero({
           className="shadow-[0_12px_32px_-16px_rgba(12,12,17,0.55)]"
         />
         <div className="min-w-0 flex-1">
-          <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+          <div className="text-[12px] font-medium text-muted-foreground">
             {seat ?? (
               <span title="The filer's name as printed on the filing; it did not match the congressional roster">
                 Not matched to the roster
               </span>
             )}
           </div>
-          <h1 className="mt-1 text-2xl font-semibold leading-tight tracking-tight sm:text-[2rem]">
+          <h1 className="mt-1 text-[28px] font-semibold leading-tight tracking-tight sm:text-[36px]">
             {detail.member_name}
           </h1>
           <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[13px] text-muted-foreground">
@@ -61,7 +61,7 @@ export function MemberHero({
                 : `trades dated ${longDate(detail.first_tx_date)} – ${longDate(detail.last_tx_date)}`}
             </span>
           </div>
-          <p className="mt-3 text-[15px] leading-snug text-foreground/90 sm:text-base">
+          <p className="mt-3 text-[15px] leading-snug text-ink-2 sm:text-base">
             {tradeSummary(detail)}
             <span className="text-muted-foreground">
               {" "}

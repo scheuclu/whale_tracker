@@ -3,6 +3,7 @@ import { memberHref, shortDate } from "@/lib/format";
 import { searchInsiderIssuers } from "@/lib/insider-queries";
 import { searchMembers, searchRoster, searchTickers } from "@/lib/queries";
 import { Card, Empty, SectionTitle } from "../charts";
+import { PAGE_STACK, PageHeader, Quiet } from "../page-header";
 import { PartyBadge } from "../ui";
 import { MemberAvatar } from "../avatar";
 
@@ -29,11 +30,10 @@ export default async function SearchPage({
   const q = (raw ?? "").trim().slice(0, QUERY_MAX);
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Search</h1>
-        <form method="get" action="/search" role="search" className="mt-3 flex max-w-xl items-center gap-2">
-          <label className="relative flex-1">
+    <div className={PAGE_STACK}>
+      <PageHeader title="Search" subtitle="Members of Congress, the tickers they trade, and SEC Form 4 insider issuers.">
+        <form method="get" action="/search" role="search" className="flex max-w-xl items-center gap-2">
+          <label className="relative min-w-0 flex-1">
             <span className="sr-only">Search members, tickers and insider issuers</span>
             <Search
               className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
@@ -46,22 +46,24 @@ export default async function SearchPage({
               maxLength={QUERY_MAX}
               placeholder="Member, ticker or insider issuer"
               autoFocus={!q}
-              className="h-10 w-full rounded-full border border-border bg-card pl-9 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none"
+              className="h-10 w-full rounded-lg border border-border bg-card pl-9 pr-4 text-sm text-foreground transition-colors duration-150 placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
             />
           </label>
           <button
             type="submit"
-            className="h-10 rounded-full border border-primary/40 bg-primary/10 px-4 text-sm font-medium transition-colors hover:bg-primary/20"
+            className="h-10 shrink-0 rounded-lg border border-primary/40 bg-primary/10 px-4 text-sm font-medium transition-colors duration-150 hover:bg-primary/20 active:bg-primary/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             Search
           </button>
         </form>
-      </div>
+      </PageHeader>
 
-      {q ? <Results q={q} /> : <Empty>Type a member&rsquo;s name, a ticker symbol or a company.</Empty>}
+      {q ? <Results q={q} /> : <Quiet>Type a member&rsquo;s name, a ticker symbol or a company.</Quiet>}
     </div>
   );
 }
+
+const plural = (n: number, word: string) => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
 
 async function Results({ q }: { q: string }) {
   let members, roster, tickers, issuers;
@@ -85,33 +87,42 @@ async function Results({ q }: { q: string }) {
       .filter(Boolean)
       .join(" · ");
 
-  return (
-    <>
-      <p className="text-xs text-muted-foreground" data-testid="search-summary">
-        {none
-          ? `No members, tickers or insider issuers match “${q}”.`
-          : `Results for “${q}”: ${members.length} member${members.length === 1 ? "" : "s"}, ` +
-            `${tickers.length} ticker${tickers.length === 1 ? "" : "s"}, ` +
-            `${issuers.length} insider issuer${issuers.length === 1 ? "" : "s"}`}
-      </p>
-
-      <section>
-        <SectionTitle right={more(members.length)}>Members</SectionTitle>
-        {members.length || roster.length ? (
-          <Card className="divide-y divide-border/50 p-0">
+  // Each group is its own query and is never pooled with another. Groups
+  // with hits come first in a fixed order; the empty ones fold into one
+  // quiet line at the end instead of three dashed boxes.
+  const groups = [
+    {
+      key: "members",
+      hits: members.length + roster.length,
+      noun: "members",
+      node: (
+        <section key="members" aria-labelledby="search-members">
+          <SectionTitle
+            right={
+              more(members.length) ?? (
+                <span className="text-[12px] text-muted-foreground">
+                  {plural(members.length, "member")} with trades
+                  {roster.length ? ` · ${roster.length} in the roster only` : ""}
+                </span>
+              )
+            }
+          >
+            <span id="search-members">Members</span>
+          </SectionTitle>
+          <Card className="divide-y divide-border/50 p-0 sm:p-0">
             {members.map((m) => (
               <a
                 key={m.member_name}
                 href={memberHref(m.member_name)}
-                className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-[13px] hover:bg-muted/50"
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-[13px] transition-colors duration-150 hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"
               >
                 <MemberAvatar name={m.member_name} bioguideId={m.bioguide_id} size="md" />
                 <span className="font-medium">{m.member_name}</span>
                 <PartyBadge party={m.party} />
                 <span className="text-muted-foreground">{seat(m) || "not matched to the roster"}</span>
                 <span className="ml-auto tabular text-xs text-muted-foreground">
-                  {m.trades.toLocaleString()} trade{m.trades === 1 ? "" : "s"} · {m.tickers} ticker
-                  {m.tickers === 1 ? "" : "s"} · last {shortDate(m.last_tx_date)}
+                  {plural(m.trades, "trade")} ·{" "}
+                  {m.tickers ? plural(m.tickers, "ticker") : "no ticker printed"} · last {shortDate(m.last_tx_date)}
                 </span>
               </a>
             ))}
@@ -128,54 +139,74 @@ async function Results({ q }: { q: string }) {
               </div>
             ))}
           </Card>
-        ) : (
-          <Empty>No member matches.</Empty>
-        )}
-      </section>
-
-      <section>
-        <SectionTitle right={more(tickers.length)}>Tickers</SectionTitle>
-        {tickers.length ? (
-          <Card className="divide-y divide-border/50 p-0">
+        </section>
+      ),
+    },
+    {
+      key: "tickers",
+      hits: tickers.length,
+      noun: "congressional tickers",
+      node: (
+        <section key="tickers" aria-labelledby="search-tickers">
+          <SectionTitle
+            right={
+              more(tickers.length) ?? (
+                <span className="text-[12px] text-muted-foreground">House &amp; Senate disclosures</span>
+              )
+            }
+          >
+            <span id="search-tickers">Tickers</span>
+          </SectionTitle>
+          <Card className="divide-y divide-border/50 p-0 sm:p-0">
             {tickers.map((t) => (
               <a
                 key={t.ticker}
                 href={`/tickers?t=${encodeURIComponent(t.ticker)}`}
-                className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-[13px] hover:bg-muted/50"
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-[13px] transition-colors duration-150 hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"
               >
                 <span className="font-mono font-semibold">{t.ticker}</span>
-                <span className="truncate text-muted-foreground">{t.asset_name}</span>
+                <span className="min-w-0 truncate text-muted-foreground">{t.asset_name}</span>
                 <span className="ml-auto tabular text-xs text-muted-foreground">
-                  {t.politicians} member{t.politicians === 1 ? "" : "s"} · {t.trades.toLocaleString()} trade
-                  {t.trades === 1 ? "" : "s"} · last {shortDate(t.last_tx_date)}
+                  {plural(t.politicians, "member")} · {plural(t.trades, "trade")} · last {shortDate(t.last_tx_date)}
                 </span>
               </a>
             ))}
           </Card>
-        ) : (
-          <Empty>No congressional ticker matches.</Empty>
-        )}
-      </section>
-
-      <section>
-        <SectionTitle right={more(issuers.length)}>Insider issuers</SectionTitle>
-        {issuers.length ? (
-          <Card className="divide-y divide-border/50 p-0">
+        </section>
+      ),
+    },
+    {
+      key: "issuers",
+      hits: issuers.length,
+      noun: "insider issuers",
+      node: (
+        <section key="issuers" aria-labelledby="search-issuers">
+          <SectionTitle
+            right={
+              more(issuers.length) ?? <span className="text-[12px] text-muted-foreground">SEC Form 4, kept apart</span>
+            }
+          >
+            <span id="search-issuers">Insider issuers</span>
+          </SectionTitle>
+          <Card className="divide-y divide-border/50 p-0 sm:p-0">
             {issuers.map((i) => {
               const inner = (
                 <>
                   <span className="font-mono font-semibold">{i.ticker ?? "—"}</span>
-                  <span className="truncate text-muted-foreground">{i.issuer_name}</span>
+                  <span className="min-w-0 truncate text-muted-foreground">{i.issuer_name}</span>
                   <span className="ml-auto tabular text-xs text-muted-foreground">
-                    {i.insiders} insider{i.insiders === 1 ? "" : "s"} · {i.filings} filing
-                    {i.filings === 1 ? "" : "s"} · {i.trades.toLocaleString()} trade{i.trades === 1 ? "" : "s"} · last{" "}
+                    {plural(i.insiders, "insider")} · {plural(i.filings, "filing")} · {plural(i.trades, "trade")} · last{" "}
                     {shortDate(i.last_tx_date)}
                   </span>
                 </>
               );
               const cls = "flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-[13px]";
               return i.ticker ? (
-                <a key={i.issuer_cik} href={`/insiders?t=${encodeURIComponent(i.ticker)}`} className={`${cls} hover:bg-muted/50`}>
+                <a
+                  key={i.issuer_cik}
+                  href={`/insiders?t=${encodeURIComponent(i.ticker)}`}
+                  className={`${cls} transition-colors duration-150 hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none`}
+                >
                   {inner}
                 </a>
               ) : (
@@ -185,16 +216,34 @@ async function Results({ q }: { q: string }) {
               );
             })}
           </Card>
-        ) : (
-          <Empty>No insider issuer matches.</Empty>
-        )}
-      </section>
+        </section>
+      ),
+    },
+  ];
+  const found = groups.filter((g) => g.hits > 0);
+  const empty = groups.filter((g) => g.hits === 0);
+
+  return (
+    <>
+      <p className="text-[13px] text-muted-foreground" data-testid="search-summary">
+        {none
+          ? `No members, tickers or insider issuers match “${q}”.`
+          : `Results for “${q}”: ${members.length} member${members.length === 1 ? "" : "s"}, ` +
+            `${tickers.length} ticker${tickers.length === 1 ? "" : "s"}, ` +
+            `${issuers.length} insider issuer${issuers.length === 1 ? "" : "s"}`}
+      </p>
+      {found.map((g) => g.node)}
+      {empty.length && !none ? (
+        <Quiet>
+          No match among {empty.map((g) => g.noun).join(empty.length === 2 ? " or " : ", ").replace(/, ([^,]*)$/, ", or $1")}.
+        </Quiet>
+      ) : null}
     </>
   );
 }
 
 function more(n: number) {
   return n >= LIMIT ? (
-    <span className="text-[11px] text-muted-foreground">first {LIMIT} — narrow the search for more</span>
+    <span className="text-[12px] text-muted-foreground">first {LIMIT} — narrow the search for more</span>
   ) : null;
 }
