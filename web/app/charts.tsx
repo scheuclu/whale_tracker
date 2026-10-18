@@ -807,14 +807,20 @@ function AxisTick({ label, index, count }: { label: string; index: number; count
   );
 }
 
-/** One tooltip, every series at this x. Hidden from the tree: the slot's aria-label says the same. */
+/**
+ * One tooltip, every series at this x. Hidden from the tree: the slot's
+ * aria-label says the same. Not rendered at all until the slot is hovered or
+ * focused: an invisible box is still laid out, and one centred on a slot near
+ * the right edge reached 17px past a 390px viewport, which gave the page a
+ * horizontal scroll (#49's guarantee).
+ */
 function Tip({ title, lines, index, count }: { title: string; lines: string[]; index: number; count: number }) {
   const align = index < 2 ? "left-0" : index > count - 3 ? "right-0" : "left-1/2 -translate-x-1/2";
   return (
     <div
       aria-hidden
       className={cn(
-        "pointer-events-none absolute bottom-full z-20 mb-1 w-max max-w-[18rem] rounded-lg border border-border bg-popover px-2.5 py-1.5 text-left text-[11px] leading-snug text-popover-foreground opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100",
+        "pointer-events-none absolute bottom-full z-20 mb-1 hidden w-max max-w-[18rem] rounded-lg border border-border bg-popover px-2.5 py-1.5 text-left text-[11px] leading-snug text-popover-foreground shadow-lg group-hover:block group-focus-visible:block",
         align
       )}
     >
