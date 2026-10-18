@@ -129,7 +129,7 @@ export default async function ScanDetailPage({
           <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
             <PartyBadge party={filing.party} />
             <a
-              href={`/politicians?m=${encodeURIComponent(filing.member_name)}`}
+              href={memberHref(filing.member_name, filing.bioguide_id)}
               className="font-medium text-foreground hover:text-primary"
             >
               {memberLabel(filing.member_name, null, filing.state, filing.district, "house")}

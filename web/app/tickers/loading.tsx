@@ -48,7 +48,7 @@ function TickersLoading() {
 }
 
 /** One ticker: heading with the buy/sell balance, tiles, timeline, range, who traded it, every trade. */
-function TickerLoading() {
+export function TickerLoading() {
   return (
     <SkeletonPage label="the ticker">
       <HeadingSkeleton split />
