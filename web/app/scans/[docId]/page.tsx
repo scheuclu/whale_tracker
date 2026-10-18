@@ -24,6 +24,8 @@ const STATUS_LABEL: Record<string, string> = {
   unknown_amount: "amount unknown",
   unknown_type: "type unknown",
   unknown: "both unknown",
+  type_disputed: "type disputed",
+  page_refused: "page refused",
 };
 
 /**
@@ -212,6 +214,9 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ doc
                                 <span className="text-muted-foreground">
                                   {" "}· {shortDate(r.tx_date)} · {range(r.amount_min_cents, r.amount_max_cents)}
                                 </span>
+                                {r.status === "type_disputed" ? (
+                                  <span className="text-amber-600 dark:text-amber-400"> · type disputed, grid kept</span>
+                                ) : null}
                               </span>
                             ) : (
                               <span className="text-muted-foreground">

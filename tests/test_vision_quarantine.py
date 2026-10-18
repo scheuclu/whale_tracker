@@ -262,9 +262,17 @@ def test_failed_scans_are_requeued_only_when_vision_can_run(conn):
     assert pipeline.retry_scanned(conn, _config(vision_enabled=False)) == 0
     assert pipeline.retry_scanned(conn, _config(gemini_api_key=None)) == 0
     assert conn.execute("SELECT status FROM filings WHERE doc_id = '9000001'").fetchone()[0] == "failed"
+    # First time under this join version: the refused one gets its one retry.
+    assert pipeline.retry_scanned(conn, _config()) == 2
+    statuses = dict(conn.execute("SELECT doc_id, status FROM filings").fetchall())
+    assert statuses == {"9000001": "new", "9000002": "new"}
+    # Refused again: not retried every run; the never-attempted one always is
+    # (the once-per-version rule is in test_vision_per_page).
+    db.set_status(conn, 1, "failed", "x", "scanned")
+    db.set_status(conn, 2, "failed", "x", "vision_failed")
+    conn.commit()
     assert pipeline.retry_scanned(conn, _config()) == 1
     statuses = dict(conn.execute("SELECT doc_id, status FROM filings").fetchall())
-    # The refused one is not retried every run; the never-attempted one is.
     assert statuses == {"9000001": "new", "9000002": "failed"}
 
 

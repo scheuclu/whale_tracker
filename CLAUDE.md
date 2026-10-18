@@ -117,6 +117,21 @@ parser stays faithful to the PDF and the UI flags the row rather than
   the commit step is last, so an uncapped backlog is killed and commits
   nothing: the first run with vision on did exactly that with 53 scans
   (2026-10-17), and every scheduled run after it would have repeated it.
+- The hybrid join (`vision.join`) is **per page** (#51): the model gives
+  every row a page number, the grid knows its rows per page, and a page whose
+  counts disagree is refused alone — its grid rows stored `page_refused`, its
+  transcription dropped — while the rest of the filing is parsed, with a
+  "partially read" note in `last_error` and the page's reason in
+  `scan_pages.error`. A page the grid cannot decompose yields nothing the same
+  way. A row whose model type contradicts the grid keeps the grid's type and is
+  stored `type_disputed`; a page or filing is refused for disputes only past
+  `MAX_DISPUTED_SHARE` with `MIN_DISPUTED_ROWS` (a quarter, and three: the
+  model misreads a quarter of boxes, so fewer is noise — the three filings
+  refused on day one had 2 of 6, 2 of 3 and 3 of 98, all the grid's call right
+  by eye). `transactions` are linked to `scan_rows` by `row_index`, not by
+  count. Refused scans (`vision_failed`) are re-queued **once per
+  `vision.JOIN_VERSION`** (stamped in `sync_state`), so bump it when the join
+  learns something and never retry them every run.
 - Scanned paper filings are **captured for inspection** in the same database
   (`scan_pages`: one 1-bit PNG per page at 110 dpi, oriented the way
   `paper_form.py` turned it; `scan_rows`: every row the grid reader found,

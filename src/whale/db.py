@@ -269,7 +269,8 @@ CREATE TABLE IF NOT EXISTS scan_rows (
   amount_margin REAL,                  -- strongest cell's lead over the row median
   action TEXT,
   type_margin REAL,
-  status TEXT NOT NULL,                -- read | unknown_amount | unknown_type | unknown
+  status TEXT NOT NULL,                -- read | unknown_amount | unknown_type | unknown (the reader's verdict)
+                                       -- | type_disputed | page_refused (the join's; scan_capture.py)
   transaction_id INTEGER REFERENCES transactions(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_scan_rows_filing ON scan_rows(filing_id, page_no, row_index);
@@ -542,26 +543,39 @@ def replace_scan_rows(conn: sqlite3.Connection, filing_id: int, rows: list[dict]
     return len(rows)
 
 
-def link_scan_rows(conn: sqlite3.Connection, filing_id: int) -> int:
-    """Point a filing's scan rows at its transactions, by order.
+def link_scan_rows(conn: sqlite3.Connection, filing_id: int,
+                   row_indexes: list[int] | None = None) -> int:
+    """Point a filing's scan rows at its transactions.
 
     `vision.join` builds transactions from the reader's rows in page order,
-    and `replace_transactions` inserts them in that order, so the n-th scan
-    row is the n-th transaction. Returns how many were linked; none when the
-    counts differ (a filing re-read since capture) or there are no
-    transactions (a scan vision never read).
+    and `replace_transactions` inserts them in that order. With
+    `row_indexes` — the join's own record of which grid row each
+    transaction came from — the n-th transaction is linked to that row,
+    which is what a filing with a refused page needs. Without it the n-th
+    scan row is the n-th transaction, and nothing is linked when the counts
+    differ (a filing re-read since capture) or there are no transactions (a
+    scan vision never read). Returns how many were linked.
     """
     rows = conn.execute(
-        "SELECT id FROM scan_rows WHERE filing_id = ? ORDER BY row_index", (filing_id,)
-    ).fetchall()
+        "SELECT id, row_index FROM scan_rows WHERE filing_id = ? ORDER BY row_index",
+        (filing_id,)).fetchall()
     txs = conn.execute(
         "SELECT id FROM transactions WHERE filing_id = ? ORDER BY id", (filing_id,)
     ).fetchall()
-    if not rows or len(rows) != len(txs):
-        return 0
-    for r, t in zip(rows, txs):
-        conn.execute("UPDATE scan_rows SET transaction_id = ? WHERE id = ?", (t["id"], r["id"]))
-    return len(rows)
+    if row_indexes is None:
+        if not rows or len(rows) != len(txs):
+            return 0
+        pairs = [(r["id"], t["id"]) for r, t in zip(rows, txs)]
+    else:
+        if len(row_indexes) != len(txs):
+            return 0
+        by_index = {r["row_index"]: r["id"] for r in rows}
+        if any(i not in by_index for i in row_indexes):
+            return 0
+        pairs = [(by_index[i], t["id"]) for i, t in zip(row_indexes, txs)]
+    for row_id, tx_id in pairs:
+        conn.execute("UPDATE scan_rows SET transaction_id = ? WHERE id = ?", (tx_id, row_id))
+    return len(pairs)
 
 
 def scan_page_png(conn: sqlite3.Connection, filing_id: int, page_no: int) -> bytes | None:

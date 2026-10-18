@@ -438,6 +438,66 @@ def check_vision_rows(conn, today: date | None = None) -> list[Finding]:
     )]
 
 
+def check_vision_join(conn, today: date | None = None) -> list[Finding]:
+    """What the page-by-page join set aside this week: pages that yielded no
+    rows, and rows whose type the model disputed.
+
+    A scan is joined page by page (vision.join). A page whose grid could not
+    be decomposed, or whose row count disagreed with the model's, yields
+    nothing and the filing is parsed from its other pages, with the page on
+    record (`scan_pages.error`, the note in `filings.last_error`): rows the
+    member filed are then missing from the knowledge base, which is worth a
+    look at /scans. A row whose model type contradicted the grid keeps the
+    grid's type and is stored `type_disputed`; by the measurement in #1 the
+    model misreads about a quarter of boxes, so a few of these are the
+    expected shape of the data. Both are INFO for the week's transcribed
+    filings. It becomes a warning when more than a quarter of the week's
+    transcribed rows are disputed: at that rate the join is out of step
+    rather than the model slipping, and the grid-kept types on those rows
+    deserve a check by eye.
+    """
+    since = ((today or date.today()) - timedelta(days=7)).isoformat()
+    rows = _rows(conn, f"""
+        SELECT f.doc_id, f.filer_name, f.last_error,
+               (SELECT COUNT(*) FROM transactions t WHERE t.filing_id = f.id) n,
+               (SELECT COUNT(*) FROM scan_rows r WHERE r.filing_id = f.id
+                  AND r.status = 'type_disputed') disputed,
+               (SELECT COUNT(*) FROM scan_rows r WHERE r.filing_id = f.id
+                  AND r.status = 'page_refused') refused_rows,
+               (SELECT COUNT(*) FROM scan_pages s WHERE s.filing_id = f.id
+                  AND s.error IS NOT NULL AND s.error != 'no table on this page') unread
+        FROM filings f
+        WHERE f.chamber = 'house' AND f.status IN {_counted()}
+          AND f.parse_method = '{TRANSCRIBED_METHOD}'
+          AND substr(f.updated_at, 1, 10) >= ?
+        ORDER BY f.filing_date DESC
+    """, (since,))
+    flagged = [r for r in rows if r["disputed"] or r["refused_rows"] or r["unread"]
+               or (r["last_error"] or "").startswith("partially read")]
+    if not flagged:
+        return []
+    total = sum(r["n"] for r in rows)
+    disputed = sum(r["disputed"] for r in rows)
+    unread = sum(r["unread"] for r in flagged)
+    severity = WARN if total and disputed > 0.25 * total else INFO
+    return [Finding(
+        severity, "vision_join",
+        f"{len(flagged)} transcribed filing(s) this week with pages set aside or rows "
+        f"disputed — {unread} page(s) yielded no rows, {disputed} of {total} row(s) "
+        f"type-disputed",
+        "A scan is joined page by page: a page whose grid could not be read, or "
+        "whose row count disagreed with the model's, yields no transactions and "
+        "the filing is parsed from the rest, so rows the member filed are "
+        "missing until the page is read; the /scans page shows which. A "
+        "type-disputed row keeps the grid's type and is flagged — the model "
+        "misreads about a quarter of boxes, so a few are expected; more than a "
+        "quarter of the week's rows means the join is out of step.",
+        [f"{r['doc_id']}  {r['filer_name']}  {r['n']} rows, {r['disputed']} disputed, "
+         f"{r['unread']} page(s) unread ({r['refused_rows']} grid rows unjoined)"
+         + (f"  {r['last_error'][:90]}" if r["last_error"] else "") for r in flagged],
+    )]
+
+
 def check_transaction_density(conn, today: date | None = None) -> list[Finding]:
     """Transactions per filing over time — a template-change detector.
 
@@ -920,6 +980,7 @@ CHECKS = (
     check_date_anomalies,
     check_parse_coverage,
     check_vision_rows,
+    check_vision_join,
     check_transaction_density,
     check_alert_health,
     check_senate,

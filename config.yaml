@@ -120,9 +120,16 @@ vision:
   # hand-labelled set of 164 rows across 16 filings and all four form layouts
   # seen, called 161 amounts and 155 types with no wrong answers — the rest it
   # left unknown (a poor scan, an X drawn outside its box). A box it cannot
-  # call is stored as unknown, never guessed, and a filing whose grid cannot
-  # be found, or whose row count does not match the transcription, is
-  # reported as unreadable with the reason.
+  # call is stored as unknown, never guessed. The two readings are joined
+  # page by page (#51): a page whose grid cannot be found, or whose row
+  # count does not match the transcription, yields no rows and is recorded
+  # as such (scan_pages.error, a "partially read" note on the filing), and
+  # the filing is parsed from its other pages; only a filing with no
+  # readable page at all is reported as unreadable. A row whose type the
+  # model read differently from the grid keeps the grid's and is flagged
+  # (scan_rows.status = type_disputed); a page, or a filing, is refused for
+  # that only past vision.MAX_DISPUTED_SHARE. Every refused filing is
+  # retried once per vision.JOIN_VERSION, never every run.
   #
   # ON since 2026-10-17, and only because transcribed rows are quarantined,
   # not trusted: they count as trades and in member and ticker lists but
