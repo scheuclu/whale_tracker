@@ -683,3 +683,166 @@ export async function getPipeline(): Promise<Pipeline> {
     runs: parseRecentRuns(runLog?.value ?? null).slice(0, RUNS_SHOWN),
   };
 }
+
+/* ------------------------------------------------------------- committees */
+
+/**
+ * Whether a table exists. The committee tables (#56) arrive with schema
+ * version 10, which the pipeline applies on its next run; until then the
+ * committed database the dashboard fetches has no such table, and a member
+ * page must render without committees rather than as an error.
+ */
+export function hasTable(db: import("better-sqlite3").Database, name: string): boolean {
+  return (
+    db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name) !==
+    undefined
+  );
+}
+
+export type CommitteeRow = {
+  thomas_id: string;
+  /** Set on a subcommittee; the full committee's id. */
+  parent_id: string | null;
+  parent_name: string | null;
+  chamber: "house" | "senate" | "joint";
+  name: string;
+  house_committee_id: string | null;
+  senate_committee_id: string | null;
+  url: string | null;
+  jurisdiction: string | null;
+  jurisdiction_source: string | null;
+};
+
+/** One member's seat on one committee or subcommittee. */
+export type CommitteeSeatRow = {
+  thomas_id: string;
+  name: string;
+  chamber: "house" | "senate" | "joint";
+  parent_id: string | null;
+  parent_name: string | null;
+  /** Seniority within the member's side; 1 is the chair or ranking member. */
+  rank: number | null;
+  /** 'majority' | 'minority' — the side, not D/R. */
+  side: string | null;
+  title: string | null;
+  /** Only joint committees say which chamber a seat is held for. */
+  seat_chamber: string | null;
+};
+
+/**
+ * The committees a member sits on, in the current Congress. Keyed on the
+ * display name like every other member query. Full committees come first,
+ * each followed by the subcommittees under it that the member also sits on.
+ */
+export async function getPoliticianCommittees(member: string): Promise<CommitteeSeatRow[]> {
+  const db = await getDb();
+  if (!hasTable(db, "committee_members")) return [];
+  return db
+    .prepare(
+      `SELECT c.thomas_id, c.name, c.chamber, c.parent_id, pc.name AS parent_name,
+              cm.rank, cm.party AS side, cm.title, cm.chamber AS seat_chamber
+       FROM committee_members cm
+       JOIN committees c ON c.thomas_id = cm.committee_id
+       LEFT JOIN committees pc ON pc.thomas_id = c.parent_id
+       JOIN politicians p ON p.id = cm.politician_id
+       WHERE p.full_name = ?
+       ORDER BY COALESCE(c.parent_id, c.thomas_id), c.parent_id IS NOT NULL, c.name`
+    )
+    .all(member) as CommitteeSeatRow[];
+}
+
+export async function getCommittee(id: string): Promise<CommitteeRow | null> {
+  const db = await getDb();
+  if (!hasTable(db, "committees")) return null;
+  const row = db
+    .prepare(
+      `SELECT c.thomas_id, c.parent_id, pc.name AS parent_name, c.chamber, c.name,
+              c.house_committee_id, c.senate_committee_id, c.url, c.jurisdiction,
+              c.jurisdiction_source
+       FROM committees c
+       LEFT JOIN committees pc ON pc.thomas_id = c.parent_id
+       WHERE c.thomas_id = ?`
+    )
+    .get(id.toUpperCase()) as CommitteeRow | undefined;
+  return row ?? null;
+}
+
+export type SubcommitteeRow = { thomas_id: string; name: string; members: number };
+
+export async function getSubcommittees(id: string): Promise<SubcommitteeRow[]> {
+  const db = await getDb();
+  if (!hasTable(db, "committees")) return [];
+  return db
+    .prepare(
+      `SELECT c.thomas_id, c.name, COUNT(cm.politician_id) AS members
+       FROM committees c
+       LEFT JOIN committee_members cm ON cm.committee_id = c.thomas_id
+       WHERE c.parent_id = ?
+       GROUP BY c.thomas_id
+       ORDER BY c.name`
+    )
+    .all(id.toUpperCase()) as SubcommitteeRow[];
+}
+
+export type CommitteeMemberRow = PoliticianRow & {
+  bioguide_id: string | null;
+  rank: number | null;
+  side: string | null;
+  title: string | null;
+  seat_chamber: string | null;
+};
+
+/**
+ * Every seat on one committee with the holder's trading totals — the whole
+ * record of each member, aggregated the way `getPoliticianDetail` does (by
+ * display name), so a member's figures agree between the two pages. Members
+ * with no disclosed trades are listed too, with zeros: an empty row is a
+ * fact about the committee, not something to hide. Traders first, then the
+ * rest in roster order (majority side, then rank).
+ */
+export async function getCommitteeMembers(id: string): Promise<CommitteeMemberRow[]> {
+  const db = await getDb();
+  if (!hasTable(db, "committee_members")) return [];
+  return db
+    .prepare(
+      `WITH seats AS (
+         SELECT cm.politician_id, cm.rank, cm.party AS side, cm.title, cm.chamber AS seat_chamber,
+                p.full_name AS member_name, p.bioguide_id, p.party, p.state, p.district, p.chamber
+         FROM committee_members cm
+         JOIN politicians p ON p.id = cm.politician_id
+         WHERE cm.committee_id = ?
+       ),
+       totals AS (
+         SELECT COALESCE(p.full_name, f.filer_name) AS member_name,
+                COUNT(*) AS trades,
+                COUNT(DISTINCT t.ticker) AS tickers,
+                SUM(t.action='purchase') AS buys,
+                SUM(t.action IN ('sale','sale_partial')) AS sells,
+                SUM(COALESCE(${MID},0)) AS volume_mid,
+                SUM(${TRANSCRIBED}) AS transcribed,
+                AVG(${DELAY}) AS avg_delay,
+                AVG(${LAG}) AS avg_lag,
+                SUM(CASE WHEN ${DELAY} > 45 THEN 1 ELSE 0 END) AS late_count
+         FROM transactions t
+         JOIN filings f ON f.id = t.filing_id
+         LEFT JOIN politicians p ON p.id = t.politician_id
+         WHERE f.status IN ${COUNTED}
+           AND COALESCE(p.full_name, f.filer_name) IN (SELECT member_name FROM seats)
+         GROUP BY member_name
+       )
+       SELECT s.member_name, s.bioguide_id, s.party, s.state, s.district, s.chamber,
+              s.rank, s.side, s.title, s.seat_chamber,
+              COALESCE(x.trades, 0) AS trades,
+              COALESCE(x.tickers, 0) AS tickers,
+              COALESCE(x.buys, 0) AS buys,
+              COALESCE(x.sells, 0) AS sells,
+              COALESCE(x.volume_mid, 0) AS volume_mid,
+              COALESCE(x.transcribed, 0) AS transcribed,
+              x.avg_delay, x.avg_lag,
+              COALESCE(x.late_count, 0) AS late_count
+       FROM seats s
+       LEFT JOIN totals x ON x.member_name = s.member_name
+       ORDER BY volume_mid DESC, trades DESC, s.side, s.rank, s.member_name`
+    )
+    .all(id.toUpperCase()) as CommitteeMemberRow[];
+}
