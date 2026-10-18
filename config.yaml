@@ -313,3 +313,26 @@ insiders:
     #   direction: sell
     #   min_insiders: 4
     #   window_days: 30
+
+issuers:
+  # Industry classification from EDGAR's SIC codes, so the dashboard can say
+  # which sectors a member is buying and which industries see insider
+  # selling. Every ticker in the congressional tables is resolved to a CIK
+  # through EDGAR's company list (one request), and every CIK — those plus
+  # every Form 4 issuer — has its submissions record fetched for the SIC
+  # code (one request each). The codes fold into twelve groups; the table is
+  # in src/whale/issuers.py. An issuer EDGAR gives no code (ETF trusts,
+  # funds) stays unclassified and is counted as such, never guessed.
+  #
+  # The fill runs in the poll run after the insider sync, through the same
+  # throttled EDGAR client and under this many seconds; the corpus on
+  # 2026-10-18 was ~890 congressional tickers and ~1,080 insider issuers, so
+  # at ~7 requests a second the first fill takes a few runs and a refresh
+  # fits in one. Progress is committed per issuer, so a run that stops on
+  # the budget continues next time. 0 switches the step off in the poll run
+  # (`whale classify-issuers --budget-seconds N` still runs by hand).
+  budget_seconds: 90
+  # A stored classification older than this is fetched again, oldest first,
+  # after every issuer that has never been fetched. SIC codes almost never
+  # change; weekly keeps renamed and newly listed issuers current.
+  refresh_days: 7

@@ -279,6 +279,36 @@ CREATE TABLE IF NOT EXISTS scan_rows (
 CREATE INDEX IF NOT EXISTS idx_scan_rows_filing ON scan_rows(filing_id, page_no, row_index);
 """
 
+# Industry classification from EDGAR's SIC codes (`issuers.py`, #55). One
+# `issuers` row per CIK — the EDGAR entity — and one `issuer_tickers` row per
+# symbol as it appears in `transactions.ticker` or `insider_filings.ticker`,
+# including symbols EDGAR does not list (cik NULL), so an unknown ticker is
+# recorded as unknown rather than looked up every run. Both dashboard joins
+# are one-to-one: transactions → issuer_tickers → issuers, and
+# insider_filings.issuer_cik → issuers. A CIK with several symbols (BRK.A and
+# BRK.B) is one issuer with two ticker rows. Never joined into any politician
+# aggregate's volume: a sector is a label on a row, not a figure.
+_ISSUER_DDL = """
+CREATE TABLE IF NOT EXISTS issuers (
+  cik TEXT PRIMARY KEY,                -- 10-digit zero-padded, as in insider_filings.issuer_cik
+  ticker TEXT,                         -- EDGAR's first listed symbol, in its hyphen form (BRK-B)
+  name TEXT,
+  sic TEXT,                            -- as EDGAR gives it ('3571'); NULL when none is assigned (funds, trusts)
+  sic_description TEXT,
+  industry_group TEXT,                 -- issuers.sic_group(sic); NULL when unknown. `group` is a keyword.
+  fetched_at TEXT,                     -- last submissions fetch, success or recorded failure; NULL = never
+  last_error TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_issuers_group ON issuers(industry_group);
+
+CREATE TABLE IF NOT EXISTS issuer_tickers (
+  ticker TEXT PRIMARY KEY,             -- as it appears in transactions.ticker / insider_filings.ticker
+  cik TEXT,                            -- NULL: not in EDGAR's company list when last looked up
+  looked_up_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_issuer_tickers_cik ON issuer_tickers(cik);
+"""
+
 # Statuses whose transactions count toward statistics. A filing that failed to
 # parse contributes nothing, and one that is merely 'new' has no rows yet.
 COUNTED_STATUSES = ("parsed", "notified", "backfilled")
@@ -337,6 +367,11 @@ def _migrate(conn: sqlite3.Connection) -> None:
         # Scan capture tables. Empty until `whale capture-scans` runs or the
         # pipeline meets a scan; nothing to backfill at migration time.
         conn.executescript(_SCAN_DDL)
+    if version < 9:
+        # Issuer classification tables (#55). Empty until the poll run's
+        # `issuers.classify` step or `whale classify-issuers` fills them;
+        # the fill needs EDGAR, so there is nothing to do at migration time.
+        conn.executescript(_ISSUER_DDL)
     if version < 11:
         # Options as structured data (#58). A fresh DB has the columns from
         # the DDL and no rows; an existing one gains them here and has them
@@ -768,6 +803,49 @@ def replace_insider_owners(conn: sqlite3.Connection, filing_id: int,
                 int(bool(o.get("is_other"))), o.get("officer_title"), o.get("other_text"),
             ),
         )
+
+
+# --- issuers (industry classification) --------------------------------------
+
+
+def upsert_issuer_ticker(conn: sqlite3.Connection, ticker: str, cik: str | None) -> None:
+    """Record what EDGAR's listing said about a symbol — including that it
+    said nothing (cik None), so the symbol is not asked about again before
+    the refresh."""
+    conn.execute(
+        "INSERT INTO issuer_tickers (ticker, cik, looked_up_at) VALUES (?,?,?) "
+        "ON CONFLICT(ticker) DO UPDATE SET cik=excluded.cik, looked_up_at=excluded.looked_up_at",
+        (ticker, cik, now_iso()),
+    )
+
+
+def upsert_issuer(conn: sqlite3.Connection, cik: str, ticker: str | None = None,
+                  name: str | None = None, sic: str | None = None,
+                  sic_description: str | None = None, industry_group: str | None = None,
+                  error: str | None = None) -> None:
+    """Store one issuer's classification, or the error that stood in for it.
+
+    An error keeps whatever an earlier fetch stored: a refresh that fails
+    must not blank a classification the dashboard was already showing.
+    """
+    if error is not None:
+        conn.execute(
+            "INSERT INTO issuers (cik, fetched_at, last_error) VALUES (?,?,?) "
+            "ON CONFLICT(cik) DO UPDATE SET fetched_at=excluded.fetched_at, "
+            "last_error=excluded.last_error",
+            (cik, now_iso(), error),
+        )
+        return
+    conn.execute(
+        """INSERT INTO issuers (cik, ticker, name, sic, sic_description, industry_group,
+                                fetched_at, last_error)
+           VALUES (?,?,?,?,?,?,?,NULL)
+           ON CONFLICT(cik) DO UPDATE SET
+             ticker=excluded.ticker, name=excluded.name, sic=excluded.sic,
+             sic_description=excluded.sic_description, industry_group=excluded.industry_group,
+             fetched_at=excluded.fetched_at, last_error=NULL""",
+        (cik, ticker, name, sic, sic_description, industry_group, now_iso()),
+    )
 
 
 def replace_insider_transactions(conn: sqlite3.Connection, filing_id: int,

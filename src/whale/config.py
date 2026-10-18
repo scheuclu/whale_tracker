@@ -336,6 +336,32 @@ class InsiderSettings:
         return [r for r in self.alerts if r.kind == kind]
 
 
+@dataclass
+class IssuerSettings:
+    """Industry classification from EDGAR SIC codes (issuers.py, #55)."""
+
+    # Seconds one poll run may spend fetching issuer records from EDGAR,
+    # after the insider sync. 0 switches the step off in the poll run;
+    # `whale classify-issuers` still runs with an explicit budget.
+    budget_seconds: float = 90.0
+    # How old a stored classification may be before it is fetched again.
+    refresh_days: int = 7
+
+
+def _refresh_days(raw) -> int:
+    """`issuers.refresh_days`: at least one day. Zero would re-fetch every
+    issuer on every run, which is the whole corpus against EDGAR eight times
+    a day while reading in config.yaml as if it were tuned."""
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        raise ConfigError(
+            f"issuers.refresh_days must be a whole number of days, not {raw!r}") from None
+    if value < 1:
+        raise ConfigError(f"issuers.refresh_days is {value}; it must be at least 1")
+    return value
+
+
 # What a watchlist entry may say. Same contract as the insider rules: an
 # unrecognised key is a typo, and a typo here would silently watch nobody.
 WATCH_KEYS = frozenset({"name", "bioguide_id", "every_trade"})
@@ -417,6 +443,7 @@ class Config:
     alerts: AlertSettings = field(default_factory=AlertSettings)
     ingest: IngestSettings = field(default_factory=IngestSettings)
     insiders: InsiderSettings = field(default_factory=InsiderSettings)
+    issuers: IssuerSettings = field(default_factory=IssuerSettings)
     watchlist: WatchlistSettings = field(default_factory=WatchlistSettings)
     senate_enabled: bool = True
     # Scanned-PDF transcription; see config.yaml for the measured accuracy
@@ -511,6 +538,12 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
         alerts=[_parse_rule(r, i) for i, r in enumerate(n.get("alerts") or [])],
     )
 
+    s = raw.get("issuers") or {}
+    issuers = IssuerSettings(
+        budget_seconds=_seconds(s.get("budget_seconds", 90), "issuers.budget_seconds"),
+        refresh_days=_refresh_days(s.get("refresh_days", 7)),
+    )
+
     watchlist = WatchlistSettings(
         members=[_parse_watch(w, i) for i, w in enumerate(raw.get("watchlist") or [])])
 
@@ -520,6 +553,7 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
         alerts=alerts,
         ingest=ingest,
         insiders=insiders,
+        issuers=issuers,
         watchlist=watchlist,
         senate_enabled=bool((raw.get("senate") or {}).get("enabled", True)),
         vision_enabled=bool((raw.get("vision") or {}).get("enabled", False)),
