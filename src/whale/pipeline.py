@@ -18,7 +18,8 @@ from . import (db, house, insider_alerts, insiders, options, roster, senate, sen
                stats, telegram)
 from .amounts import parse_amount
 from .config import Config
-from .ptr import ParsedFiling, ScannedFilingError, parse_pdf
+from .ptr import (PAREN_SYMBOL_RE, SLOT_SYMBOL_RE, ParsedFiling, ScannedFilingError, parse_pdf,
+                  ticker_from_asset_name, with_ticker_note)
 from .vision import ScanUnreadable, VisionUnavailable, parse_scanned
 
 log = logging.getLogger(__name__)
@@ -147,6 +148,7 @@ AGE_CUTOFF_STATE = "house_age_cutoff"
 def sync(conn: sqlite3.Connection, config: Config) -> int:
     """Refresh the roster and record newly filed disclosures."""
     roster.sync(conn)
+    _derive_tickers_from_names(conn)
     matcher = roster.Matcher(conn)
 
     new_count = 0
@@ -359,6 +361,55 @@ def _normalise_senate_rows(conn: sqlite3.Connection) -> int:
         log.info("senate: normalised %d row(s) (ISO dates, state from the roster, ticker cells)",
                  fixed)
     return fixed
+
+
+def _derive_tickers_from_names(conn: sqlite3.Connection) -> int:
+    """Give stored ticker-less rows the symbol their asset name carries (#50).
+
+    The parsers now read "(BHP)" off the name when the ticker column is
+    empty; rows stored before they did are brought into line here, the way
+    `_normalise_senate_rows` does for Senate dates. Same rule per chamber as
+    at parse time — the House form's own "(SYM) [XX]" slot, any single
+    parenthesised symbol on the Senate's free-text name — and the same
+    provenance note in `description`, so the audit counts both alike. A
+    Senate cell that held two legs' symbols was not empty, and the name is
+    not consulted for it. Idempotent: a row with a ticker is never touched,
+    so nothing matches once converted, and it runs on every sync and backfill.
+    """
+    rows = conn.execute(
+        """SELECT t.id, t.asset_name, t.description, t.raw_text, f.chamber
+           FROM transactions t JOIN filings f ON f.id = t.filing_id
+           WHERE t.ticker IS NULL AND t.asset_name LIKE '%(%)%'"""
+    ).fetchall()
+    fixed = 0
+    for row in rows:
+        if row["chamber"] == "house":
+            pattern = SLOT_SYMBOL_RE
+        elif _senate_cell_had_symbols(row["raw_text"]):
+            continue
+        else:
+            pattern = PAREN_SYMBOL_RE
+        symbol = ticker_from_asset_name(row["asset_name"], pattern)
+        if symbol is None:
+            continue
+        conn.execute(
+            "UPDATE transactions SET ticker = ?, description = ? WHERE id = ?",
+            (symbol, with_ticker_note(row["description"]), row["id"]))
+        fixed += 1
+    if fixed:
+        conn.commit()
+        log.info("tickers: read %d ticker(s) off the asset names of stored rows", fixed)
+    return fixed
+
+
+def _senate_cell_had_symbols(raw_text: str | None) -> bool:
+    """Whether a stored Senate row's ticker cell held any symbol at all.
+
+    `raw_text` is the nine cells joined by " | " and the ticker is the
+    fourth; the three before it never contain the separator.
+    """
+    cells = (raw_text or "").split(" | ", 4)
+    return len(cells) > 3 and bool(senate_ptr.ticker_from_cell(cells[3])[1])
 
 
 def _sync_insiders(conn: sqlite3.Connection, config: Config,
@@ -1087,6 +1138,7 @@ def backfill(config: Config, year: int | None, limit: int | None,
     conn = db.connect(config.db_path)
     try:
         _normalise_senate_rows(conn)
+        _derive_tickers_from_names(conn)
         chambers = ("house", "senate") if chamber == "all" else (chamber,)
         marks = ", ".join("?" for _ in chambers)
         sql = f"SELECT id FROM filings WHERE status = 'seen_skipped' AND chamber IN ({marks})"

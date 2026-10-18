@@ -27,6 +27,7 @@ from pathlib import Path
 
 from .amounts import BRACKETS
 from .db import COUNTED_STATUSES, connect
+from .ptr import TICKER_FROM_NAME_NOTE
 from .stats import TRANSCRIBED_METHOD
 
 # Severity ordering, worst first.
@@ -157,6 +158,37 @@ def check_ticker_sanity(conn, today: date | None = None) -> list[Finding]:
         "ST is Sensata, AB is AllianceBernstein, BA is Boeing.",
         [f"{r['ticker']!r}  type={r['asset_type']}  filing {r['doc_id']}  {r['asset_name'][:40]}"
          for r in suspicious],
+    )]
+
+
+def check_tickers_from_asset_names(conn, today: date | None = None) -> list[Finding]:
+    """Tickers read off the asset name because the ticker column was empty (#50).
+
+    Informational: the symbol is the one the filer typed, just in the wrong
+    cell. The evidence lists every such symbol with its row and member
+    counts, because this is where a parenthesised word that is not a ticker
+    would surface. Silent when no row carries the provenance note.
+    """
+    rows = _rows(conn, f"""
+        SELECT t.ticker, COUNT(*) AS n, COUNT(DISTINCT t.politician_id) AS members
+        FROM transactions t JOIN filings f ON f.id = t.filing_id
+        WHERE f.status IN {_counted()} AND t.ticker IS NOT NULL AND t.description LIKE ?
+        GROUP BY t.ticker ORDER BY n DESC, t.ticker
+    """, (f"%{TICKER_FROM_NAME_NOTE}%",))
+    if not rows:
+        return []
+    total = sum(r["n"] for r in rows)
+    return [Finding(
+        INFO, "tickers_from_asset_names",
+        f"{total} transaction(s) carry a ticker read from the asset name "
+        f"({len(rows)} distinct symbol(s))",
+        "The ticker column was empty and the asset name carried exactly one "
+        "symbol in parentheses — \"BHP Group Limited (BHP)\" — so the parser "
+        "took it and marked the row in `description`; the name is kept "
+        "verbatim. On a House row only the form's own \"(SYM) [XX]\" slot "
+        "counts. A symbol colliding with an asset-type code is not a defect "
+        "(SE is Sea Limited); a plain word in this list would be.",
+        [f"{r['ticker']:<8}{r['n']:>5} row(s)  {r['members']} member(s)" for r in rows],
     )]
 
 
@@ -993,6 +1025,7 @@ CHECKS = (
     check_house_age_cutoff,
     check_missing_transaction_fields,
     check_ticker_sanity,
+    check_tickers_from_asset_names,
     check_unmatched_filers,
     check_date_anomalies,
     check_parse_coverage,

@@ -46,6 +46,22 @@ TICKER_TYPE_RE = re.compile(r"\(([A-Z0-9.\-]{1,10})\)\s*\[([A-Z0-9]{2})\]\s*$")
 # pollutes the ticker namespace with identifiers no equity will ever match.
 CUSIP_RE = re.compile(r"^(?=.*\d)[A-Z0-9]{9}$")
 TYPE_ONLY_RE = re.compile(r"\[([A-Z0-9]{2})\]\s*$")
+# A ticker the filer wrote into the asset name instead of the ticker column
+# (#50): one to five upper-case letters, optionally a one-letter share class
+# ("BRK.B", "GEF-B"), in parentheses. Letters only, so a CUSIP never
+# qualifies, and the case is the filer's: "(Ireland)" and "(Sponsored)" are
+# words. No word blacklist beyond that — real tickers collide with anything
+# short (ST is Sensata, AB is AllianceBernstein, SE is Sea Limited).
+PAREN_SYMBOL_RE = re.compile(r"\(([A-Z]{1,5}(?:[.\-][A-Z])?)\)")
+# The House form's own ticker slot, "(NVDA) [ST]", wherever it sits in the
+# cell. `_resolve_asset` recognises it only at the end; a comment wrapping
+# into the asset column pushes it mid-cell ("(TEM) [ST] 1/16/26."). On a
+# House row only the slot counts: "(THE)" in "MOSAIC COMPANY (THE) CMN" and
+# "(AMI)" in "Advanced Machine Intelligence (AMI) Labs" are not tickers.
+SLOT_SYMBOL_RE = re.compile(PAREN_SYMBOL_RE.pattern + r"\s*\[[A-Z0-9]{2}\]")
+# Appended to `description` when the ticker was read from the asset name:
+# the only provenance there is (no schema column), and what the audit counts.
+TICKER_FROM_NAME_NOTE = "Ticker read from the asset name"
 
 ACTIONS = {
     "P": "purchase",
@@ -246,6 +262,31 @@ def _resolve_asset(tx: Transaction) -> None:
     elif m := TYPE_ONLY_RE.search(name):
         tx.asset_type = m.group(1)
         tx.asset_name = name[: m.start()].strip(" -")
+    if tx.ticker is None and (symbol := ticker_from_asset_name(tx.asset_name, SLOT_SYMBOL_RE)):
+        # The slot is there but not at the end of the cell. The name stays
+        # verbatim, trailing text and all; only the ticker is read off it.
+        tx.ticker = symbol
+        tx.description = with_ticker_note(tx.description)
+
+
+def ticker_from_asset_name(name: str | None,
+                           pattern: re.Pattern[str] = PAREN_SYMBOL_RE) -> str | None:
+    """The one symbol the asset name carries in parentheses, else None.
+
+    For a row whose ticker column is empty (#50). Two different symbols
+    ("(FB) ... (META)") is a choice the parser must not make; the same
+    symbol twice is one symbol. A House row passes `SLOT_SYMBOL_RE`; the
+    Senate's free-text name column has no slot, so the default applies.
+    """
+    symbols = set(pattern.findall(name or ""))
+    return symbols.pop() if len(symbols) == 1 else None
+
+
+def with_ticker_note(description: str | None) -> str:
+    """`description` with `TICKER_FROM_NAME_NOTE` appended, at most once."""
+    if description and TICKER_FROM_NAME_NOTE in description:
+        return description
+    return f"{description} · {TICKER_FROM_NAME_NOTE}" if description else TICKER_FROM_NAME_NOTE
 
 
 def _iso_date(cell: str) -> str | None:
