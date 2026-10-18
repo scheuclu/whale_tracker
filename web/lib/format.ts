@@ -128,6 +128,16 @@ export function shortDate(iso: string | null): string {
   return `${m}/${d}/${y.slice(2)}`;
 }
 
+/** A run's wall-clock duration: "48s", "3m 05s", "1h 12m". */
+export function duration(seconds: number | null): string {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return "—";
+  const s = Math.round(seconds);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ${String(s % 60).padStart(2, "0")}s`;
+  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
+}
+
 export function relativeTime(iso: string | null): string {
   if (!iso) return "never";
   const then = Date.parse(iso.replace(" ", "T"));

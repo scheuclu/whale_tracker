@@ -7,6 +7,9 @@ __pycache__/
 web/node_modules/
 web/.next/
 
+# Per-agent worktrees Claude Code creates under the main checkout
+.claude/worktrees/
+
 # Local secrets — never commit
 .env
 .env.*
