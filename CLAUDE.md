@@ -135,6 +135,16 @@ parser stays faithful to the PDF and the UI flags the row rather than
   deliberately no shape check on `insider_filings.ticker`: it comes from an XML
   element rather than a column split, and real values include exchange-prefixed
   foreign symbols like `ASX:LNW`.
+- Committee seats (`committees`, `committee_members`) come from the same
+  congress-legislators dataset as the roster and are refreshed inside
+  `roster.sync`. They are a snapshot of the *current* Congress with no
+  history, so a refresh replaces both tables wholesale in one transaction
+  that rolls back on a bad fetch, keeping the previous snapshot; a seat whose
+  bioguide id is not in `politicians` is dropped and counted, never invented.
+  Subcommittees are `committees` rows with `parent_id`, keyed
+  `<parent><two-digit code>` (`HSIF16`) the way the membership file keys
+  them. The web queries guard on the tables existing: the committed database
+  gains a new schema version only on the pipeline's next run after a merge.
 - Tests: `.venv/bin/python -m pytest -q` (run before every PR).
 
 ## Watchlist (per-member alerting)
