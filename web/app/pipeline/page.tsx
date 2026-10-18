@@ -275,7 +275,7 @@ export default async function PipelinePage() {
           <ResponsiveTable>
             <table className="w-full text-[13px]">
               <thead>
-                <tr className="border-b border-border text-left text-[11px] font-medium uppercase tracking-[0.07em] text-muted-foreground">
+                <tr className="border-b border-border text-left text-[12px] font-medium text-muted-foreground">
                   <th className="px-4 py-2.5 font-medium">Started</th>
                   <th className="px-4 py-2.5 font-medium">Took</th>
                   <th className="px-4 py-2.5 text-right font-medium">Parsed</th>
