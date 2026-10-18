@@ -28,6 +28,7 @@ import {
   StatTile,
   VolumeRange,
 } from "../charts";
+import { ExportLink } from "../feed-controls";
 import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, ResponsiveTable, ScanTag, SectorTag, TickerChip } from "../ui";
 import { MemberAvatar } from "../avatar";
 import { MemberBars } from "./member-bars";
@@ -339,7 +340,7 @@ async function MemberDetail({ member, action }: { member: string; action?: strin
       <section>
         <SectionTitle
           right={
-            <div className="flex gap-1 text-[11px]">
+            <div className="flex items-center gap-1 text-[11px]">
               {FILTERS.map((f) => (
                 <a
                   key={f.label}
@@ -353,6 +354,10 @@ async function MemberDetail({ member, action }: { member: string; action?: strin
                   {f.label}
                 </a>
               ))}
+              <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+              <ExportLink
+                filters={{ member, action: action === "buy" || action === "sell" ? action : undefined }}
+              />
             </div>
           }
         >

@@ -17,7 +17,7 @@ export function TickerMembers({ ticker, members }: { ticker: string; members: Ti
       <SectionTitle
         right={
           <span className="text-[11px] text-muted-foreground">
-            {members.length} member{members.length === 1 ? "" : "s"} · by trades · disclosed range
+            {members.length} member{members.length === 1 ? "" : "s"} · by est. volume · disclosed range
           </span>
         }
       >

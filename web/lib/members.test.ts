@@ -15,7 +15,7 @@ test("leaderboard rows carry the bioguide id the portraits are keyed on", async 
 });
 
 test("a ticker's member list adds up to the ticker's trades", async () => {
-  const [stat, members] = await Promise.all([q.getTickerDetail("NVDA"), q.getTickerMembers("nvda")]);
+  const [stat, members] = await Promise.all([q.getTickerDetail("NVDA"), q.getTickerMembers("nvda", undefined, 1000)]);
   assert.ok(stat && members.length > 0);
   assert.equal(
     members.reduce((s, m) => s + m.trades, 0),
