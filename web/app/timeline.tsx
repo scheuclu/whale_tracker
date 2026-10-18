@@ -30,7 +30,13 @@ type Mode = "ticker" | "member";
 
 const COLOR = { buy: "var(--viz-buy)", sell: "var(--viz-sell)", other: "var(--viz-axis)" } as const;
 const TOP = 18;
-const AXIS_BAND = 34;
+const AXIS_BAND = 36;
+// Axis text at the 12px meta size, its year line a step below. Inline: the
+// `.tl-*` rules in globals.css set the colour and figures, these the size.
+const TICK = { fontSize: 12 } as const;
+const TICK_SUB = { fontSize: 11 } as const;
+// Sentence case, not tracked caps.
+const SIDE = { fontSize: 11, letterSpacing: 0, textTransform: "none" } as const;
 
 /**
  * Two server layouts, one shown per breakpoint. A phone gets its own
@@ -138,7 +144,7 @@ function TimelineLegend({
 }) {
   const { counts } = layout;
   return (
-    <div className="mb-2 flex flex-wrap items-center gap-x-5 gap-y-2 px-1 text-[11px] text-muted-foreground">
+    <div className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-2 px-1 text-[12px] text-muted-foreground">
       <span className="inline-flex items-center gap-1.5">
         <Dot color={COLOR.buy} />
         <span>
@@ -240,10 +246,10 @@ function TimelineSvg({
           return (
             <g key={side}>
               <rect x={g.x - 20} y={TOP - 6} width={40} height={plotBottom - TOP + 12} rx={8} fill="var(--viz-track)" />
-              <text x={g.x} y={plotBottom + 15} textAnchor="middle" className="tl-tick">
+              <text x={g.x} y={plotBottom + 16} textAnchor="middle" className="tl-tick" style={TICK}>
                 {g.label}
               </text>
-              <text x={g.x} y={plotBottom + 27} textAnchor="middle" className="tl-tick tl-tick-sub">
+              <text x={g.x} y={plotBottom + 29} textAnchor="middle" className="tl-tick tl-tick-sub" style={TICK_SUB}>
                 {why}
               </text>
               {/* Scale break on the axis. */}
@@ -265,12 +271,12 @@ function TimelineSvg({
           <g key={t.x}>
             <line x1={t.x} x2={t.x} y1={TOP - 4} y2={plotBottom + 3} stroke="var(--viz-grid)" strokeWidth="1" />
             {fits ? (
-              <text x={t.x + 3} y={plotBottom + 15} className="tl-tick">
+              <text x={t.x + 3} y={plotBottom + 16} className="tl-tick" style={TICK}>
                 {t.label}
               </text>
             ) : null}
             {fits && t.year ? (
-              <text x={t.x + 3} y={plotBottom + 27} className="tl-tick tl-tick-sub">
+              <text x={t.x + 3} y={plotBottom + 29} className="tl-tick tl-tick-sub" style={TICK_SUB}>
                 {t.year}
               </text>
             ) : null}
@@ -281,7 +287,7 @@ function TimelineSvg({
       {layout.todayX != null ? (
         <g>
           <line x1={layout.todayX} x2={layout.todayX} y1={TOP - 4} y2={plotBottom + 3} stroke="var(--viz-axis)" strokeWidth="1" />
-          <text x={layout.todayX - 3} y={TOP - 7} textAnchor="end" className="tl-tick">
+          <text x={layout.todayX - 3} y={TOP - 7} textAnchor="end" className="tl-tick" style={TICK}>
             today
           </text>
         </g>
@@ -295,6 +301,7 @@ function TimelineSvg({
       <text
         transform={`translate(${LABEL_COL / 2 + 3} ${axisY - 6}) rotate(-90)`}
         className="tl-side"
+        style={SIDE}
       >
         Buys →
       </text>
@@ -302,6 +309,7 @@ function TimelineSvg({
         transform={`translate(${LABEL_COL / 2 + 3} ${axisY + 6}) rotate(-90)`}
         textAnchor="end"
         className="tl-side"
+        style={SIDE}
       >
         ← Sells
       </text>
@@ -317,6 +325,7 @@ function TimelineSvg({
           y={o.side === "buy" ? TOP + 4 : plotBottom - 2}
           textAnchor="middle"
           className="tl-more"
+          style={{ fontSize: 11 }}
         >
           +{o.count}
         </text>
@@ -451,5 +460,9 @@ function TimelineNotes({
     parts.push(`${layout.counts.undated} trade${layout.counts.undated === 1 ? " has" : "s have"} no readable trade date and ${layout.counts.undated === 1 ? "is" : "are"} not plotted.`);
   }
   parts.push(mode === "ticker" ? "Select a mark to open the member." : "Select a mark to open the ticker.");
-  return <p className={cn("mt-2 px-1 text-[11px] leading-relaxed text-muted-foreground", className)}>{parts.join(" ")}</p>;
+  return (
+    <p className={cn("mt-3 max-w-[76ch] px-1 text-[12px] leading-relaxed text-muted-foreground", className)}>
+      {parts.join(" ")}
+    </p>
+  );
 }
