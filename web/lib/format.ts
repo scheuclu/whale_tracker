@@ -94,6 +94,12 @@ export function memberHref(name: string, action?: string): string {
   return `/politicians?m=${encodeURIComponent(name)}${action ? `&action=${action}` : ""}`;
 }
 
+/** One committee's roster with each seat holder's trading totals, keyed on
+ *  its thomas_id ('HSIF'; 'HSIF16' for a subcommittee). */
+export function committeeHref(id: string): string {
+  return `/politicians?committee=${encodeURIComponent(id)}`;
+}
+
 export function shortDate(iso: string | null): string {
   if (!iso) return "—";
   const [y, m, d] = iso.split("-");
