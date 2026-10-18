@@ -26,6 +26,8 @@ const STATUS_LABEL: Record<string, string> = {
   unknown_amount: "amount unknown",
   unknown_type: "type unknown",
   unknown: "both unknown",
+  type_disputed: "type disputed",
+  page_refused: "page refused",
 };
 /** A status the pipeline adds later shows as its own words, never as a blank. */
 function statusLabel(status: string): string {
@@ -109,7 +111,7 @@ export default async function ScanDetailPage({
         <StatTile
           label="Pages"
           value={String(pages.length)}
-          hint={failedPages ? `${failedPages} the reader could not decompose` : "all decomposed"}
+          hint={failedPages ? `${failedPages} yielded no rows` : "all decomposed and joined"}
         />
         <StatTile label="Rows read" value={String(filing.rows)} hint="transaction rows the grid found" />
         <StatTile label="Unknown" value={String(filing.unknown_rows)} hint="amount or type not called" />
@@ -153,7 +155,7 @@ export default async function ScanDetailPage({
           </SectionTitle>
           {page.error ? (
             <p className="mb-2 text-xs text-amber-600 dark:text-amber-400">
-              Reader could not decompose this page: <span className="font-mono">{page.error}</span>
+              This page yielded no rows: <span className="font-mono">{page.error}</span>
             </p>
           ) : null}
           {/* An even split: the page is landscape, and the transcription column
@@ -195,7 +197,7 @@ export default async function ScanDetailPage({
                 </table>
               ) : (
                 <p className="p-4 text-xs text-muted-foreground">
-                  {page.error ? "No rows: the page could not be decomposed." : "No transaction rows on this page."}
+                  {page.error ? "No rows: the page yielded none." : "No transaction rows on this page."}
                 </p>
               )}
             </Card>

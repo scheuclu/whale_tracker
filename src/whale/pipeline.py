@@ -20,7 +20,7 @@ from .amounts import parse_amount
 from .config import Config
 from .ptr import (PAREN_SYMBOL_RE, SLOT_SYMBOL_RE, ParsedFiling, ScannedFilingError, parse_pdf,
                   ticker_from_asset_name, with_ticker_note)
-from .vision import ScanUnreadable, VisionUnavailable, parse_scanned
+from .vision import JOIN_VERSION, ScannedFiling, ScanUnreadable, VisionUnavailable, parse_scanned
 
 log = logging.getLogger(__name__)
 
@@ -704,7 +704,10 @@ def parse_pending(conn: sqlite3.Connection, config: Config,
         # unreadable, now transcribed — is history: 'parsed' would wait for
         # a message that must never be sent twice.
         status = "backfilled" if target_status == "parsed" and filing["notified_at"] else target_status
-        db.set_status(conn, filing["id"], status, None, method)
+        # A scan read from some pages but not all is parsed, and says so:
+        # the pages that yielded nothing are on the record, not just absent.
+        scanned = parsed if isinstance(parsed, ScannedFiling) else None
+        db.set_status(conn, filing["id"], status, scanned.note() if scanned else None, method)
         if silent:
             db.mark_notified(conn, filing["id"])
         conn.commit()
@@ -712,20 +715,22 @@ def parse_pending(conn: sqlite3.Connection, config: Config,
         log.info("parsed %s (%s): %d transaction(s)", filing["doc_id"], method, len(rows))
         if method == "vision":
             # After the transactions exist, so the captured rows link to them.
-            _capture_scan(conn, filing, pdf_bytes)
+            _capture_scan(conn, filing, pdf_bytes, scanned)
     if deferred:
         log.warning("vision budget of %.0fs spent after %.0fs; %d scan(s) stay queued for the next run",
                     budget, vision_spent, deferred)
     return done
 
 
-def _capture_scan(conn: sqlite3.Connection, filing, pdf_bytes: bytes) -> None:
+def _capture_scan(conn: sqlite3.Connection, filing, pdf_bytes: bytes, scanned=None) -> None:
     """Store a scan's pages and grid rows for the /scans view. Best-effort:
-    inspection must never cost a parse, so nothing here raises."""
+    inspection must never cost a parse, so nothing here raises. `scanned`
+    is the join's account when the filing was just transcribed, so the
+    rows it disputed and the pages it refused are stored as such."""
     from . import scan_capture
 
     try:
-        pages, rows, unknown = scan_capture.capture_filing(conn, filing["id"], pdf_bytes)
+        pages, rows, unknown = scan_capture.capture_filing(conn, filing["id"], pdf_bytes, scanned)
     except Exception:
         log.exception("scan capture failed for %s", filing["doc_id"])
         conn.rollback()
@@ -743,8 +748,12 @@ def retry_scanned(conn: sqlite3.Connection, config: Config) -> int:
     arrived. Re-queued as `new`, they go through `parse_pending` like any
     filing; the ones already reported to Telegram as unreadable keep their
     `notified_at` and so land as history rather than as a second message.
-    Only the never-attempted ones: a scan vision has refused
-    (`vision_failed`) is not retried every three hours.
+    The never-attempted ones every run; a scan vision has refused
+    (`vision_failed`) only once per `vision.JOIN_VERSION`, the stamp kept in
+    `sync_state`. A refusal is a verdict on the join's rules, so it is worth
+    one more try exactly when those rules change (#51 made the join per
+    page, and the eight filings refused under the old one are that
+    version's retry) and never every three hours.
     """
     if not (config.vision_enabled and config.gemini_api_key):
         return 0
@@ -752,12 +761,28 @@ def retry_scanned(conn: sqlite3.Connection, config: Config) -> int:
         "SELECT id, doc_id FROM filings WHERE chamber = 'house' "
         "AND status = 'failed' AND parse_method = 'scanned'"
     ).fetchall()
-    for r in rows:
+    refused = []
+    if db.get_state(conn, REFUSED_RETRY_STATE) != str(JOIN_VERSION):
+        refused = conn.execute(
+            "SELECT id, doc_id FROM filings WHERE chamber = 'house' "
+            "AND status = 'failed' AND parse_method = 'vision_failed'"
+        ).fetchall()
+        db.set_state(conn, REFUSED_RETRY_STATE, str(JOIN_VERSION))
+    for r in rows + refused:
         db.set_status(conn, r["id"], "new", None)
     conn.commit()
     if rows:
         log.info("vision available: re-queued %d scanned filing(s)", len(rows))
-    return len(rows)
+    if refused:
+        log.info("join version %d: re-queued %d refused scan(s) for one more try",
+                 JOIN_VERSION, len(refused))
+    return len(rows) + len(refused)
+
+
+# sync_state key: the `vision.JOIN_VERSION` under which refused scans were
+# last re-queued. Written whenever `retry_scanned` re-queues them, so each
+# version gives every `vision_failed` filing exactly one more attempt.
+REFUSED_RETRY_STATE = "vision_refused_retried"
 
 
 def _parse_senate_filings(conn: sqlite3.Connection, config: Config, filings: list,
