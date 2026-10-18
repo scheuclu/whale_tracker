@@ -2,233 +2,259 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ============================================================
+   Whale Tracker — design tokens (values and rationale: web/DESIGN.md).
+
+   Calm and precise: a faintly tinted page, solid card surfaces drawn by
+   hairlines rather than shadows, three ink levels, indigo only for accent
+   roles (active nav, links, focus, selection). Dark mode is its own
+   palette — three surface steps, not an inversion.
+   ============================================================ */
+
 @theme inline {
-    --font-heading: var(--font-sans);
-    --font-sans: var(--font-sans);
-    --color-sidebar-ring: var(--sidebar-ring);
-    --color-sidebar-border: var(--sidebar-border);
-    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-    --color-sidebar-accent: var(--sidebar-accent);
-    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-    --color-sidebar-primary: var(--sidebar-primary);
-    --color-sidebar-foreground: var(--sidebar-foreground);
-    --color-sidebar: var(--sidebar);
-    --color-chart-5: var(--chart-5);
-    --color-chart-4: var(--chart-4);
-    --color-chart-3: var(--chart-3);
-    --color-chart-2: var(--chart-2);
-    --color-chart-1: var(--chart-1);
-    --color-ring: var(--ring);
-    --color-input: var(--input);
-    --color-border: var(--border);
-    --color-destructive: var(--destructive);
-    --color-accent-foreground: var(--accent-foreground);
-    --color-accent: var(--accent);
-    --color-muted-foreground: var(--muted-foreground);
-    --color-muted: var(--muted);
-    --color-secondary-foreground: var(--secondary-foreground);
-    --color-secondary: var(--secondary);
-    --color-primary-foreground: var(--primary-foreground);
-    --color-primary: var(--primary);
-    --color-popover-foreground: var(--popover-foreground);
-    --color-popover: var(--popover);
-    --color-card-foreground: var(--card-foreground);
-    --color-card: var(--card);
-    --color-foreground: var(--foreground);
-    --color-background: var(--background);
-    --radius-sm: calc(var(--radius) * 0.6);
-    --radius-md: calc(var(--radius) * 0.8);
-    --radius-lg: var(--radius);
-    --radius-xl: calc(var(--radius) * 1.4);
-    --radius-2xl: calc(var(--radius) * 1.8);
-    --radius-3xl: calc(var(--radius) * 2.2);
-    --radius-4xl: calc(var(--radius) * 2.6);
+  --font-heading: var(--font-sans);
+  --font-sans: var(--font-sans);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-raised: var(--raised);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-ink-2: var(--ink-2);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-attention: var(--attention);
+  --color-attention-soft: var(--attention-soft);
+  --color-error: var(--error);
+  --color-error-soft: var(--error-soft);
+
+  /* Radius scale. Nothing above 12px except fully round pills/avatars:
+     the stock rounded-2xl/3xl utilities resolve to the card radius too. */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 12px;
+  --radius-3xl: 12px;
+  --radius-4xl: 12px;
+  --radius-chip: 6px;
+  --radius-control: 8px;
+  --radius-card: 12px;
+
+  /* Elevation: shadow-card / shadow-popover utilities. */
+  --shadow-card: var(--elev-card);
+  --shadow-popover: var(--elev-popover);
 }
 
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+  --radius: 12px;
+
+  /* Surfaces: page < card < raised; popover floats. */
+  --background: #f6f7f9;
+  --card: #ffffff;
+  --raised: #f9fafb;
+  --popover: #ffffff;
+  /* Kept for the sticky table column / scroll fades: the card, solid. */
+  --card-solid: #ffffff;
+
+  /* Ink: foreground (primary), ink-2 (secondary), muted-foreground (tertiary). */
+  --foreground: #0f1117;
+  --card-foreground: #0f1117;
+  --popover-foreground: #0f1117;
+  --ink-2: #3f4451;
+  --muted-foreground: #646a78;
+
+  /* Hairlines. */
+  --border: rgba(15, 17, 23, 0.085);
+  --border-strong: rgba(15, 17, 23, 0.14);
+  --input: rgba(15, 17, 23, 0.12);
+
+  /* Accent (indigo) — active nav, links, focus ring, selection only. */
+  --primary: #5b5bd6;
+  --primary-foreground: #ffffff;
+  --accent: rgba(91, 91, 214, 0.09);
+  --accent-foreground: #3d3db5;
+  --ring: #6e6ee0;
+
+  /* Neutral fills (chips, hovers). */
+  --secondary: rgba(15, 17, 23, 0.05);
+  --secondary-foreground: #262a34;
+  --muted: rgba(15, 17, 23, 0.04);
+
+  /* Status — muted, AA as text on every surface. Not for buy/sell. */
+  --ok: #2b7d55;
+  --ok-soft: rgba(43, 125, 85, 0.1);
+  --attention: #9a6412;
+  --attention-soft: rgba(196, 132, 29, 0.12);
+  --error: #c13d3d;
+  --error-soft: rgba(193, 61, 61, 0.09);
+  --destructive: var(--error);
+
+  /* Elevation. */
+  --elev-card: 0 1px 2px rgba(15, 17, 23, 0.04);
+  --elev-card-hover: 0 1px 2px rgba(15, 17, 23, 0.05), 0 4px 12px -6px rgba(15, 17, 23, 0.1);
+  --elev-popover: 0 0 0 1px rgba(15, 17, 23, 0.06), 0 12px 32px -8px rgba(15, 17, 23, 0.18),
+    0 2px 6px rgba(15, 17, 23, 0.06);
+
+  --scrollbar: rgba(15, 17, 23, 0.18);
+  --scrollbar-hover: rgba(15, 17, 23, 0.3);
+  --selection: rgba(91, 91, 214, 0.2);
+
+  /* Motion. */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 120ms;
+  --dur: 160ms;
 }
 
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+  --background: #0b0c0f;
+  --card: #131419;
+  --raised: #1a1b21;
+  --popover: #1f2027;
+  --card-solid: #131419;
+
+  --foreground: #ededf0;
+  --card-foreground: #ededf0;
+  --popover-foreground: #ededf0;
+  --ink-2: #b9bcc6;
+  --muted-foreground: #8d919d;
+
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.13);
+  --input: rgba(255, 255, 255, 0.11);
+
+  --primary: #8b8bf2;
+  --primary-foreground: #0b0c14;
+  --accent: rgba(139, 139, 242, 0.14);
+  --accent-foreground: #c9c9ff;
+  --ring: #8b8bf2;
+
+  --secondary: rgba(255, 255, 255, 0.06);
+  --secondary-foreground: #e4e5ea;
+  --muted: rgba(255, 255, 255, 0.05);
+
+  --ok: #55b685;
+  --ok-soft: rgba(85, 182, 133, 0.13);
+  --attention: #d6a24a;
+  --attention-soft: rgba(214, 162, 74, 0.13);
+  --error: #ec7a76;
+  --error-soft: rgba(236, 122, 118, 0.12);
+
+  --elev-card: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --elev-card-hover: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 16px -8px rgba(0, 0, 0, 0.6);
+  --elev-popover: 0 0 0 1px rgba(255, 255, 255, 0.09), 0 16px 40px -10px rgba(0, 0, 0, 0.7),
+    0 2px 8px rgba(0, 0, 0, 0.4);
+
+  --scrollbar: rgba(255, 255, 255, 0.16);
+  --scrollbar-hover: rgba(255, 255, 255, 0.28);
+  --selection: rgba(139, 139, 242, 0.32);
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
-    }
-  body {
-    @apply bg-background text-foreground;
-    }
+    @apply border-border;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar) transparent;
+  }
   html {
     @apply font-sans;
-    }
-}
-/* ============================================================
-   Whale Tracker — Linear/Vercel-style theme
-   Dark-first: gradient canvas, glass surfaces, indigo accent.
-   ============================================================ */
+    color-scheme: light;
+    -webkit-text-size-adjust: 100%;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "cv11", "ss01";
+  }
 
-:root {
-  --radius: 0.875rem;
-  --background: #fbfbfd;
-  --foreground: #0c0c11;
-  --card: rgba(255, 255, 255, 0.72);
-  --card-foreground: #0c0c11;
-  --popover: #ffffff;
-  --popover-foreground: #0c0c11;
-  --primary: #5b5bd6;
-  --primary-foreground: #ffffff;
-  --secondary: rgba(12, 12, 17, 0.05);
-  --secondary-foreground: #26263a;
-  --muted: rgba(12, 12, 17, 0.04);
-  --muted-foreground: #6b6b80;
-  --accent: rgba(91, 91, 214, 0.1);
-  --accent-foreground: #3b3bb0;
-  --destructive: #e5484d;
-  --border: rgba(12, 12, 17, 0.09);
-  --input: rgba(12, 12, 17, 0.11);
-  --ring: #8b8bec;
-  /* --card flattened onto --background: for the few places a translucent
-     surface cannot be painted (a sticky table column, a scroll-edge fade). */
-  --card-solid: #fefeff;
-}
+  ::selection {
+    background: var(--selection);
+  }
 
-.dark {
-  --background: #08080c;
-  --foreground: #f2f2f5;
-  --card: rgba(255, 255, 255, 0.034);
-  --card-foreground: #f2f2f5;
-  --popover: #14141b;
-  --popover-foreground: #f2f2f5;
-  --primary: #7c7cf0;
-  --primary-foreground: #0a0a12;
-  --secondary: rgba(255, 255, 255, 0.06);
-  --secondary-foreground: #e6e6ee;
-  --muted: rgba(255, 255, 255, 0.05);
-  --muted-foreground: #9595a8;
-  --accent: rgba(124, 124, 240, 0.15);
-  --accent-foreground: #c9c9ff;
-  --destructive: #ff6369;
-  --border: rgba(255, 255, 255, 0.08);
-  --input: rgba(255, 255, 255, 0.1);
-  --ring: #7c7cf0;
-  --card-solid: #101014;
+  /* One focus ring everywhere: 2px indigo, offset from the element.
+     Components may restyle it; nothing may remove it. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--scrollbar);
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-hover);
+  }
 }
 
-/* Ambient gradient canvas — fixed so it never scrolls away. */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background:
-    radial-gradient(60rem 38rem at 12% -12%, rgba(91, 91, 214, 0.1), transparent 62%),
-    radial-gradient(46rem 32rem at 92% -4%, rgba(56, 189, 248, 0.07), transparent 58%),
-    radial-gradient(52rem 40rem at 62% 112%, rgba(168, 85, 247, 0.06), transparent 62%);
+/* Page rhythm: the layout's <main> spaces each page's top-level sections
+   28px apart on a phone, 40px from 640px. Pages wrap their sections in a
+   `space-y-8` stack; this overrides its gap without touching the pages. */
+.page-flow > .space-y-8 > :not(:last-child) {
+  margin-block-end: 28px;
 }
-.dark body::before,
-.dark::before {
-  background:
-    radial-gradient(60rem 38rem at 12% -12%, rgba(124, 124, 240, 0.18), transparent 62%),
-    radial-gradient(46rem 32rem at 92% -4%, rgba(56, 189, 248, 0.1), transparent 58%),
-    radial-gradient(52rem 40rem at 62% 112%, rgba(168, 85, 247, 0.1), transparent 62%);
+@media (min-width: 640px) {
+  .page-flow > .space-y-8 > :not(:last-child) {
+    margin-block-end: 40px;
+  }
 }
 
 @layer components {
-  /* Frosted surface: translucent --card + blur + inner top highlight. */
+  /* Card surface (the name predates the flat theme). Solid --card, the
+     card elevation: a hairline is the edge, the shadow only a hint. */
   .glass {
-    backdrop-filter: blur(18px) saturate(150%);
-    -webkit-backdrop-filter: blur(18px) saturate(150%);
-    box-shadow:
-      inset 0 1px 0 0 rgba(255, 255, 255, 0.5),
-      0 10px 30px -18px rgba(12, 12, 17, 0.35);
-  }
-  .dark .glass {
-    box-shadow:
-      inset 0 1px 0 0 rgba(255, 255, 255, 0.06),
-      0 12px 40px -20px rgba(0, 0, 0, 0.9);
+    box-shadow: var(--elev-card);
   }
 
-  /* Lift + border brighten on hover. */
+  /* Interactive card: the hairline firms up and a soft shadow arrives.
+     No travel — a 1px nudge at most, and none under reduced motion. */
   .lift {
     transition:
-      transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
-      border-color 180ms ease,
-      box-shadow 180ms ease;
+      border-color var(--dur) ease-out,
+      box-shadow var(--dur) ease-out,
+      background-color var(--dur) ease-out,
+      transform var(--dur) var(--ease-out);
+  }
+  .lift:hover {
+    border-color: var(--border-strong);
+    box-shadow: var(--elev-card-hover);
+  }
+  .lift:active {
+    box-shadow: var(--elev-card);
   }
   @media (prefers-reduced-motion: no-preference) {
     .lift:hover {
-      transform: translateY(-2px);
+      transform: translateY(-1px);
     }
-  }
-  .lift:hover {
-    border-color: color-mix(in oklab, var(--primary) 38%, transparent);
-    box-shadow:
-      inset 0 1px 0 0 rgba(255, 255, 255, 0.06),
-      0 18px 44px -22px color-mix(in oklab, var(--primary) 55%, transparent);
+    .lift:active {
+      transform: none;
+    }
   }
 
   /* Gradient brand mark. */

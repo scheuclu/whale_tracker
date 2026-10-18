@@ -102,6 +102,11 @@ export type IssuerRow = {
   sells: number;
   buy_value: number;
   sell_value: number;
+  /** Rows in each direction with no usable value (no price, or implausible):
+   *  absent from `buy_value` / `sell_value`, which are therefore a partial
+   *  sum — and unknown, not zero, when every row in a direction is one. */
+  unpriced_buys: number;
+  unpriced_sells: number;
   last_tx_date: string | null;
   /** Issuers in the whole result before LIMIT — set by `getInsiderIssuers` only. */
   total_rows?: number;
@@ -121,6 +126,8 @@ const ISSUER_SELECT = `SELECT f.issuer_cik,
        SUM(t.action = 'sale') AS sells,
        ${BUY_VALUE} AS buy_value,
        ${SELL_VALUE} AS sell_value,
+       SUM(t.action = 'purchase' AND (${VALUE}) IS NULL) AS unpriced_buys,
+       SUM(t.action = 'sale' AND (${VALUE}) IS NULL) AS unpriced_sells,
        MAX(t.tx_date) AS last_tx_date
   ${FROM}`;
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { Children, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { stickyShift } from "@/lib/sticky-head";
 
@@ -146,9 +146,34 @@ function siteHeader(): HTMLElement | null {
  * Clicks on any other link or control in the row, and drags that select
  * text, are left alone. Cmd/Ctrl-click and middle-click open a new tab, as
  * the link itself would.
+ *
+ * With no rows it renders one quiet line instead (`empty`), spanning every
+ * column, so a filter that matches nothing reads as "nothing matched" rather
+ * than as a header over a void.
  */
-export function RowLinkBody({ children, className }: { children: React.ReactNode; className?: string }) {
+export function RowLinkBody({
+  children,
+  className,
+  empty = "Nothing matches this view.",
+}: {
+  children: React.ReactNode;
+  className?: string;
+  empty?: React.ReactNode;
+}) {
   const router = useRouter();
+
+  if (Children.count(children) === 0) {
+    return (
+      <tbody className={className}>
+        <tr>
+          {/* colSpan past the column count spans exactly the columns there are. */}
+          <td colSpan={100} className="px-4 py-8 text-center text-[13px] text-muted-foreground">
+            {empty}
+          </td>
+        </tr>
+      </tbody>
+    );
+  }
 
   const target = (e: React.MouseEvent): string | null => {
     const el = e.target as HTMLElement;

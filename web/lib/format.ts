@@ -146,6 +146,17 @@ export function memberHref(name: string, action?: string): string {
   return `/politicians?m=${encodeURIComponent(name)}${action ? `&action=${action}` : ""}`;
 }
 
+/** A ticker's page. Every link to it should come from here, so a change of
+ *  URL scheme is one edit. */
+export function tickerHref(symbol: string): string {
+  return `/tickers?t=${encodeURIComponent(symbol.toUpperCase())}`;
+}
+
+/** An issuer's Form 4 insider page. */
+export function insiderIssuerHref(symbol: string): string {
+  return `/insiders?t=${encodeURIComponent(symbol.toUpperCase())}`;
+}
+
 /** One committee's roster with each seat holder's trading totals, keyed on
  *  its thomas_id ('HSIF'; 'HSIF16' for a subcommittee). */
 export function committeeHref(id: string): string {

@@ -1,3 +1,4 @@
+import { MoneyText } from "../money";
 import { getSectorLeaderboard, getTickerMembers, getTickers, getTransactions, type SectorRow } from "@/lib/queries";
 import {
   getInsiderIssuer,
@@ -6,6 +7,7 @@ import {
   type IssuerRow,
 } from "@/lib/insider-queries";
 import { memberHref, memberLabel, range, shortDate, usd } from "@/lib/format";
+import { AgentAlternates } from "../agent-alternates";
 import {
   Card,
   DivergingSplit,
@@ -17,11 +19,14 @@ import {
   VolumeRange,
 } from "../charts";
 import { ExportLink } from "../feed-controls";
-import { ActionBadge, Amount, DelayTag, OptionBadge, OwnerTag, PartyBadge, ResponsiveTable, RoleTag, ScanTag, SectorTag } from "../ui";
+import { ActionBadge, Amount, OptionBadge, OwnerTag, ResponsiveTable, RoleTag, SectorTag } from "../ui";
 import { ASSET_TYPE_LABEL } from "@/lib/format";
 import { getTimelineTrades, type TimelineTrade } from "@/lib/timeline-queries";
 import { TradeTimeline } from "../timeline";
-import { MemberAvatar } from "../avatar";
+import { Disclosure, RangeCaption } from "../disclosure";
+import { PAGE_STACK, PageHeader, PillLinks, Quiet } from "../page-header";
+import { TradeList, TradeRow } from "../trade-row";
+import { assetLabel } from "@/lib/asset-label";
 import { TickerMembers } from "./ticker-members";
 import {
   ROW_LIMITS,
@@ -115,27 +120,25 @@ export default async function TickersPage({
   const withRows = (count: string) => `/tickers${query({ w: params.w, ...keepSort, n: count })}#all-tickers`;
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-wrap items-center gap-1 text-[11px]">
-        {WINDOWS.map((w) => {
-          const key = w.days ? String(w.days) : "all";
-          const active = (params.w ?? "90") === key;
-          return (
-            <a
-              key={w.label}
-              href={`/tickers${query({ w: key, ...keepSort })}`}
-              className={`rounded-full border px-2.5 py-1 transition-colors ${
-                active
-                  ? "border-primary/40 bg-primary/10 text-foreground"
-                  : "border-border text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              {w.label}
-            </a>
-          );
-        })}
-        <span className="ml-2 text-muted-foreground">window measured on trade date</span>
-      </div>
+    <div className={PAGE_STACK}>
+      <PageHeader
+        title="Tickers"
+        subtitle="What members of Congress trade, ranked over a window measured on trade date. Volumes are estimates from disclosed brackets."
+        aside={
+          <PillLinks
+            label="Window"
+            note="by trade date"
+            items={WINDOWS.map((w) => {
+              const key = w.days ? String(w.days) : "all";
+              return {
+                href: `/tickers${query({ w: key, ...keepSort })}`,
+                label: w.label,
+                active: (params.w ?? "90") === key,
+              };
+            })}
+          />
+        }
+      />
 
       <section className="grid gap-6 lg:grid-cols-2">
         <div>
@@ -145,7 +148,7 @@ export default async function TickersPage({
               data={rows.slice(0, 12).map((r) => ({
                 key: r.ticker,
                 label: r.ticker,
-                sublabel: r.asset_name?.slice(0, 28) ?? undefined,
+                sublabel: assetLabel(r.asset_name, { ticker: r.ticker }).slice(0, 28) || undefined,
                 title: r.asset_name ?? undefined,
                 value: r.volume_mid,
                 valueLabel: usd(r.volume_mid),
@@ -154,7 +157,7 @@ export default async function TickersPage({
               }))}
               note={VOLUME_NOTE}
             />
-            <p className="mt-3 text-[11px] text-muted-foreground">
+            <p className="mt-3 text-xs text-muted-foreground">
               Estimated from disclosure brackets — see each ticker for the disclosed range.
             </p>
           </Card>
@@ -188,7 +191,7 @@ export default async function TickersPage({
                 {header("asset", "Asset", { align: "left" })}
                 {header("members", "Members", { hint: "Distinct members who traded the ticker in the window." })}
                 {header("trades", "Trades")}
-                {header("buysell", "Buy / Sell", {
+                {header("buysell", "Buy / sell", {
                   hint: "Purchases / sales. Sorts by the share that are purchases; exchanges count as neither.",
                 })}
                 {header("volume", "Volume (est.)", {
@@ -211,7 +214,7 @@ export default async function TickersPage({
                     </a>
                   </td>
                   <td className="max-w-[10rem] truncate px-3 py-2 text-muted-foreground sm:max-w-[18rem]" title={r.asset_name ?? undefined}>
-                    {r.asset_name}
+                    {assetLabel(r.asset_name, { ticker: r.ticker }) || r.asset_name}
                   </td>
                   <td className="tabular px-3 py-2 text-right font-medium">{r.politicians}</td>
                   <td className="tabular px-3 py-2 text-right text-muted-foreground">{r.trades}</td>
@@ -220,7 +223,7 @@ export default async function TickersPage({
                     {usd(r.volume_mid)}
                   </BarCell>
                   <td className="tabular px-3 py-2 text-right text-muted-foreground">
-                    {r.volume_max == null ? `≥${usd(r.volume_min)}` : `${usd(r.volume_min)}–${usd(r.volume_max)}`}
+                    <MoneyText value={r.volume_max == null ? `≥${usd(r.volume_min)}` : `${usd(r.volume_min)}–${usd(r.volume_max)}`} />
                   </td>
                 </tr>
               ))}
@@ -294,25 +297,27 @@ function SectorLeaderboard({ sectors }: { sectors: SectorRow[] }) {
               }))}
               note={VOLUME_NOTE}
             />
-            <p className="mt-3 text-[11px] text-muted-foreground">
+            <p className="mt-3 text-xs text-muted-foreground">
               Bracket midpoints; the disclosed range is under each bar.
             </p>
           </Card>
         </div>
       ) : (
-        <Card>
-          <Empty>
-            No sector is known for any ticker yet. The pipeline classifies issuers from their
-            EDGAR SIC codes after each run.
-          </Empty>
-        </Card>
+        <Quiet>
+          No sector is known for any ticker yet. The pipeline classifies issuers from their
+          EDGAR SIC codes after each run.
+        </Quiet>
       )}
-      <p className="mt-3 text-[11px] text-muted-foreground">
-        Industry groups fold each issuer&rsquo;s EDGAR SIC code into twelve sectors.{" "}
-        {tickersKnown} of {tickersTotal} tickers in this window are classified; the rest are
-        ETF trusts and other issuers EDGAR lists no SIC for, symbols not in EDGAR&rsquo;s
-        company list, or issuers the fill has not reached yet.
-      </p>
+      <Disclosure
+        size="sm"
+        className="mt-3"
+        lead={`Industry groups fold each issuer’s EDGAR SIC code into twelve sectors; ${tickersKnown} of ${tickersTotal} tickers in this window are classified.`}
+      >
+        <p>
+          The rest are ETF trusts and other issuers EDGAR lists no SIC for, symbols not in EDGAR&rsquo;s
+          company list, or issuers the fill has not reached yet.
+        </p>
+      </Disclosure>
     </section>
   );
 }
@@ -336,15 +341,14 @@ async function TickerDetail({ ticker }: { ticker: string }) {
   const other = stat.trades - stat.buys - stat.sells;
 
   return (
-    <div className="space-y-8">
-      <div>
-        <a href="/tickers" className="text-xs text-muted-foreground hover:text-primary">
-          ← all tickers
-        </a>
-        <div className="mt-3 flex flex-wrap items-end justify-between gap-x-10 gap-y-5">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-              <h1 className="font-mono text-4xl font-semibold tracking-tight sm:text-5xl">{stat.ticker}</h1>
+    <div className={PAGE_STACK}>
+      <AgentAlternates ticker={ticker} />
+      <PageHeader
+        back={{ href: "/tickers", label: "all tickers" }}
+        title={stat.ticker}
+        titleClassName="font-mono sm:text-[44px]"
+        badges={
+          <>
               {assetTypes.map((a) => (
                 <span
                   key={a.code}
@@ -359,9 +363,14 @@ async function TickerDetail({ ticker }: { ticker: string }) {
                 sic={trades[0]?.sic}
                 description={trades[0]?.sic_description}
               />
-            </div>
-            <p className="mt-1.5 text-base text-foreground/80">{stat.asset_name}</p>
-          </div>
+          </>
+        }
+        subtitle={
+          <span className="text-ink-2" title={stat.asset_name ?? undefined}>
+            {assetLabel(stat.asset_name, { ticker: stat.ticker })}
+          </span>
+        }
+        aside={
           <FlowSplit
             buys={stat.buys}
             sells={stat.sells}
@@ -369,10 +378,9 @@ async function TickerDetail({ ticker }: { ticker: string }) {
             buyers={stat.buy_politicians}
             sellers={stat.sell_politicians}
           />
-        </div>
-      </div>
-
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        }
+      >
+      <section aria-label="Ticker totals" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile label="Members" value={String(stat.politicians)} hint="distinct filers" />
         <StatTile label="Trades" value={String(stat.trades)} hint={`${stat.buys} buy / ${stat.sells} sell`} />
         <StatTile
@@ -386,6 +394,7 @@ async function TickerDetail({ ticker }: { ticker: string }) {
         />
         <StatTile label="Last trade" value={shortDate(stat.last_tx_date)} />
       </section>
+      </PageHeader>
 
       <section>
         <SectionTitle right={<span className="text-[11px] text-muted-foreground">by trade date</span>}>
@@ -403,11 +412,7 @@ async function TickerDetail({ ticker }: { ticker: string }) {
             mid={stat.volume_mid}
             scaleMax={scaleMax}
           />
-          <p className="mt-3 text-[11px] text-muted-foreground">
-            The band is the full range these disclosures permit; the tick is the
-            midpoint estimate. Members report brackets, so the true figure lies
-            somewhere in the band.
-          </p>
+          <RangeCaption />
         </Card>
       </section>
 
@@ -415,39 +420,11 @@ async function TickerDetail({ ticker }: { ticker: string }) {
 
       <section>
         <SectionTitle right={<ExportLink filters={{ ticker }} />}>Every disclosed trade</SectionTitle>
-        <div className="space-y-1.5">
+        <TradeList>
           {trades.map((r) => (
-            <Card key={r.id} className="px-4 py-3">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                <ActionBadge action={r.action} />
-                <OptionBadge kind={r.option_kind} strikeCents={r.strike_cents} expiry={r.expiry} />
-                <Amount min={r.amount_min_cents} max={r.amount_max_cents} exact={r.amount_exact_cents} />
-                <SectorTag group={r.industry_group} sic={r.sic} description={r.sic_description} />
-                <a
-                  href={memberHref(r.member_name)}
-                  className="inline-flex items-center gap-2 text-[13px] font-medium hover:text-primary"
-                >
-                  <MemberAvatar name={r.member_name} bioguideId={r.bioguide_id} size="sm" />
-                  {memberLabel(r.member_name, null, r.state, r.district, r.chamber)}
-                </a>
-                <PartyBadge party={r.party} />
-                <OwnerTag owner={r.owner} />
-                <ScanTag transcribed={r.transcribed} docId={r.doc_id} />
-                <div className="flex-1" />
-                <span className="tabular text-xs text-muted-foreground">{shortDate(r.tx_date)}</span>
-                <DelayTag days={r.delay_days} inconsistent={r.dates_inconsistent} />
-                <a
-                  href={r.pdf_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-[11px] text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
-                >
-                  filing
-                </a>
-              </div>
-            </Card>
+            <TradeRow key={r.id} r={r} subject="member" />
           ))}
-        </div>
+        </TradeList>
       </section>
 
       <InsidersInIssuer ticker={ticker} />
@@ -466,7 +443,7 @@ async function TickerDetail({ ticker }: { ticker: string }) {
           <ResponsiveTable>
             <table className="w-full text-[13px]">
               <thead>
-                <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.06em] text-muted-foreground">
+                <tr className="border-b border-border text-left text-[12px] font-medium text-muted-foreground">
                   <th className="px-4 py-2.5 font-medium">Contract</th>
                   <th className="px-4 py-2.5 font-medium">Action</th>
                   <th className="px-4 py-2.5 font-medium">Member</th>
@@ -478,7 +455,7 @@ async function TickerDetail({ ticker }: { ticker: string }) {
               </thead>
               <tbody>
                 {optionTrades.map((r) => (
-                  <tr key={r.id} className="border-b border-border/50 last:border-0 hover:bg-muted/50">
+                  <tr key={r.id} className="border-b border-border/60 transition-colors duration-(--dur-fast) last:border-0 hover:bg-raised">
                     <td className="px-4 py-2">
                       <OptionBadge kind={r.option_kind} strikeCents={r.strike_cents} expiry={null} />
                     </td>
@@ -513,11 +490,13 @@ async function TickerDetail({ ticker }: { ticker: string }) {
               </tbody>
             </table>
           </ResponsiveTable>
-          <p className="mt-3 text-[11px] text-muted-foreground">
-            Kind, strike and expiry are read from each filing&apos;s own text and shown only when
-            printed; a put bought is listed as the purchase it was filed as. Amounts are the
-            disclosed brackets.
-          </p>
+          <Disclosure
+            size="sm"
+            className="mt-3"
+            lead="Kind, strike and expiry are read from each filing’s own text and shown only when printed; amounts are the disclosed brackets."
+          >
+            <p>A put bought is listed as the purchase it was filed as.</p>
+          </Disclosure>
         </section>
       ) : null}
     </div>
@@ -684,17 +663,22 @@ async function InsidersInIssuer({ ticker }: { ticker: string }) {
                 </div>
               ))}
             </div>
-            <p className="mt-3 text-[11px] text-muted-foreground">
-              Primary reporting owners from stored Form 4s; values are shares × the price as
-              filed, not a disclosed range. Kept apart from the member figures above — nothing
-              here enters them.{" "}
-              <a href={href} className="underline-offset-2 hover:text-primary hover:underline">
-                every stored insider trade in {ticker} →
-              </a>
-            </p>
+            <Disclosure
+              size="sm"
+              className="mt-3"
+              lead="Values are shares × the price as filed, not a disclosed range. Kept apart from the member figures above — nothing here enters them."
+            >
+              <p>Primary reporting owners from stored Form 4s.</p>
+            </Disclosure>
+            <a
+              href={href}
+              className="mt-2 inline-block text-[12px] text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
+            >
+              every stored insider trade in {ticker} →
+            </a>
           </>
         ) : (
-          <Empty>
+          <Quiet>
             No stored Form 4 trade in {ticker} in the last {CROSS_WINDOW_DAYS} days.{" "}
             {allTime ? (
               <>
@@ -707,7 +691,7 @@ async function InsidersInIssuer({ ticker }: { ticker: string }) {
             ) : (
               "No stored filing carries this symbol."
             )}
-          </Empty>
+          </Quiet>
         )}
       </Card>
     </section>

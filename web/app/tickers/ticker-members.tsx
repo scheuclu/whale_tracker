@@ -1,3 +1,4 @@
+import { MoneyText } from "../money";
 import type { TickerMemberRow } from "@/lib/queries";
 import { memberHref, range, shortDate } from "@/lib/format";
 import { seatLabel } from "@/lib/members";
@@ -72,7 +73,7 @@ export function TickerMembers({ ticker, members }: { ticker: string; members: Ti
                       : "Transcribed from a scan: counted as a trade, never in a total"
                   }
                 >
-                  {counted ? range(m.volume_min, m.volume_max) : "not counted"}
+                  {counted ? <MoneyText value={range(m.volume_min, m.volume_max)} /> : "not counted"}
                 </div>
               </a>
             </li>

@@ -388,6 +388,30 @@ parser stays faithful to the PDF and the UI flags the row rather than
   `notified_at` — backfills set `notified_at` silently to mean "never
   announce".
 
+## Agent/LLM access
+
+- `/api/v1` (JSON, `web/lib/api-v1.ts`), `/llms.txt`, `/llms-full.txt`,
+  `/openapi.json` and the human `/methodology` page all render from **one
+  module**, `web/lib/methodology.ts`: the quoting rules, sources, known gaps,
+  the data dictionary and the endpoint list. Never restate a rule in one
+  surface; change it there. The rules restate the data rules above
+  (brackets, open-ended `≥floor`, midpoints labelled estimates, transcription
+  quarantine, delay = trade → filing date, Form 4 = shares × reported price,
+  insider data never combined) — when a data rule changes, change the
+  module in the same PR.
+- Every amount leaves the API as `{ kind, min_usd, max_usd, exact_usd,
+  disclosed, midpoint_estimate_usd }` (`api-format.ts`), every total as a
+  `Volume` built from the query layer's own `volume_min/max/mid`. The API
+  reuses `queries.ts` / `insider-queries.ts` and the feed's filter parser;
+  it must not re-derive a definition. `lib/api.test.ts` checks API totals
+  against the pages'.
+- Parameters are whitelisted per endpoint (`PARAMS`): unknown keys and
+  malformed values are 400s, `limit` clamps at 500 and says so in
+  `meta.notices`. `/openapi.json` is generated from the same `PARAMS`.
+- Absolute URLs come from `web/lib/site-url.ts` (`NEXT_PUBLIC_SITE_URL` →
+  `VERCEL_PROJECT_PRODUCTION_URL` → request origin), never a deployment URL;
+  page links in API objects come from `memberHref` / `tickerHref`.
+
 ## Data-viz
 
 Charts are pure CSS/SVG in `web/app/charts.tsx`; no chart library. Colour roles

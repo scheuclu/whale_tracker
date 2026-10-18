@@ -57,7 +57,7 @@ export function HeaderShell({ children }: { children: React.ReactNode }) {
     <header
       data-condensed={condensed ? "" : undefined}
       data-first-load={firstLoad ? "" : undefined}
-      className="site-header sticky top-0 z-30 border-b border-border/70 bg-background/60 backdrop-blur-xl"
+      className="site-header sticky top-0 z-30 border-b border-border bg-background/75 backdrop-blur-xl backdrop-saturate-150"
     >
       {children}
     </header>
