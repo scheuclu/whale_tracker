@@ -8,8 +8,10 @@ import {
   type AlertKind,
 } from "@/lib/alert-queries";
 import { relativeTime } from "@/lib/format";
+import { getAlertOutcomes, getOutcomeSummary } from "@/lib/outcome-queries";
 import { Empty, SectionTitle, StatTile } from "../charts";
 import { AlertRowCard } from "./alert-row";
+import { OutcomeLine, OutcomeSummarySection } from "./outcomes";
 
 export const dynamic = "force-dynamic";
 
@@ -47,12 +49,14 @@ export default async function AlertsPage({
     return s ? `/alerts?${s}` : "/alerts";
   };
 
-  let totals, weekly, alerts;
+  let totals, weekly, alerts, outcomes, outcomeSummary;
   try {
-    [totals, weekly, alerts] = await Promise.all([
+    [totals, weekly, alerts, outcomes, outcomeSummary] = await Promise.all([
       getAlertTotals(),
       getAlertsPerWeek(WEEKS),
       getAlerts({ kind, limit: all ? 1_000_000 : PAGE }),
+      getAlertOutcomes(),
+      getOutcomeSummary(),
     ]);
   } catch (err) {
     return <Empty>{(err as Error).message}</Empty>;
@@ -60,6 +64,7 @@ export default async function AlertsPage({
 
   const byKind = new Map(totals.byKind.map((k) => [k.kind, k]));
   const shown = kind ? byKind.get(kind)?.total ?? 0 : totals.total;
+  const noSeries = new Set(outcomeSummary.no_series);
 
   return (
     <div className="space-y-8">
@@ -69,7 +74,9 @@ export default async function AlertsPage({
         values are shares × the reported price.{" "}
         {totals.recorded_since
           ? `Participants, range and message text are logged for every alert since ${totals.recorded_since.slice(0, 10)}; earlier rows kept only the fields the cluster dedupe needed.`
-          : "Until the pipeline next runs, only the cluster dedupe rows exist here; from then on every kind is logged with its message text."}
+          : "Until the pipeline next runs, only the cluster dedupe rows exist here; from then on every kind is logged with its message text."}{" "}
+        Each alert also shows what its ticker did afterwards against SPY — the ticker&rsquo;s move,
+        not a trade&rsquo;s return.
       </p>
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -87,6 +94,8 @@ export default async function AlertsPage({
           );
         })}
       </section>
+
+      <OutcomeSummarySection summary={outcomeSummary} />
 
       <section>
         <SectionTitle
@@ -111,7 +120,11 @@ export default async function AlertsPage({
         {alerts.length ? (
           <ol className="space-y-2">
             {alerts.map((a) => (
-              <AlertRowCard key={a.id} alert={a} />
+              <AlertRowCard
+                key={a.id}
+                alert={a}
+                extra={<OutcomeLine alert={a} outcome={outcomes.get(a.id)} noSeries={noSeries} />}
+              />
             ))}
           </ol>
         ) : (

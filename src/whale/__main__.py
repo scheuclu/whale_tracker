@@ -105,6 +105,14 @@ def main(argv: list[str] | None = None) -> int:
     p_ialerts.add_argument("--show-message", action="store_true",
                            help="print the Telegram message each match would send")
 
+    p_prices = sub.add_parser(
+        "fetch-prices",
+        help="refresh daily closes for every alerted ticker and the benchmark, rebuild "
+             "the post-alert outcomes, and print the per-kind summary")
+    p_prices.add_argument("--budget-seconds", type=float, default=None,
+                          help="stop after this long; the next run continues "
+                               "(default: prices.budget_seconds)")
+
     args = parser.parse_args(argv)
     config = load_config()
 
@@ -199,6 +207,18 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     from . import query
+
+    if args.command == "fetch-prices":
+        from . import prices
+
+        conn = db.connect(config.db_path)
+        try:
+            result = prices.sync(conn, config, budget_seconds=args.budget_seconds)
+            print(f"prices: {result.summary()}")
+            query.print_outcome_summary(conn)
+        finally:
+            conn.close()
+        return 0
 
     if args.command == "tickers":
         query.top_tickers(config, args.since, args.by, args.limit)
