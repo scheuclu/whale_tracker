@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/seo";
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { getCoverage } from "@/lib/api-queries";
@@ -15,11 +15,12 @@ import { AgentAlternates } from "../agent-alternates";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
+export const metadata = pageMetadata({
   title: "Methodology",
   description:
     "Where the data comes from, why congressional amounts are ranges, how estimates, disclosure delays and insider values are computed, and what is not covered.",
-};
+  path: "/methodology",
+});
 
 /** `code` spans in the shared rule text become <code>; nothing else is markup. */
 function Prose({ text }: { text: string }) {
