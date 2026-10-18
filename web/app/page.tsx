@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getConsensusTickers, getPipeline, getTransactions } from "@/lib/queries";
+import { getBothSides, getSharedTickers, type BothSidesRow, type SharedTickers } from "@/lib/crossover-queries";
 import { memberHref, memberLabel, shortDate, usd } from "@/lib/format";
 import { Card, DivergingSplit, Empty, SectionTitle, StatTile } from "./charts";
 import {
@@ -9,6 +10,7 @@ import {
   OptionBadge,
   OwnerTag,
   PartyBadge,
+  ResponsiveTable,
   ScanTag,
   TickerChip,
 } from "./ui";
@@ -154,6 +156,103 @@ export default async function FeedPage({
           <Empty>No trades match this filter.</Empty>
         )}
       </section>
+
+      <BothSides />
     </div>
+  );
+}
+
+/** Trade-date window for the overlap. 30 days, not 90: this card wants both
+ *  sides moving at once, and Form 4's two-business-day deadline fills the
+ *  insider side immediately. */
+const BOTH_SIDES_DAYS = 30;
+
+/**
+ * Tickers a member of Congress and a corporate insider traded the same way
+ * inside the window. Two sets of books set beside each other — members from
+ * House and Senate disclosures, insiders from SEC Form 4s — and never summed:
+ * each count is that side's own aggregate, matched on the listed symbol alone.
+ * Fetches its own data so a fault in either set of tables stays in this card.
+ */
+async function BothSides() {
+  let rows: BothSidesRow[], shared: SharedTickers;
+  try {
+    [rows, shared] = await Promise.all([getBothSides(BOTH_SIDES_DAYS, 12), getSharedTickers(BOTH_SIDES_DAYS)]);
+  } catch (err) {
+    return (
+      <section>
+        <SectionTitle>Both sides</SectionTitle>
+        <Empty>{(err as Error).message}</Empty>
+      </section>
+    );
+  }
+  if (!rows.length) return null;
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+  return (
+    <section>
+      <SectionTitle
+        right={
+          <span className="text-[11px] text-muted-foreground">
+            last {BOTH_SIDES_DAYS} days · {plural(shared.tickers, "ticker")} traded by both,{" "}
+            {shared.same_direction} the same way
+          </span>
+        }
+      >
+        Both sides
+      </SectionTitle>
+      <ResponsiveTable>
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.06em] text-muted-foreground">
+              <th className="px-4 py-2.5 font-medium">Ticker</th>
+              <th className="px-4 py-2.5 font-medium">Direction</th>
+              <th className="px-4 py-2.5 text-right font-medium">Members</th>
+              <th className="px-4 py-2.5 text-right font-medium">Insiders</th>
+              <th className="px-4 py-2.5 font-medium">Issuer</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={`${r.ticker}-${r.direction}`} className="border-b border-border/50 last:border-0 hover:bg-muted/50">
+                <td className="px-4 py-2">
+                  <a
+                    href={`/tickers?t=${encodeURIComponent(r.ticker)}`}
+                    className="font-mono font-semibold hover:text-primary"
+                  >
+                    {r.ticker}
+                  </a>
+                </td>
+                <td className="px-4 py-2">
+                  <ActionBadge action={r.direction === "buy" ? "purchase" : "sale"} />
+                </td>
+                <td className="tabular px-4 py-2 text-right">
+                  <a href={`/tickers?t=${encodeURIComponent(r.ticker)}`} className="font-medium hover:text-primary">
+                    {plural(r.members, "member")}
+                  </a>
+                  <span className="text-muted-foreground"> · {plural(r.member_trades, "trade")}</span>
+                </td>
+                <td className="tabular px-4 py-2 text-right">
+                  <a href={`/insiders?t=${encodeURIComponent(r.ticker)}`} className="font-medium hover:text-primary">
+                    {plural(r.insiders, "insider")}
+                  </a>
+                  <span className="text-muted-foreground"> · {plural(r.insider_filings, "filing")}</span>
+                </td>
+                <td className="max-w-[18rem] truncate px-4 py-2 text-muted-foreground">
+                  {r.issuer_name ?? r.asset_name}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </ResponsiveTable>
+      <p className="mt-3 text-[11px] text-muted-foreground">
+        Two sets of books, never summed: members are distinct filers on House and Senate
+        disclosures, insiders are distinct primary reporting owners on SEC Form 4s, matched on
+        the listed symbol alone. Same direction, both inside the last {BOTH_SIDES_DAYS} days on
+        trade date. Form 4 is due in two business days and a member&apos;s report in 45, so the
+        member side of the most recent weeks is still arriving.
+      </p>
+    </section>
   );
 }
