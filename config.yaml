@@ -188,6 +188,33 @@ vision:
   # drains over a few runs instead of blocking one.
   budget_seconds: 480
 
+prices:
+  # Daily closes for every ticker an alert has named, plus SPY as the
+  # benchmark, so the /alerts page can say what the ticker did at +5, +20 and
+  # +60 trading days after each alert minus SPY over the same days. That is
+  # the only use: a descriptive measure of whether the alert rules carry any
+  # signal. It is never advice, and never a trade's return — congressional
+  # amounts are brackets, and nothing here touches one.
+  #
+  # The series is unofficial and key-less, and so can vanish without notice:
+  #   yahoo  Yahoo Finance's chart endpoint; split-adjusted closes. Answers a
+  #          descriptive User-Agent (whale-tracker/…) and 429s a bare one.
+  #   stooq  Stooq's daily CSV, the source issue #53 named. On 2026-10-18 it
+  #          served a JavaScript browser-verification page to every client
+  #          (stooq.com and stooq.pl alike), which the step reports as
+  #          `blocked` and never tries to solve; its documented daily hit
+  #          limit is reported as `throttled`.
+  # Yahoo is the default because it was the one that answered.
+  enabled: true
+  source: yahoo
+  # Seconds one poll run may spend fetching; 0 = no limit. Each ticker is
+  # refreshed once per UTC day (the 00:00 UTC run, after the close), the
+  # benchmark first, then any ticker never fetched, then the longest-unseen,
+  # at no more than two requests a second — about 25 s for 50 tickers. What
+  # the budget leaves behind is fetched on the next run, so a throttle or a
+  # short budget rotates through the list rather than starving its tail.
+  budget_seconds: 60
+
 insiders:
   # SEC Form 4: corporate officers, directors and 10% owners. Only open-market
   # or private purchases and sales (codes P and S in the non-derivative table)

@@ -20,19 +20,69 @@ export function StatTile({
   label,
   value,
   hint,
+  trend,
+  trendLabel,
 }: {
   label: string;
   value: string;
   hint?: string;
+  /** Per-period counts, oldest → newest; the last entry is the period `value` reports. */
+  trend?: number[];
+  /** Accessible description of the trend, e.g. "cluster alerts per week, last 8 weeks". */
+  trendLabel?: string;
 }) {
   return (
     <div className="glass rounded-2xl border border-border bg-card px-4 py-3.5">
       <div className="text-[11px] font-medium uppercase tracking-[0.07em] text-muted-foreground">
         {label}
       </div>
-      <div className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">{value}</div>
+      <div className="mt-1 flex items-end justify-between gap-3">
+        <div className="text-xl font-semibold tracking-tight sm:text-2xl">{value}</div>
+        {trend?.length ? <Sparkbars values={trend} label={trendLabel ?? label} /> : null}
+      </div>
       {hint ? <div className="mt-0.5 text-xs text-muted-foreground">{hint}</div> : null}
     </div>
+  );
+}
+
+/**
+ * The stat tile's trend: one thin column per period, the current period in
+ * the accent and the rest de-emphasised. Columns rather than a line because
+ * the series are small integer counts where most periods may be zero — a
+ * zero is drawn as a hairline at the baseline so "nothing" is visibly
+ * nothing, not missing. 2px surface gaps between fills; no per-mark labels
+ * (the tile's value carries the current figure).
+ */
+function Sparkbars({ values, label }: { values: number[]; label: string }) {
+  const max = Math.max(...values, 1);
+  const w = 4;
+  const gap = 2;
+  const h = 18;
+  return (
+    <svg
+      width={values.length * (w + gap) - gap}
+      height={h}
+      role="img"
+      aria-label={`${label}: ${values.join(", ")}`}
+      className="mb-1 shrink-0"
+    >
+      {values.map((v, i) => {
+        const bh = v > 0 ? Math.max((v / max) * h, 2) : 1;
+        const current = i === values.length - 1;
+        return (
+          <rect
+            key={i}
+            x={i * (w + gap)}
+            y={h - bh}
+            width={w}
+            height={bh}
+            rx={1}
+            fill={current ? "var(--viz-seq)" : "var(--viz-axis)"}
+            opacity={current ? 1 : v > 0 ? 0.45 : 0.25}
+          />
+        );
+      })}
+    </svg>
   );
 }
 

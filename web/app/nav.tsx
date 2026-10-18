@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
-import { Activity, Briefcase, Landmark, LineChart, Moon, Receipt, ScanLine, Sun } from "lucide-react";
+import { Activity, Bell, Briefcase, Landmark, LineChart, Moon, Receipt, ScanLine, Sun } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { revealOffset } from "@/lib/scroll-edges";
 import { ScrollX } from "./scroll-area";
@@ -16,6 +16,7 @@ const TABS = [
   { href: "/insiders", label: "Insiders", icon: Briefcase },
   { href: "/scans", label: "Scans", icon: ScanLine },
   { href: "/pipeline", label: "Pipeline", icon: Activity },
+  { href: "/alerts", label: "Alerts", icon: Bell },
 ];
 
 /**

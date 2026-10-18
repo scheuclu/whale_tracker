@@ -253,9 +253,12 @@ def test_without_a_user_agent_the_step_skips_itself(conn):
 
 def test_disabled_writes_nothing(conn):
     sec = Edgar().feed(*APPLE_ENTRIES)
+    # Compared against the state the schema migration left, not against an
+    # empty table: connecting writes the alert-log marker before any sync.
+    before = conn.execute("SELECT key, value FROM sync_state ORDER BY key").fetchall()
     insiders.sync(conn, _config(enabled=False), client=sec.client, today=TODAY)
     assert sec.requests == []
-    assert conn.execute("SELECT COUNT(*) FROM sync_state").fetchone()[0] == 0
+    assert conn.execute("SELECT key, value FROM sync_state ORDER BY key").fetchall() == before
 
 
 def test_time_budget_stops_the_run_gently(conn):
