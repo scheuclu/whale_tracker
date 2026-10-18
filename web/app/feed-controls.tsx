@@ -1,4 +1,4 @@
-import { Download } from "lucide-react";
+import { ChevronDown, Download } from "lucide-react";
 import { ASSET_TYPE_LABEL, OWNER_LABEL, range } from "@/lib/format";
 import {
   CHAMBERS,
@@ -11,6 +11,8 @@ import {
 } from "@/lib/feed-filters";
 import type { TransactionTotals } from "@/lib/queries";
 import { Card } from "./charts";
+import { cn } from "@/lib/utils";
+import { BUTTON, BUTTON_PRIMARY, FIELD, MoneyText } from "./ui";
 
 /**
  * The feed's filter bar and pagination. Plain GET forms and links: the
@@ -32,14 +34,10 @@ const SCANS_LABEL: Record<string, string> = {
   exclude: "Exclude transcribed scans",
 };
 
-const FIELD =
-  "h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground " +
-  "focus:border-primary/50 focus:outline-none";
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
   return (
-    <label className="flex flex-col gap-1 text-[11px] text-muted-foreground">
-      <span className="uppercase tracking-[0.06em]">{label}</span>
+    <label className={cn("flex min-w-0 flex-col gap-1.5", className)}>
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
       {children}
     </label>
   );
@@ -60,23 +58,33 @@ function Select({
   // the reference table omits) selectable, or the form would drop it.
   const known = options.some((o) => o.value === value);
   return (
-    <select name={name} defaultValue={value ?? ""} className={FIELD}>
-      <option value="">{any}</option>
-      {!known && value ? <option value={value}>{value}</option> : null}
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
+    <span className="relative flex">
+      <select name={name} defaultValue={value ?? ""} className={cn(FIELD, "cursor-pointer appearance-none pr-8")}>
+        <option value="">{any}</option>
+        {!known && value ? <option value={value}>{value}</option> : null}
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown
+        className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+        aria-hidden
+      />
+    </span>
   );
 }
 
 export function FilterBar({ filters, ignored }: { filters: TransactionFilters; ignored: string[] }) {
   const active = Object.keys(filters).filter((k) => k !== "action").length > 0;
   return (
-    <Card className="mb-4 px-4 py-3">
-      <form method="get" action="/" className="flex flex-wrap items-end gap-x-3 gap-y-2">
+    <Card className="mb-4 px-4 py-4 sm:px-5">
+      <form
+        method="get"
+        action="/"
+        className="grid grid-cols-2 items-end gap-x-3 gap-y-3 sm:grid-cols-4 lg:grid-cols-[repeat(4,minmax(0,1fr))_repeat(2,minmax(0,1.15fr))_minmax(0,1.75fr)_auto]"
+      >
         {/* The direction pills own this one; the form must not lose it. */}
         {filters.action ? <input type="hidden" name="action" value={filters.action} /> : null}
         {filters.ticker ? <input type="hidden" name="ticker" value={filters.ticker} /> : null}
@@ -113,12 +121,12 @@ export function FilterBar({ filters, ignored }: { filters: TransactionFilters; i
           />
         </Field>
         <Field label="Traded from">
-          <input type="date" name="from" defaultValue={filters.from ?? ""} className={FIELD} />
+          <input type="date" name="from" defaultValue={filters.from ?? ""} className={cn(FIELD, "tabular")} />
         </Field>
         <Field label="to">
-          <input type="date" name="to" defaultValue={filters.to ?? ""} className={FIELD} />
+          <input type="date" name="to" defaultValue={filters.to ?? ""} className={cn(FIELD, "tabular")} />
         </Field>
-        <Field label="Scans">
+        <Field label="Scans" className="col-span-2 sm:col-span-1">
           <Select
             name="scans"
             value={filters.transcribed}
@@ -126,25 +134,19 @@ export function FilterBar({ filters, ignored }: { filters: TransactionFilters; i
             options={TRANSCRIBED.map((t) => ({ value: t, label: SCANS_LABEL[t] }))}
           />
         </Field>
-        <div className="flex items-center gap-2">
-          <button
-            type="submit"
-            className="h-8 rounded-full border border-primary/40 bg-primary/10 px-3 text-xs font-medium text-foreground transition-colors hover:bg-primary/20"
-          >
+        <div className="col-span-2 flex items-center gap-2 sm:col-span-3 lg:col-span-1">
+          <button type="submit" className={BUTTON_PRIMARY}>
             Apply
           </button>
           {active ? (
-            <a
-              href={filters.action ? feedHref({ action: filters.action }) : "/"}
-              className="text-xs text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
-            >
+            <a href={filters.action ? feedHref({ action: filters.action }) : "/"} className={BUTTON}>
               Reset
             </a>
           ) : null}
         </div>
       </form>
       {ignored.length ? (
-        <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-400">
+        <p className="mt-3 text-xs text-attention">
           Ignored unrecognised filter{ignored.length === 1 ? "" : "s"}: {ignored.join(", ")}
         </p>
       ) : null}
@@ -173,7 +175,7 @@ export function ShownLine({
   const counted = all - totals.transcribed;
   return (
     <p className="mb-3 text-xs text-muted-foreground">
-      {span} · disclosed total {range(totals.volume_min, totals.volume_max)}
+      {span} · disclosed total <MoneyText value={range(totals.volume_min, totals.volume_max)} className="text-ink-2" />
       {shown === all ? "" : ` across all ${all.toLocaleString()}`}
       {totals.transcribed
         ? ` · ${totals.transcribed.toLocaleString()} transcribed from scans, not in the total (${counted.toLocaleString()} counted)`
@@ -188,7 +190,7 @@ export function ExportLink({ filters, className }: { filters: TransactionFilters
       href={exportHref(filters)}
       className={
         className ??
-        "inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        cn(BUTTON, "h-7 px-2.5 text-[11px]")
       }
       title="Every matching trade as CSV. Amounts are exported as min/max bracket columns."
       download
@@ -219,8 +221,7 @@ export function Pagination({
   const more = offset + shown < total;
   const newer = offset > 0;
   if (!more && !newer) return null;
-  const pill =
-    "rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground";
+  const pill = BUTTON;
   return (
     <nav className="mt-4 flex items-center justify-center gap-2" aria-label="Trade list pages">
       {newer ? (
@@ -230,7 +231,10 @@ export function Pagination({
       ) : null}
       {more ? (
         <a href={feedHref(filters, offset + page)} className={pill} rel="next">
-          Load more ({(total - offset - shown).toLocaleString()} older)
+          Load more
+          <span className="tabular font-normal text-muted-foreground">
+            ({(total - offset - shown).toLocaleString()} older)
+          </span>
         </a>
       ) : null}
     </nav>

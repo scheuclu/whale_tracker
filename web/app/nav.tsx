@@ -55,8 +55,8 @@ export function Tabs() {
   }, [pathname]);
 
   return (
-    <nav aria-label="Sections" className="glass w-fit max-w-full rounded-full border border-border bg-card">
-      <ScrollX viewportRef={viewport} viewportClassName="scrollbar-none flex gap-1 p-1">
+    <nav aria-label="Sections" className="min-w-0 max-w-full">
+      <ScrollX viewportRef={viewport} viewportClassName="scrollbar-none flex gap-0.5 px-0.5 pt-0.5">
         {TABS.map(({ href, label, icon: Icon }) => {
           const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
           return (
@@ -65,14 +65,35 @@ export function Tabs() {
               href={href}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors",
-                active
-                  ? "bg-primary/15 text-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                "group/tab relative flex h-10 shrink-0 items-center whitespace-nowrap px-1 pb-0.5 text-[13px] font-medium outline-none",
+                active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
               )}
             >
-              <Icon className={cn("size-3.5", active && "text-primary")} aria-hidden />
-              {label}
+              {/* The hover/focus/pressed surface is an inner box, so the active
+                  underline can run the tab's full width along the header's edge. */}
+              <span
+                className={cn(
+                  "flex items-center gap-1.5 rounded-control px-2.5 py-1.5 transition-[background-color,color] duration-(--dur) ease-(--ease-out)",
+                  "group-hover/tab:bg-secondary group-active/tab:bg-foreground/[0.08]",
+                  "group-focus-visible/tab:outline-solid group-focus-visible/tab:outline-2 group-focus-visible/tab:outline-ring"
+                )}
+              >
+                <Icon
+                  className={cn(
+                    "size-3.5 transition-colors duration-150",
+                    active ? "text-primary" : "text-muted-foreground group-hover/tab:text-foreground"
+                  )}
+                  aria-hidden
+                />
+                {label}
+              </span>
+              <span
+                aria-hidden
+                className={cn(
+                  "absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-primary transition-opacity duration-150",
+                  active ? "opacity-100" : "opacity-0"
+                )}
+              />
             </Link>
           );
         })}
@@ -89,7 +110,11 @@ export function ThemeToggle() {
   return (
     <button
       type="button"
-      className="group flex size-9 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+      className={cn(
+        "group flex size-8 shrink-0 items-center justify-center rounded-control text-muted-foreground",
+        "transition-[background-color,color] duration-(--dur) ease-(--ease-out) hover:bg-secondary hover:text-foreground active:bg-foreground/[0.1]",
+        "outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      )}
       aria-label={mounted ? `Switch to ${resolvedTheme === "dark" ? "light" : "dark"} theme` : "Toggle theme"}
       onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
     >
@@ -103,25 +128,105 @@ export function ThemeToggle() {
 
 /**
  * Global search: members, tickers and insider issuers. A plain GET form to
- * /search, so it works before hydration and the result is a URL.
+ * /search, so it works before hydration and the result is a URL. ⌘K / Ctrl K
+ * (and "/" outside a text field) focus it; the hint appears once hydrated,
+ * because the shortcut only exists then.
  */
 export function SearchForm({ className }: { className?: string }) {
+  const input = useRef<HTMLInputElement | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
+
+  useEffect(() => {
+    setHint(/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? "⌘K" : "Ctrl K");
+    const onKey = (e: KeyboardEvent) => {
+      const el = input.current;
+      if (!el) return;
+      const target = e.target as HTMLElement | null;
+      const typing = !!target?.closest("input, textarea, select, [contenteditable='true']");
+      if ((e.key === "k" || e.key === "K") && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey) {
+        e.preventDefault();
+        el.focus();
+        el.select();
+      } else if (e.key === "/" && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        el.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
-    <form
-      method="get"
-      action="/search"
-      role="search"
-      className={cn("glass relative flex items-center rounded-full border border-border bg-card", className)}
-    >
-      <Search className="pointer-events-none absolute left-3 size-3.5 text-muted-foreground" aria-hidden />
+    <form method="get" action="/search" role="search" className={cn("relative flex items-center", className)}>
+      <Search className="pointer-events-none absolute left-2.5 size-3.5 text-muted-foreground" aria-hidden />
       <input
+        ref={input}
         type="search"
         name="q"
         maxLength={80}
-        placeholder="Search member, ticker, issuer"
+        placeholder="Search members, tickers, issuers"
         aria-label="Search members, tickers and insider issuers"
-        className="h-8 w-44 rounded-full bg-transparent pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:w-64 focus:outline-none sm:w-56"
+        aria-keyshortcuts={hint ? "Meta+K Control+K /" : undefined}
+        className={cn(
+          "peer h-8 w-full rounded-control border border-border bg-card pl-8 pr-14 text-[13px] text-foreground",
+          "transition-[border-color,background-color,box-shadow] duration-(--dur) ease-(--ease-out) [&::-webkit-search-cancel-button]:hidden",
+          "placeholder:text-muted-foreground hover:border-border-strong focus:border-ring"
+        )}
       />
+      {hint ? (
+        <kbd
+          aria-hidden
+          className={cn(
+            "pointer-events-none absolute right-2 hidden h-5 items-center rounded-[5px] border border-border bg-[var(--card-solid)] px-1.5",
+            "font-sans text-[10.5px] font-medium text-muted-foreground sm:inline-flex",
+            "peer-focus:opacity-0 peer-[:not(:placeholder-shown)]:opacity-0"
+          )}
+        >
+          {hint}
+        </kbd>
+      ) : null}
     </form>
+  );
+}
+
+/**
+ * When the pipeline last wrote, as a quiet dot and a relative time; links to
+ * /pipeline. Past STALE_AFTER_HOURS the dot takes the attention colour and a screen reader
+ * hears "stale" — the colour is never the only signal.
+ */
+export function SyncStatus({
+  synced,
+  syncedAt,
+  tone,
+}: {
+  synced: string;
+  syncedAt: string | null;
+  tone: "fresh" | "stale" | "unknown";
+}) {
+  return (
+    <Link
+      href="/pipeline"
+      title={syncedAt ? `Last pipeline write: ${syncedAt} — open Pipeline` : "Open Pipeline"}
+      className={cn(
+        "inline-flex h-8 shrink-0 items-center gap-2 rounded-control px-2.5 text-xs text-muted-foreground",
+        "transition-[background-color,color] duration-(--dur) ease-(--ease-out) hover:bg-secondary hover:text-foreground active:bg-foreground/[0.08]",
+        "outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "size-1.5 shrink-0 rounded-full ring-[3px]",
+          tone === "fresh" && "bg-ok ring-ok-soft",
+          tone === "stale" && "bg-attention ring-attention-soft",
+          tone === "unknown" && "bg-muted-foreground ring-muted"
+        )}
+      />
+      <span className="tabular">
+        <span className="sr-only sm:not-sr-only">synced </span>
+        {synced}
+        {tone === "stale" ? <span className="text-attention"> · stale</span> : null}
+      </span>
+    </Link>
   );
 }

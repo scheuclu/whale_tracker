@@ -24,6 +24,7 @@
 
 import { useId } from "react";
 import { cn } from "@/lib/utils";
+import { MoneyText } from "./money";
 import { BRACKETS, bracketSpan } from "@/lib/feed";
 import { range } from "@/lib/format";
 
@@ -162,9 +163,10 @@ export function BracketAmount({
       title={bracketTitle(min, max, exact, scan)}
     >
       <BracketGlyph min={min} max={max} exact={exact} transcribed={scan} />
-      <span className={cn("tabular text-[13px]", scan && "text-amber-800 dark:text-amber-200")}>
-        {range(min, max, exact)}
-      </span>
+      <MoneyText
+        value={range(min, max, exact)}
+        className={cn("text-[13px]", scan && "text-amber-800 dark:text-amber-200")}
+      />
       {exact != null ? (
         <span className="rounded-sm border border-border px-1 text-[9.5px] font-medium uppercase tracking-wide text-muted-foreground">
           exact
