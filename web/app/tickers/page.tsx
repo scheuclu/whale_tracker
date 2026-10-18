@@ -17,11 +17,12 @@ import {
   VolumeRange,
 } from "../charts";
 import { ExportLink } from "../feed-controls";
-import { ActionBadge, Amount, DelayTag, OptionBadge, OwnerTag, PartyBadge, ResponsiveTable, RoleTag, ScanTag, SectorTag } from "../ui";
+import { ActionBadge, Amount, OptionBadge, OwnerTag, ResponsiveTable, RoleTag, SectorTag } from "../ui";
 import { ASSET_TYPE_LABEL } from "@/lib/format";
 import { getTimelineTrades, type TimelineTrade } from "@/lib/timeline-queries";
 import { TradeTimeline } from "../timeline";
-import { MemberAvatar } from "../avatar";
+import { TradeList, TradeRow } from "../trade-row";
+import { assetLabel } from "@/lib/asset-label";
 import { TickerMembers } from "./ticker-members";
 import {
   ROW_LIMITS,
@@ -188,7 +189,7 @@ export default async function TickersPage({
                 {header("asset", "Asset", { align: "left" })}
                 {header("members", "Members", { hint: "Distinct members who traded the ticker in the window." })}
                 {header("trades", "Trades")}
-                {header("buysell", "Buy / Sell", {
+                {header("buysell", "Buy / sell", {
                   hint: "Purchases / sales. Sorts by the share that are purchases; exchanges count as neither.",
                 })}
                 {header("volume", "Volume (est.)", {
@@ -211,7 +212,7 @@ export default async function TickersPage({
                     </a>
                   </td>
                   <td className="max-w-[10rem] truncate px-3 py-2 text-muted-foreground sm:max-w-[18rem]" title={r.asset_name ?? undefined}>
-                    {r.asset_name}
+                    {assetLabel(r.asset_name, { ticker: r.ticker }) || r.asset_name}
                   </td>
                   <td className="tabular px-3 py-2 text-right font-medium">{r.politicians}</td>
                   <td className="tabular px-3 py-2 text-right text-muted-foreground">{r.trades}</td>
@@ -415,39 +416,11 @@ async function TickerDetail({ ticker }: { ticker: string }) {
 
       <section>
         <SectionTitle right={<ExportLink filters={{ ticker }} />}>Every disclosed trade</SectionTitle>
-        <div className="space-y-1.5">
+        <TradeList>
           {trades.map((r) => (
-            <Card key={r.id} className="px-4 py-3">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                <ActionBadge action={r.action} />
-                <OptionBadge kind={r.option_kind} strikeCents={r.strike_cents} expiry={r.expiry} />
-                <Amount min={r.amount_min_cents} max={r.amount_max_cents} exact={r.amount_exact_cents} />
-                <SectorTag group={r.industry_group} sic={r.sic} description={r.sic_description} />
-                <a
-                  href={memberHref(r.member_name)}
-                  className="inline-flex items-center gap-2 text-[13px] font-medium hover:text-primary"
-                >
-                  <MemberAvatar name={r.member_name} bioguideId={r.bioguide_id} size="sm" />
-                  {memberLabel(r.member_name, null, r.state, r.district, r.chamber)}
-                </a>
-                <PartyBadge party={r.party} />
-                <OwnerTag owner={r.owner} />
-                <ScanTag transcribed={r.transcribed} docId={r.doc_id} />
-                <div className="flex-1" />
-                <span className="tabular text-xs text-muted-foreground">{shortDate(r.tx_date)}</span>
-                <DelayTag days={r.delay_days} inconsistent={r.dates_inconsistent} />
-                <a
-                  href={r.pdf_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-[11px] text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
-                >
-                  filing
-                </a>
-              </div>
-            </Card>
+            <TradeRow key={r.id} r={r} subject="member" />
           ))}
-        </div>
+        </TradeList>
       </section>
 
       <InsidersInIssuer ticker={ticker} />
@@ -466,7 +439,7 @@ async function TickerDetail({ ticker }: { ticker: string }) {
           <ResponsiveTable>
             <table className="w-full text-[13px]">
               <thead>
-                <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.06em] text-muted-foreground">
+                <tr className="border-b border-border text-left text-[12px] font-medium text-muted-foreground">
                   <th className="px-4 py-2.5 font-medium">Contract</th>
                   <th className="px-4 py-2.5 font-medium">Action</th>
                   <th className="px-4 py-2.5 font-medium">Member</th>
@@ -478,7 +451,7 @@ async function TickerDetail({ ticker }: { ticker: string }) {
               </thead>
               <tbody>
                 {optionTrades.map((r) => (
-                  <tr key={r.id} className="border-b border-border/50 last:border-0 hover:bg-muted/50">
+                  <tr key={r.id} className="border-b border-border/60 transition-colors duration-150 last:border-0 hover:bg-muted/60">
                     <td className="px-4 py-2">
                       <OptionBadge kind={r.option_kind} strikeCents={r.strike_cents} expiry={null} />
                     </td>

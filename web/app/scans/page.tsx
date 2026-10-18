@@ -63,7 +63,7 @@ export default async function ScansPage({
           <ResponsiveTable wrap>
             <table className="w-full text-[13px]">
               <thead>
-                <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.06em] text-muted-foreground">
+                <tr className="whitespace-nowrap border-b border-border text-left text-[12px] font-medium text-muted-foreground">
                   <th className="px-4 py-2.5 font-medium">Filing</th>
                   <th className="px-4 py-2.5 font-medium">Member</th>
                   <th className="px-4 py-2.5 font-medium">Filed</th>
@@ -77,7 +77,7 @@ export default async function ScansPage({
               </thead>
               <tbody>
                 {filings.map((f) => (
-                  <tr key={f.id} className="border-b border-border/50 last:border-0 hover:bg-muted/50">
+                  <tr key={f.id} className="border-b border-border/60 transition-colors duration-150 last:border-0 hover:bg-muted/60">
                     <td className="px-4 py-2 font-mono text-xs">
                       {f.pages ? (
                         <a href={`/scans/${encodeURIComponent(f.doc_id)}`} className="font-semibold hover:text-primary">
@@ -105,7 +105,7 @@ export default async function ScansPage({
                               : f.status
                           }
                         />
-                        <span className="text-[11px] text-muted-foreground">
+                        <span className="whitespace-nowrap text-[12px] text-muted-foreground">
                           {METHOD_LABEL[f.parse_method ?? ""] ?? f.parse_method}
                         </span>
                       </div>

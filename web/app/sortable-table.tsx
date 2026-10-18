@@ -14,11 +14,28 @@ import { SortLink } from "./table-client";
 /** Class for the `<table>` itself: hooks the sticky-header and row styles in globals.css. */
 export const DATA_TABLE = "data-table w-full text-[13px]";
 
-/** Class for the header `<tr>`. */
-export const HEAD_ROW = "text-left text-[11px] uppercase tracking-[0.06em] text-muted-foreground";
+/**
+ * Class for the header `<tr>`: 12px muted, sentence case, no tracking — the
+ * labels are written in sentence case at the call site and shown as written.
+ */
+export const HEAD_ROW = "text-left text-[12px] font-medium text-muted-foreground";
 
-/** Class for a body `<tr>` that links to a detail page. */
-export const BODY_ROW = "data-row border-b border-border/50 last:border-0";
+/**
+ * Class for a body `<tr>` that links to a detail page. Hairline rules, no
+ * zebra: every table on the site separates rows the same way. Keyboard focus
+ * on the row's own link lights the row the way a pointer hover does.
+ */
+export const BODY_ROW =
+  "data-row border-b border-border/60 last:border-0 has-[a:focus-visible]:bg-[color-mix(in_srgb,var(--foreground)_4.5%,transparent)]";
+
+/**
+ * The same header and row treatment for a plain `<table>` that is not a
+ * leaderboard (no sticky header, no row link): a hairline under the header,
+ * hairlines between rows, a quiet hover.
+ */
+export const PLAIN_HEAD_ROW = "border-b border-border text-left text-[12px] font-medium text-muted-foreground";
+export const PLAIN_BODY_ROW =
+  "border-b border-border/60 transition-colors duration-150 last:border-0 hover:bg-muted/60";
 
 /**
  * Builds the URL a header links to: the page's own parameters (window,
@@ -75,20 +92,22 @@ export function SortHeader<K extends string>({
         href={href}
         aria-describedby={hintId}
         className={cn(
-          "group/sort relative flex items-center gap-1 px-3 py-2.5 outline-none transition-colors",
-          "hover:text-foreground focus-visible:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset",
-          align === "right" ? "justify-end" : "justify-start",
+          "group/sort relative flex items-center gap-1 px-3 py-2.5 outline-none transition-colors duration-150",
+          "hover:text-foreground focus-visible:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+          // A right-aligned column puts its arrow before the label, so the
+          // label's right edge lines up with the figures beneath it.
+          align === "right" ? "flex-row-reverse justify-start" : "justify-start",
           active && "text-foreground"
         )}
       >
-        <span className={cn(hint && "underline decoration-dotted decoration-muted-foreground/50 underline-offset-[3px]")}>
+        <span className={cn(hint && "underline decoration-dotted decoration-muted-foreground/40 underline-offset-[4px]")}>
           {children}
         </span>
         <Icon
           aria-hidden
           className={cn(
-            "size-3 shrink-0 transition-opacity",
-            active ? "opacity-90" : "opacity-0 group-hover/sort:opacity-50 group-focus-visible/sort:opacity-50"
+            "size-3 shrink-0 transition-opacity duration-150",
+            active ? "text-primary" : "opacity-0 group-hover/sort:opacity-60 group-focus-visible/sort:opacity-60"
           )}
           strokeWidth={2.25}
         />
@@ -102,7 +121,7 @@ export function SortHeader<K extends string>({
             role="tooltip"
             className={cn(
               "pointer-events-none absolute top-full z-20 mt-1 w-64 rounded-lg border border-border bg-popover px-3 py-2",
-              "text-left text-[11.5px] font-normal normal-case leading-snug tracking-normal whitespace-normal text-popover-foreground shadow-lg",
+              "text-left text-[12px] font-normal normal-case leading-snug tracking-normal whitespace-normal text-popover-foreground shadow-md",
               "invisible opacity-0 transition-opacity delay-0 group-hover/sort:visible group-hover/sort:opacity-100 group-hover/sort:delay-300",
               "group-focus-visible/sort:visible group-focus-visible/sort:opacity-100",
               align === "right" ? "right-2" : "left-2"
@@ -165,13 +184,29 @@ export function BarCell({
       <span className="relative inline-block w-[4.5rem] py-0.5 pr-1.5 sm:w-[5.5rem]">
         {pct ? (
           // max(2px, …): the smallest nonzero value still leaves a visible edge.
-          <span aria-hidden className={cn("cell-bar", `bar-${tone}`)} style={{ width: `max(2px, ${pct}%)` }} />
+          <span
+            aria-hidden
+            className={cn("pointer-events-none absolute inset-y-0 right-0 rounded-[4px_1px_1px_4px]", BAR_TINT[tone])}
+            style={{ width: `max(2px, ${pct}%)` }}
+          />
         ) : null}
         <span className="relative">{children}</span>
       </span>
     </td>
   );
 }
+
+/**
+ * The bar tints: a step quieter than a chart mark (13% light, 17% dark), so a
+ * column of bars reads as texture behind the figures rather than as a second,
+ * louder number. The hues are the `--viz-*` roles; only the strength is set
+ * here.
+ */
+const BAR_TINT = {
+  seq: "bg-[color-mix(in_oklab,var(--viz-seq)_13%,transparent)] dark:bg-[color-mix(in_oklab,var(--viz-seq)_17%,transparent)]",
+  buy: "bg-[color-mix(in_oklab,var(--viz-buy)_13%,transparent)] dark:bg-[color-mix(in_oklab,var(--viz-buy)_17%,transparent)]",
+  sell: "bg-[color-mix(in_oklab,var(--viz-sell)_13%,transparent)] dark:bg-[color-mix(in_oklab,var(--viz-sell)_17%,transparent)]",
+} as const;
 
 /**
  * Buys and sells, printed as "12 / 30" with a two-segment bar after it:
@@ -265,21 +300,24 @@ export function TableFooter({
   allHref?: string;
 }) {
   return (
-    <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+    <p className="tabular mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground">
       <span>
         {shown < total ? `${shown} of ${total.toLocaleString()} ${noun}` : `All ${total.toLocaleString()} ${noun}`}, by{" "}
         {orderLabel}
       </span>
       {shown < total && moreHref ? (
-        <SortLink href={moreHref} jump={false} className="underline-offset-2 hover:text-primary hover:underline">
+        <SortLink href={moreHref} jump={false} className={FOOTER_LINK}>
           show {Math.min(total, 200)}
         </SortLink>
       ) : null}
       {shown < total && allHref ? (
-        <SortLink href={allHref} jump={false} className="underline-offset-2 hover:text-primary hover:underline">
+        <SortLink href={allHref} jump={false} className={FOOTER_LINK}>
           show all
         </SortLink>
       ) : null}
     </p>
   );
 }
+
+const FOOTER_LINK =
+  "rounded-sm text-foreground/80 underline decoration-border underline-offset-[3px] transition-colors duration-150 hover:text-primary hover:decoration-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
