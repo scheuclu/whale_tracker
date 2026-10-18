@@ -16,6 +16,7 @@ import { plural } from "@/lib/site";
 import { clip, pageMetadata } from "@/lib/seo";
 import { Card, ColumnSeries, Empty, SectionTitle, StatTile, VOLUME_NOTE } from "../charts";
 import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, ResponsiveTable, ScanTag, TickerChip } from "../ui";
+import { AssetName } from "../trade-row";
 import { MemberAvatar } from "../avatar";
 import { MemberBars } from "./member-bars";
 import { CHAMBER_LABEL, SeatTag } from "../members/[slug]/member-detail";
@@ -217,7 +218,7 @@ export default async function PoliticiansPage({
                 {header("member", "Member", { align: "left" })}
                 {header("trades", "Trades")}
                 {header("tickers", "Tickers")}
-                {header("buysell", "Buy / Sell", { hint: BUYSELL_HINT })}
+                {header("buysell", "Buy / sell", { hint: BUYSELL_HINT })}
                 {header("volume", "Volume (est.)", { hint: VOLUME_HINT })}
                 {header("delay", "Delay", { hint: DELAY_HINT })}
                 {header("late", "Late", { hint: LATE_HINT })}
@@ -421,7 +422,7 @@ async function CommitteeView({ id }: { id: string }) {
           <ResponsiveTable>
             <table className="w-full text-[13px]">
               <thead>
-                <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.06em] text-muted-foreground">
+                <tr className="border-b border-border text-left text-[12px] font-medium text-muted-foreground">
                   <th className="px-4 py-2.5 font-medium">Member</th>
                   <th className="px-4 py-2.5 font-medium">Seat</th>
                   <th className="px-4 py-2.5 text-right font-medium">Trades</th>
@@ -436,7 +437,7 @@ async function CommitteeView({ id }: { id: string }) {
                 {members.map((r) => (
                   <tr
                     key={r.bioguide_id ?? r.member_name}
-                    className="border-b border-border/50 last:border-0 hover:bg-muted/50"
+                    className="border-b border-border/60 transition-colors duration-(--dur-fast) last:border-0 hover:bg-raised"
                   >
                     <td className="px-4 py-2">
                       <div className="flex items-center gap-2">
@@ -652,7 +653,7 @@ async function LateView() {
         <ResponsiveTable className="mt-4">
           <table className="w-full text-[12px]">
             <thead>
-              <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.06em] text-muted-foreground">
+              <tr className="border-b border-border text-left text-[12px] font-medium text-muted-foreground">
                 <th className="py-1.5 pr-3 font-medium">Month filed</th>
                 <th className="py-1.5 pr-3 text-right font-medium">Filings</th>
                 <th className="py-1.5 pr-3 text-right font-medium">Trades</th>
@@ -703,7 +704,7 @@ async function LateView() {
         <ResponsiveTable>
           <table className="w-full text-[13px]">
             <thead>
-              <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.06em] text-muted-foreground">
+              <tr className="border-b border-border text-left text-[12px] font-medium text-muted-foreground">
                 <th className="px-4 py-2.5 font-medium">Member</th>
                 <th className="px-4 py-2.5 text-right font-medium">Trades</th>
                 <th className="px-4 py-2.5 text-right font-medium">Late</th>
@@ -716,7 +717,7 @@ async function LateView() {
             </thead>
             <tbody>
               {members.map((r) => (
-                <tr key={r.member_name} className="border-b border-border/50 last:border-0 hover:bg-muted/50">
+                <tr key={r.member_name} className="border-b border-border/60 transition-colors duration-(--dur-fast) last:border-0 hover:bg-raised">
                   <td className="px-4 py-2">
                     <div className="flex items-center gap-2">
                       <MemberAvatar name={r.member_name} bioguideId={r.bioguide_id} size="sm" />
@@ -816,9 +817,7 @@ async function LateView() {
                     />
                     <OwnerTag owner={r.owner} />
                     <ScanTag transcribed={r.transcribed} docId={r.doc_id} />
-                    <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">
-                      {r.asset_name}
-                    </span>
+                    <AssetName name={r.asset_name} ticker={r.ticker} className="flex-1 text-[13px]" />
                     <span className="tabular text-xs text-muted-foreground">
                       traded {shortDate(r.tx_date)}
                     </span>

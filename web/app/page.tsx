@@ -262,7 +262,7 @@ async function BothSides() {
       <ResponsiveTable>
         <table className="w-full text-[13px]">
           <thead>
-            <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.06em] text-muted-foreground">
+            <tr className="border-b border-border text-left text-[12px] font-medium text-muted-foreground">
               <th className="px-4 py-2.5 font-medium">Ticker</th>
               <th className="px-4 py-2.5 font-medium">Direction</th>
               <th className="px-4 py-2.5 text-right font-medium">Members</th>
@@ -272,7 +272,7 @@ async function BothSides() {
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={`${r.ticker}-${r.direction}`} className="border-b border-border/50 last:border-0 hover:bg-muted/50">
+              <tr key={`${r.ticker}-${r.direction}`} className="border-b border-border/60 transition-colors duration-(--dur-fast) last:border-0 hover:bg-raised">
                 <td className="px-4 py-2">
                   <a
                     href={tickerHref(r.ticker)}

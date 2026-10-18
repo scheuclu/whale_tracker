@@ -4,6 +4,7 @@ import { range, tickerHref, usd } from "@/lib/format";
 import { pageMetadata } from "@/lib/seo";
 import { Card, DivergingSplit, Empty, MagnitudeBars, SectionTitle, VOLUME_NOTE } from "../charts";
 import { ResponsiveTable } from "../ui";
+import { assetLabel } from "@/lib/asset-label";
 import {
   ROW_LIMITS,
   TICKER_SORT,
@@ -186,7 +187,7 @@ export default async function TickersPage({
                 {header("asset", "Asset", { align: "left" })}
                 {header("members", "Members", { hint: "Distinct members who traded the ticker in the window." })}
                 {header("trades", "Trades")}
-                {header("buysell", "Buy / Sell", {
+                {header("buysell", "Buy / sell", {
                   hint: "Purchases / sales. Sorts by the share that are purchases; exchanges count as neither.",
                 })}
                 {header("volume", "Volume (est.)", {
@@ -209,7 +210,7 @@ export default async function TickersPage({
                     </a>
                   </td>
                   <td className="max-w-[10rem] truncate px-3 py-2 text-muted-foreground sm:max-w-[18rem]" title={r.asset_name ?? undefined}>
-                    {r.asset_name}
+                    {assetLabel(r.asset_name, { ticker: r.ticker }) || r.asset_name}
                   </td>
                   <td className="tabular px-3 py-2 text-right font-medium">{r.politicians}</td>
                   <td className="tabular px-3 py-2 text-right text-muted-foreground">{r.trades}</td>

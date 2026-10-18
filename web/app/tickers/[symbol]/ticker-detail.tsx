@@ -1,17 +1,13 @@
 import { getTickerMembers, getTransactions, type TickerRow } from "@/lib/queries";
-import {
-  getInsiderIssuer,
-  getIssuerInsiders,
-  type IssuerInsiderRow,
-  type IssuerRow,
-} from "@/lib/insider-queries";
+import { getInsiderIssuer, getIssuerInsiders, type IssuerInsiderRow, type IssuerRow } from "@/lib/insider-queries";
 import { ASSET_TYPE_LABEL, memberHref, memberLabel, range, shortDate, usd } from "@/lib/format";
 import { Card, Empty, SectionTitle, StatTile, VolumeRange } from "../../charts";
 import { ExportLink } from "../../feed-controls";
-import { ActionBadge, Amount, DelayTag, OptionBadge, OwnerTag, PartyBadge, ResponsiveTable, RoleTag, ScanTag, SectorTag } from "../../ui";
+import { ActionBadge, Amount, OptionBadge, OwnerTag, ResponsiveTable, RoleTag, SectorTag } from "../../ui";
+import { TradeList, TradeRow } from "../../trade-row";
 import { getTimelineTrades, type TimelineTrade } from "@/lib/timeline-queries";
 import { TradeTimeline } from "../../timeline";
-import { MemberAvatar } from "../../avatar";
+
 import { TickerMembers } from "../ticker-members";
 
 /*
@@ -62,7 +58,7 @@ export async function TickerDetail({ stat }: { stat: TickerRow }) {
                 description={trades[0]?.sic_description}
               />
             </div>
-            <p className="mt-1.5 text-base text-foreground/80">{stat.asset_name}</p>
+            <p className="mt-1.5 text-base text-ink-2">{stat.asset_name}</p>
           </div>
           <FlowSplit
             buys={stat.buys}
@@ -117,39 +113,11 @@ export async function TickerDetail({ stat }: { stat: TickerRow }) {
 
       <section>
         <SectionTitle right={<ExportLink filters={{ ticker }} />}>Every disclosed trade</SectionTitle>
-        <div className="space-y-1.5">
+        <TradeList>
           {trades.map((r) => (
-            <Card key={r.id} className="px-4 py-3">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                <ActionBadge action={r.action} />
-                <OptionBadge kind={r.option_kind} strikeCents={r.strike_cents} expiry={r.expiry} />
-                <Amount min={r.amount_min_cents} max={r.amount_max_cents} exact={r.amount_exact_cents} />
-                <SectorTag group={r.industry_group} sic={r.sic} description={r.sic_description} />
-                <a
-                  href={memberHref(r.member_name, r.bioguide_id)}
-                  className="inline-flex items-center gap-2 text-[13px] font-medium hover:text-primary"
-                >
-                  <MemberAvatar name={r.member_name} bioguideId={r.bioguide_id} size="sm" />
-                  {memberLabel(r.member_name, null, r.state, r.district, r.chamber)}
-                </a>
-                <PartyBadge party={r.party} />
-                <OwnerTag owner={r.owner} />
-                <ScanTag transcribed={r.transcribed} docId={r.doc_id} />
-                <div className="flex-1" />
-                <span className="tabular text-xs text-muted-foreground">{shortDate(r.tx_date)}</span>
-                <DelayTag days={r.delay_days} inconsistent={r.dates_inconsistent} />
-                <a
-                  href={r.pdf_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-[11px] text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
-                >
-                  filing
-                </a>
-              </div>
-            </Card>
+            <TradeRow key={r.id} r={r} subject="member" />
           ))}
-        </div>
+        </TradeList>
       </section>
 
       <InsidersInIssuer ticker={ticker} />

@@ -1,17 +1,11 @@
-import {
-  getPoliticianCommittees,
-  getPoliticianSectors,
-  getPoliticianTickers,
-  getTransactions,
-  type CommitteeSeatRow,
-  type PoliticianDetail,
-} from "@/lib/queries";
+import { getPoliticianCommittees, getPoliticianSectors, getPoliticianTickers, getTransactions, type CommitteeSeatRow, type PoliticianDetail } from "@/lib/queries";
 import { getScanFilings } from "@/lib/scan-queries";
 import { MemberTimeline } from "../../timeline";
-import { committeeHref, memberHref, range, shortDate, tickerHref, usd } from "@/lib/format";
+import { committeeHref, memberHref, range, tickerHref, usd } from "@/lib/format";
 import { Card, DivergingSplit, Empty, MagnitudeBars, SectionTitle, StatTile, VOLUME_NOTE, VolumeRange } from "../../charts";
 import { ExportLink } from "../../feed-controls";
-import { ActionBadge, Amount, DelayTag, OwnerTag, ScanTag, SectorTag, TickerChip } from "../../ui";
+
+import { TradeList, TradeRow } from "../../trade-row";
 import { MemberHero } from "../../politicians/member-hero";
 
 /*
@@ -201,37 +195,11 @@ export async function MemberDetail({
                 ? `Newest ${trades.length} of ${matching} trades`
                 : `${trades.length} trades, newest first`}
             </p>
-            <div className="space-y-1.5">
+            <TradeList>
               {trades.map((r) => (
-                <Card key={r.id} className="px-4 py-3">
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                    <ActionBadge action={r.action} />
-                    <TickerChip ticker={r.ticker} type={r.asset_type} />
-                    <Amount
-                      min={r.amount_min_cents}
-                      max={r.amount_max_cents}
-                      exact={r.amount_exact_cents}
-                    />
-                    <SectorTag group={r.industry_group} sic={r.sic} description={r.sic_description} />
-                    <OwnerTag owner={r.owner} />
-                    <ScanTag transcribed={r.transcribed} docId={r.doc_id} />
-                    <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">
-                      {r.asset_name}
-                    </span>
-                    <span className="tabular text-xs text-muted-foreground">{shortDate(r.tx_date)}</span>
-                    <DelayTag days={r.delay_days} inconsistent={r.dates_inconsistent} />
-                    <a
-                      href={r.pdf_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-[11px] text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
-                    >
-                      filing
-                    </a>
-                  </div>
-                </Card>
+                <TradeRow key={r.id} r={r} subject="asset" />
               ))}
-            </div>
+            </TradeList>
           </>
         ) : (
           <Empty>No trades match this filter.</Empty>

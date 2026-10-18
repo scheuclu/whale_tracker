@@ -335,7 +335,7 @@ export default async function InsidersPage({
                     {issuerHeader("filings", "Filings", {
                       hint: "Stored Form 4s. Related parties filing separately still count twice here.",
                     })}
-                    {issuerHeader("buysell", "Buy / Sell", {
+                    {issuerHeader("buysell", "Buy / sell", {
                       hint: "Open-market purchases / sales. Sorts by the share that are purchases.",
                     })}
                     {issuerHeader("bought", "Bought", { hint: VALUE_HINT })}
