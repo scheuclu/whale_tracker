@@ -35,10 +35,16 @@ export function StickyThead({ children, className }: { children: React.ReactNode
     let mode: "css" | "shift" = "css";
 
     const place = () => {
-      if (mode !== "shift") return;
       const r = table.getBoundingClientRect();
       const shift = stickyShift({ top, tableTop: r.top, tableHeight: r.height, headHeight: thead.offsetHeight });
-      table.style.setProperty("--thead-shift", `${shift}px`);
+      if (mode === "shift") table.style.setProperty("--thead-shift", `${shift}px`);
+      // `data-stuck` while rows pass beneath the header: only then does it
+      // need an opaque surface. Otherwise it stays the card's own glass.
+      const stuck = shift > 0;
+      if (stuck !== ("stuck" in table.dataset)) {
+        if (stuck) table.dataset.stuck = "";
+        else delete table.dataset.stuck;
+      }
     };
 
     const measure = () => {
@@ -68,6 +74,7 @@ export function StickyThead({ children, className }: { children: React.ReactNode
       window.removeEventListener("resize", measure);
       ro?.disconnect();
       delete table.dataset.sticky;
+      delete table.dataset.stuck;
     };
   }, []);
 

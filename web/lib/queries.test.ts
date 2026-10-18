@@ -4,6 +4,9 @@ import { test } from "node:test";
 import * as q from "./queries.ts";
 import * as iq from "./insider-queries.ts";
 import * as sq from "./scan-queries.ts";
+import * as tq from "./trend-queries.ts";
+import { monthKeys } from "./months.ts";
+import * as xq from "./crossover-queries.ts";
 import * as aq from "./alert-queries.ts";
 import * as oq from "./outcome-queries.ts";
 
@@ -27,6 +30,28 @@ const calls: Array<[string, () => Promise<unknown>]> = [
   ["getSubcommittees", () => q.getSubcommittees("HSIF")],
   ["getCommitteeMembers", () => q.getCommitteeMembers("HSIF")],
   ["getTickerDetail", () => q.getTickerDetail("NVDA")],
+  [
+    "getTransactions(every filter)",
+    () =>
+      q.getTransactions({
+        action: "sell",
+        chamber: "house",
+        party: "D",
+        assetType: "ST",
+        owner: "SP",
+        from: "2026-01-01",
+        to: "2026-12-31",
+        transcribed: "exclude",
+        limit: 5,
+        offset: 5,
+      }),
+  ],
+  ["getTransactionTotals", () => q.getTransactionTotals()],
+  ["getTransactionTotals(filtered)", () => q.getTransactionTotals({ chamber: "senate", owner: "self" })],
+  ["searchMembers", () => q.searchMembers("Pelosi")],
+  ["searchRoster", () => q.searchRoster("Pelosi")],
+  ["searchTickers", () => q.searchTickers("NVDA")],
+  ["searchInsiderIssuers", () => iq.searchInsiderIssuers("NVDA")],
   ["getPoliticianSectors", () => q.getPoliticianSectors("Nancy Pelosi")],
   ["getSectorLeaderboard", () => q.getSectorLeaderboard(90)],
   ["getSectorLeaderboard(all)", () => q.getSectorLeaderboard()],
@@ -48,6 +73,20 @@ const calls: Array<[string, () => Promise<unknown>]> = [
   ["getScanFiling(page)", () => sq.getScanFiling("8221322", 2)],
   ["getScanTotals", () => sq.getScanTotals()],
   ["getScanPagePng", () => sq.getScanPagePng(1, 1)],
+  ["getMonthlyTrades", () => tq.getMonthlyTrades(12)],
+  ["getMonthlyDelay", () => tq.getMonthlyDelay(12)],
+  ["getRisingTickers", () => tq.getRisingTickers("2026-09", 5)],
+  ["getRisingTickers(malformed)", () => tq.getRisingTickers("2026-9", 5)],
+  ["getMonthlyScans", () => tq.getMonthlyScans(12)],
+  ["getInsiderMonthly", () => iq.getInsiderMonthly(12)],
+  // Cross-links (#54): the windowed lookups each detail page makes of the
+  // other side's tables, and the feed's overlap card.
+  ["getTickerDetail(90d)", () => q.getTickerDetail("NVDA", 90)],
+  ["getTickerMembers", () => q.getTickerMembers("NVDA", 90)],
+  ["getInsiderIssuer(90d)", () => iq.getInsiderIssuer("LEN", 90)],
+  ["getIssuerInsiders(90d)", () => iq.getIssuerInsiders("LEN", 90)],
+  ["getBothSides", () => xq.getBothSides(30, 5)],
+  ["getSharedTickers", () => xq.getSharedTickers(60)],
   ["getAlerts", () => aq.getAlerts({ limit: 5 })],
   ["getAlerts(cluster)", () => aq.getAlerts({ kind: "cluster", limit: 5 })],
   ["getAlertTotals", () => aq.getAlertTotals()],
@@ -67,6 +106,207 @@ for (const [name, run] of calls) {
 test("the insider totals are populated, not an error page", async () => {
   const t = await iq.getInsiderTotals();
   assert.ok(t.trades > 0, "insider_transactions is populated in the committed DB");
+});
+
+// --- feed filters ---------------------------------------------------------
+
+test("each feed filter narrows to rows that satisfy it", async () => {
+  const senate = await q.getTransactions({ chamber: "senate", limit: 50 });
+  assert.ok(senate.length > 0);
+  // The filter is on the filing's chamber; the row's is the roster's and may be unmatched.
+  for (const r of senate) assert.ok(r.chamber === "senate" || r.chamber == null, `${r.member_name} is ${r.chamber}`);
+
+  const dems = await q.getTransactions({ party: "D", limit: 50 });
+  assert.ok(dems.length > 0);
+  for (const r of dems) assert.equal(r.party, "D");
+
+  const spouse = await q.getTransactions({ owner: "SP", limit: 50 });
+  assert.ok(spouse.length > 0);
+  for (const r of spouse) assert.equal(r.owner, "SP");
+  const self = await q.getTransactions({ owner: "self", limit: 50 });
+  assert.ok(self.length > 0);
+  for (const r of self) assert.ok(r.owner == null || r.owner === "");
+
+  const stock = await q.getTransactions({ assetType: "GS", limit: 50 });
+  assert.ok(stock.length > 0);
+  for (const r of stock) assert.equal(r.asset_type, "GS");
+
+  const window = await q.getTransactions({ from: "2026-02-01", to: "2026-02-28", limit: 50 });
+  assert.ok(window.length > 0);
+  for (const r of window) assert.ok(r.tx_date! >= "2026-02-01" && r.tx_date! <= "2026-02-28", r.tx_date!);
+
+  const only = await q.getTransactions({ transcribed: "only", limit: 50 });
+  for (const r of only) assert.equal(r.transcribed, 1);
+  const none = await q.getTransactions({ transcribed: "exclude", limit: 50 });
+  assert.ok(none.length > 0);
+  for (const r of none) assert.equal(r.transcribed, 0);
+});
+
+test("offset pages through the same ordering without overlap", async () => {
+  const first = await q.getTransactions({ limit: 20 });
+  const second = await q.getTransactions({ limit: 20, offset: 20 });
+  const both = await q.getTransactions({ limit: 40 });
+  assert.deepEqual(
+    [...first, ...second].map((r) => r.id),
+    both.map((r) => r.id)
+  );
+});
+
+test("the totals describe the same rows the list does, as a bracket range", async () => {
+  for (const filters of [{}, { ticker: "NVDA" }, { chamber: "senate" as const, action: "buy" as const }]) {
+    const totals = await q.getTransactionTotals(filters);
+    const rows = await q.getTransactions({ ...filters, limit: 100_000 });
+    assert.equal(totals.trades, rows.length, JSON.stringify(filters));
+    assert.equal(
+      totals.transcribed,
+      rows.filter((r) => r.transcribed).length
+    );
+    // Floor and ceiling summed over the counted rows; NULL ceiling once any is open-ended.
+    const counted = rows.filter((r) => !r.transcribed);
+    const floor = counted.reduce((a, r) => a + (r.amount_min_cents ?? 0), 0);
+    const open = counted.some((r) => r.amount_max_cents == null && r.amount_exact_cents == null);
+    assert.equal(totals.volume_min, floor);
+    if (open) assert.equal(totals.volume_max, null);
+    else {
+      assert.equal(
+        totals.volume_max,
+        counted.reduce((a, r) => a + (r.amount_max_cents ?? r.amount_exact_cents ?? 0), 0)
+      );
+      assert.ok(totals.volume_mid <= totals.volume_max!);
+    }
+    assert.ok(totals.volume_mid >= totals.volume_min);
+  }
+});
+
+// --- search -----------------------------------------------------------------
+
+test("search finds a member, a ticker and an insider issuer", async () => {
+  const members = await q.searchMembers("pelosi");
+  assert.ok(members.some((m) => m.member_name === "Nancy Pelosi"), JSON.stringify(members));
+  assert.ok(members.every((m) => m.trades > 0));
+  // She has trades, so she is not in the roster-only list.
+  const roster = await q.searchRoster("pelosi");
+  assert.ok(!roster.some((r) => r.full_name === "Nancy Pelosi"));
+
+  const tickers = await q.searchTickers("nvda");
+  assert.equal(tickers[0]?.ticker, "NVDA", "exact symbol ranks first");
+  const byName = await q.searchTickers("nvidia");
+  assert.ok(byName.some((t) => t.ticker === "NVDA"), "asset name matches too");
+
+  const issuers = await iq.searchInsiderIssuers("nvda");
+  assert.equal(issuers[0]?.ticker, "NVDA", JSON.stringify(issuers));
+  assert.ok(issuers[0].insiders > 0 && issuers[0].filings > 0);
+});
+
+test("LIKE wildcards in a query are literal", () => {
+  assert.equal(q.likePattern("a%b_c\\d"), "%a\\%b\\_c\\\\d%");
+});
+
+
+// The monthly series are dense and end in the current month: a quiet month
+// is a zero row, never a missing slot, and the window never names a month
+// the database considers not to have started.
+test("every monthly series has one row per month of the window, in order", async () => {
+  const keys = monthKeys(12);
+  const [trades, delay, insiders, scans] = await Promise.all([
+    tq.getMonthlyTrades(12),
+    tq.getMonthlyDelay(12),
+    iq.getInsiderMonthly(12),
+    tq.getMonthlyScans(12),
+  ]);
+  for (const rows of [trades, delay.months, insiders, scans]) {
+    assert.deepEqual(
+      rows.map((r) => r.month),
+      keys
+    );
+  }
+});
+
+// The overlap card sets two sets of books beside each other and must never
+// mix them: each count on a row has to be exactly what that side's own page
+// reports for the same ticker and window. If the insider join ever leaked
+// into the member count (or vice versa) these would drift apart.
+test("both sides reports each side's own aggregate, matched on listed symbols", async () => {
+  const days = 30;
+  const [rows, shared] = await Promise.all([xq.getBothSides(days, 100), xq.getSharedTickers(days)]);
+  assert.ok(shared.tickers >= shared.same_direction, "same-direction overlap is a subset of the overlap");
+  if (rows.length < 100) {
+    assert.equal(new Set(rows.map((r) => r.ticker)).size, shared.same_direction);
+  }
+  for (const r of rows) {
+    assert.ok(r.direction === "buy" || r.direction === "sell", `direction ${r.direction}`);
+    assert.ok(r.members >= 1 && r.insiders >= 1, `${r.ticker}: both sides present`);
+    assert.ok(r.ticker.trim() !== "", "matched on a listed symbol");
+
+    const stat = await q.getTickerDetail(r.ticker, days);
+    assert.ok(stat, `${r.ticker}: the ticker page finds the same window`);
+    assert.equal(
+      r.members,
+      r.direction === "buy" ? stat.buy_politicians : stat.sell_politicians,
+      `${r.ticker} ${r.direction}: member count is the ticker page's own figure`
+    );
+
+    const owners = await iq.getIssuerInsiders(r.ticker, days);
+    assert.equal(
+      r.insiders,
+      owners.filter((o) => (r.direction === "buy" ? o.buys : o.sells) > 0).length,
+      `${r.ticker} ${r.direction}: insider count is the issuer page's own figure`
+    );
+  }
+});
+
+test("the party split and the direction split both add up", async () => {
+  const rows = await tq.getMonthlyTrades(12);
+  assert.ok(rows.some((r) => r.trades > 0), "the window has trades");
+  for (const r of rows) {
+    assert.equal(r.buy_d + r.buy_r + r.buy_other, r.buys, `${r.month} buys by party`);
+    assert.equal(r.sell_d + r.sell_r + r.sell_other, r.sells, `${r.month} sells by party`);
+    // Exchanges and unknown actions are in the total, in neither direction.
+    assert.ok(r.buys + r.sells <= r.trades, `${r.month} directions within total`);
+  }
+});
+
+test("the delay quantiles are ordered and present exactly when a month has measurable trades", async () => {
+  const { months, overall } = await tq.getMonthlyDelay(12);
+  for (const m of months) {
+    if (m.n === 0) {
+      assert.equal(m.median, null, `${m.month} median`);
+      assert.equal(m.p90, null, `${m.month} p90`);
+    } else {
+      assert.ok(m.median != null && m.p90 != null, `${m.month} quantiles`);
+      assert.ok(m.median <= m.p90, `${m.month} median ${m.median} <= p90 ${m.p90}`);
+      assert.ok(m.late <= m.n, `${m.month} late within n`);
+    }
+  }
+  assert.ok(overall.n > 0 && overall.median != null && overall.p90 != null);
+  assert.ok(overall.median <= overall.p90);
+});
+
+test("a rising ticker gained members, and its direction counts are within its member count", async () => {
+  const rows = await tq.getRisingTickers("2026-09", 10);
+  for (const r of rows) {
+    assert.equal(r.gain, r.members - r.prev_members);
+    assert.ok(r.gain > 0, `${r.ticker} gained`);
+    assert.ok(r.buy_members <= r.members && r.sell_members <= r.members, `${r.ticker} directions`);
+  }
+});
+
+test("the insider monthly values are exact-but-computed: an unpriced row is in trades, in no value", async () => {
+  const rows = await iq.getInsiderMonthly(12);
+  for (const r of rows) {
+    assert.equal(r.buys + r.sells, r.trades, `${r.month} only P and S rows are stored`);
+    assert.ok(r.unpriced <= r.trades);
+    assert.ok(r.buy_value >= 0 && r.sell_value >= 0);
+  }
+});
+
+test("the overlap window is bounded at today, like every other window", async () => {
+  // A handful of filings carry a mistyped future trade date. `sinceClause`
+  // excludes them, so widening the window never pulls in a trade that has
+  // not happened yet: the 60-day overlap can only grow by adding past days.
+  const [d30, d60] = await Promise.all([xq.getSharedTickers(30), xq.getSharedTickers(60)]);
+  assert.ok(d60.tickers >= d30.tickers);
+  assert.ok(d60.same_direction >= d30.same_direction);
 });
 
 // --- scans, one page at a time (#62) ----------------------------------------

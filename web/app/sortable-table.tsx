@@ -134,10 +134,14 @@ export function PlainHeader({
 }
 
 /**
- * A number with a quiet magnitude bar beside it. The bar is scaled to `max`
- * — the largest value in the whole result, not the rows on screen, so a
- * bar means the same length whichever way the table is sorted. The printed
- * value is the datum; the bar only helps the eye compare down the column.
+ * A number with a magnitude bar behind it: a light tint anchored at the
+ * right edge, where the right-aligned figures line up, growing left over a
+ * fixed width, so every row shares one baseline and one scale. Linear from
+ * zero and scaled to `max` — the largest value in the whole result, not the
+ * rows on screen — so a bar means the same length whichever way the table is
+ * sorted. There is no empty track: a small value is a sliver under its own
+ * number, and an empty or unknown one has no mark at all (an empty bar would
+ * read as a measured zero). The printed value is the datum.
  */
 export function BarCell({
   value,
@@ -155,18 +159,15 @@ export function BarCell({
   tone?: "seq" | "buy" | "sell";
   className?: string;
 }) {
-  const pct = value && max > 0 ? Math.min(100, Math.max(2, (value / max) * 100)) : 0;
+  const pct = value && value > 0 && max > 0 ? Math.min(100, (value / max) * 100) : 0;
   return (
     <td className={cn("tabular px-3 py-2 text-right", className)} title={title}>
-      <span className="inline-flex items-center justify-end gap-2">
-        {/* No track at all for an empty or unknown value: an empty bar would read as a measured zero. */}
-        <span
-          aria-hidden
-          className={cn("block h-1.5 w-8 overflow-hidden rounded-[2px] sm:w-10 lg:w-12", pct ? "bar-track" : "invisible")}
-        >
-          {pct ? <span className={cn("bar-fill block h-full", `bar-${tone}`)} style={{ width: `${pct}%` }} /> : null}
-        </span>
-        <span className="min-w-[2.75rem]">{children}</span>
+      <span className="relative inline-block w-[4.5rem] py-0.5 pr-1.5 sm:w-[5.5rem]">
+        {pct ? (
+          // max(2px, …): the smallest nonzero value still leaves a visible edge.
+          <span aria-hidden className={cn("cell-bar", `bar-${tone}`)} style={{ width: `max(2px, ${pct}%)` }} />
+        ) : null}
+        <span className="relative">{children}</span>
       </span>
     </td>
   );
