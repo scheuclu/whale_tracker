@@ -35,6 +35,7 @@ import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, ResponsiveTable, S
 import { MemberAvatar } from "../avatar";
 import { MemberBars } from "./member-bars";
 import { MemberHero } from "./member-hero";
+import { AgentAlternates } from "../agent-alternates";
 import { POLITICIAN_SORT, isDefaultSort, parseSort, type PoliticianSortKey } from "@/lib/table-sort";
 import { BODY_ROW, BarCell, DATA_TABLE, HEAD_ROW, LateCell, SortHeader, SplitCell, sortHref } from "../sortable-table";
 import { RowLinkBody, StickyThead } from "../table-client";
@@ -287,6 +288,7 @@ async function MemberDetail({ member, action }: { member: string; action?: strin
 
   return (
     <div className="space-y-8">
+      <AgentAlternates member={detail.bioguide_id} />
       <div className="space-y-3">
         <a href="/politicians" className="text-xs text-muted-foreground hover:text-primary">
           ← all members

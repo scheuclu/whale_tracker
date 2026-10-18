@@ -46,6 +46,7 @@ export function SiteFooter() {
             Pipeline status and coverage
             <ArrowRight className="size-3" aria-hidden />
           </Link>
+          <Link href="/methodology" className="flex items-center gap-1 font-medium text-foreground/80 transition-colors hover:text-primary">Methodology and how to quote the data<ArrowRight className="size-3" aria-hidden /></Link>
         </div>
 
         <div>

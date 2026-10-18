@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { WhaleMark, Wordmark } from "./brand";
 import { HeaderShell } from "./header-shell";
 import { SiteFooter } from "./site-footer";
+import { AgentAlternates } from "./agent-alternates";
 import { getPipeline } from "@/lib/queries";
 import { getInsiderTotals } from "@/lib/insider-queries";
 import { relativeTime } from "@/lib/format";
@@ -77,6 +78,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       className={`${geist.variable} ${geistMono.variable}`}
     >
       <body className="min-h-screen bg-background font-sans text-foreground antialiased">
+        <AgentAlternates site />
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <HeaderShell>
             <div className="site-header-top mx-auto flex max-w-6xl items-center gap-3 px-4 pt-4 sm:px-6">
