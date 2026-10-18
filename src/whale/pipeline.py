@@ -14,7 +14,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import date
 
-from . import (db, house, insider_alerts, insiders, issuers, options, prices, roster, senate,
+from . import (db, digest, house, insider_alerts, insiders, issuers, options, prices, roster, senate,
                senate_ptr, stats, telegram)
 from .amounts import parse_amount
 from .config import Config
@@ -36,6 +36,7 @@ def run(config: Config, dry_run: bool = False) -> None:
         tally.alerts_sent += notify_clusters(conn, config, dry_run=dry_run)
         tally.insiders_stored = _sync_insiders(conn, config)
         tally.alerts_sent += notify_insiders(conn, config, dry_run=dry_run)
+        digest.scheduled(conn, config, dry_run=dry_run)
         _sync_prices(conn, config, dry_run=dry_run)
         _classify_issuers(conn, config)
         tally.outcome = "ok"

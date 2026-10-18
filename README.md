@@ -60,6 +60,8 @@ NVDA         12      30      12/18          $3.5M   $1.2M–$5.8M
 - `python -m whale classify-issuers [--budget-seconds 600]` — fetch EDGAR SIC
   codes for every traded ticker and Form 4 issuer and fold them into industry
   groups (the poll run does this on its own; see *Industry groups*)
+- `python -m whale digest [--dry-run] [--days 7]` — the week in one Telegram
+  message; `--dry-run` prints it and records nothing
 - `python -m whale status` — ingestion and coverage
 - `python -m whale audit` — data-integrity and pipeline-health report
 
@@ -129,6 +131,46 @@ watchlist:
     bioguide_id: P000197     # authoritative; `name` is the fallback
     every_trade: true
 ```
+
+**Weekly digest** — the week in one message, sent by the poll run on the first
+run after Monday 07:00 UTC when `telegram.digest: true` in `config.yaml` (off
+by default). Filings and trades by chamber, the tickers more than one member
+touched with buyers and sellers apart, the largest equity trades as the
+brackets they were filed in, who filed past the 45-day deadline, what was
+sent, insider clusters and the largest insider buys (shares × reported
+price), the scans by outcome, the pipeline's health in a line, and links to
+the dashboard:
+
+```
+📬 Weekly digest · 2026-10-11 → 2026-10-18
+
+Congress
+House 11 filings · 112 trades (+1 queued) — Senate 0 filings · 0 trades
+55 buys · 56 sells · volume $3.1M–$7.9M (est. mid $5.5M)
+Most members: HD 2 (2 sell)
+Largest equity trades, as filed:
+🔴 SELL DVN $50k–$100k — Rep. Kevin Hern (R-OK1)
+...
+Filed past 45 days: none
+Sent: 11 filing alerts · 4 congressional cluster · 3 insider cluster · 27 insider alerts
+
+Insiders (Form 4) · values are shares × reported price
+372 filings stored · 122 buys $366.3M · 1029 sells $1677.2M
+Clusters (7d): 8 sold LQDA ($2.9M) · 7 sold FERG ($7.1M) · +8 more
+Largest buys, one filing each:
+🟢 SAFX $142.1M — EEME Energy SPV I, LLC
+...
+
+Scans 30 transcribed · 8 refused · 14 waiting · 7 Senate paper
+Pipeline Senate ok · EDGAR ok · 14 queued
+```
+
+A congressional total is the sum of the disclosed brackets with its midpoint
+labelled as the estimate it is, or `≥floor` when the open-ended top bracket is
+in it; transcribed rows count as trades and never as money. The week sent is
+recorded in `sync_state.digest_sent_week`, so a late Monday run catches up and
+a second run does not repeat it. `python -m whale digest --dry-run` previews
+the message at any time without recording anything.
 
 Watched filings also ignore `ingest.max_filing_age_days` — that cutoff exists
 to stop a first run replaying a year of everyone's history, and a member named
