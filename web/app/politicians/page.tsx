@@ -1,18 +1,23 @@
 import {
   STOCK_ACT_DEADLINE_DAYS,
+  getCommittee,
+  getCommitteeMembers,
   getLateFilings,
   getLateMembers,
   getLateMonthly,
   getLateTotals,
+  getPoliticianCommittees,
   getPoliticianDetail,
   getPoliticianSectors,
   getPoliticianTickers,
   getPoliticianTotals,
   getPoliticians,
+  getSubcommittees,
   getTransactions,
+  type CommitteeSeatRow,
 } from "@/lib/queries";
 import { getScanFilings } from "@/lib/scan-queries";
-import { memberHref, range, shortDate, usd } from "@/lib/format";
+import { committeeHref, memberHref, range, shortDate, usd } from "@/lib/format";
 import {
   Card,
   ColumnSeries,
@@ -37,11 +42,12 @@ const TRADE_PAGE = 300;
 export default async function PoliticiansPage({
   searchParams,
 }: {
-  searchParams: Promise<{ m?: string; action?: string; view?: string }>;
+  searchParams: Promise<{ m?: string; action?: string; committee?: string; view?: string }>;
 }) {
   const params = await searchParams;
   if (params.m) return <MemberDetail member={params.m} action={params.action} />;
   if (params.view === "late") return <LateView />;
+  if (params.committee) return <CommitteeView id={params.committee} />;
 
   let rows, totals;
   try {
@@ -196,14 +202,15 @@ const FILTERS = [
 ];
 
 async function MemberDetail({ member, action }: { member: string; action?: string }) {
-  let detail, tickers, trades, scans, sectors;
+  let detail, tickers, trades, scans, sectors, committees;
   try {
-    [detail, tickers, trades, scans, sectors] = await Promise.all([
+    [detail, tickers, trades, scans, sectors, committees] = await Promise.all([
       getPoliticianDetail(member),
       getPoliticianTickers(member, 40),
       getTransactions({ member, action, limit: TRADE_PAGE }),
       getScanFilings({ member }),
       getPoliticianSectors(member),
+      getPoliticianCommittees(member),
     ]);
   } catch (err) {
     return <Empty>{(err as Error).message}</Empty>;
@@ -273,6 +280,8 @@ async function MemberDetail({ member, action }: { member: string; action?: strin
           ) : null}
         </p>
       </div>
+
+      {committees.length ? <MemberCommittees seats={committees} /> : null}
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile
@@ -481,6 +490,310 @@ function MemberSectors({
         </p>
       </Card>
     </section>
+  );
+}
+
+/* ------------------------------------------------------------- committees */
+
+const CHAMBER_LABEL: Record<string, string> = { house: "House", senate: "Senate", joint: "Joint" };
+
+/** How a seat is held: leadership title, side and seniority as the source lists them. */
+function SeatTag({
+  seat,
+}: {
+  seat: Pick<CommitteeSeatRow, "rank" | "side" | "title" | "seat_chamber">;
+}) {
+  return (
+    <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground">
+      {seat.title ? (
+        <span className="rounded bg-muted px-1.5 py-px text-[10px] font-medium text-foreground/80">
+          {seat.title}
+        </span>
+      ) : null}
+      {seat.side ? (
+        <span>
+          {seat.side}
+          {seat.rank != null ? ` · rank ${seat.rank}` : ""}
+        </span>
+      ) : null}
+      {seat.seat_chamber ? <span>· for the {CHAMBER_LABEL[seat.seat_chamber] ?? seat.seat_chamber}</span> : null}
+    </span>
+  );
+}
+
+/**
+ * The member's seats in the current Congress: each full committee with the
+ * subcommittees under it the member also sits on. A subcommittee seat whose
+ * parent the member is not listed on (some ex officio seats) still shows
+ * under the parent's name, so nothing the source has is dropped.
+ */
+function MemberCommittees({ seats }: { seats: CommitteeSeatRow[] }) {
+  const groups = new Map<
+    string,
+    { id: string; name: string; seat: CommitteeSeatRow | null; subs: CommitteeSeatRow[] }
+  >();
+  for (const s of seats) {
+    const key = s.parent_id ?? s.thomas_id;
+    const g = groups.get(key) ?? { id: key, name: s.parent_name ?? s.name, seat: null, subs: [] };
+    if (s.parent_id) g.subs.push(s);
+    else g.seat = s;
+    groups.set(key, g);
+  }
+  return (
+    <section>
+      <SectionTitle
+        right={
+          <span className="text-[11px] text-muted-foreground">
+            current Congress · {groups.size} committee{groups.size === 1 ? "" : "s"}
+          </span>
+        }
+      >
+        Committees
+      </SectionTitle>
+      <Card className="p-0">
+        <ul className="divide-y divide-border/50">
+          {[...groups.values()].map((g) => (
+            <li key={g.id} className="px-4 py-2.5">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
+                <a href={committeeHref(g.id)} className="font-medium hover:text-primary">
+                  {g.name}
+                </a>
+                {g.seat ? <SeatTag seat={g.seat} /> : null}
+              </div>
+              {g.subs.length ? (
+                <ul className="mt-1 space-y-0.5 pl-4 text-[12px]">
+                  {g.subs.map((s) => (
+                    <li key={s.thomas_id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                      <a
+                        href={committeeHref(s.thomas_id)}
+                        className="text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
+                      >
+                        {s.name}
+                      </a>
+                      <SeatTag seat={s} />
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      </Card>
+    </section>
+  );
+}
+
+/** One committee's roster with each seat holder's trading totals (`?committee=HSIF`). */
+async function CommitteeView({ id }: { id: string }) {
+  let committee, members, subs;
+  try {
+    [committee, members, subs] = await Promise.all([
+      getCommittee(id),
+      getCommitteeMembers(id),
+      getSubcommittees(id),
+    ]);
+  } catch (err) {
+    return <Empty>{(err as Error).message}</Empty>;
+  }
+  if (!committee) {
+    return (
+      <Empty>
+        No committee {id}. Committee rosters are loaded with the pipeline&rsquo;s roster
+        refresh.{" "}
+        <a href="/politicians" className="underline underline-offset-2 hover:text-primary">
+          All members
+        </a>
+      </Empty>
+    );
+  }
+
+  // Totals over every seat, which is the whole set for this committee — not
+  // a rendered slice.
+  const traders = members.filter((m) => m.trades > 0).length;
+  const majority = members.filter((m) => m.side === "majority").length;
+  const minority = members.filter((m) => m.side === "minority").length;
+  const volume = members.reduce((s, m) => s + m.volume_mid, 0);
+  const late = members.reduce((s, m) => s + m.late_count, 0);
+  const transcribed = members.reduce((s, m) => s + m.transcribed, 0);
+  const kind = committee.parent_id ? "subcommittee" : "committee";
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <a href="/politicians" className="text-xs text-muted-foreground hover:text-primary">
+          ← all members
+        </a>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight">{committee.name}</h1>
+        <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+          <span>
+            {CHAMBER_LABEL[committee.chamber] ?? committee.chamber} {kind}
+          </span>
+          {committee.parent_id ? (
+            <a
+              href={committeeHref(committee.parent_id)}
+              className="underline-offset-2 hover:text-primary hover:underline"
+            >
+              · of {committee.parent_name ?? committee.parent_id}
+            </a>
+          ) : null}
+          <span className="font-mono text-xs">· {committee.thomas_id}</span>
+          {committee.url ? (
+            <a
+              href={committee.url}
+              target="_blank"
+              rel="noreferrer"
+              className="underline-offset-2 hover:text-primary hover:underline"
+            >
+              · committee site
+            </a>
+          ) : null}
+        </p>
+        {committee.jurisdiction ? (
+          <p className="mt-3 max-w-3xl text-sm text-muted-foreground">
+            {committee.jurisdiction}
+            {committee.jurisdiction_source ? (
+              <>
+                {" "}
+                <a
+                  href={committee.jurisdiction_source}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline-offset-2 hover:text-primary hover:underline"
+                >
+                  source
+                </a>
+              </>
+            ) : null}
+          </p>
+        ) : null}
+      </div>
+
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatTile
+          label="Members"
+          value={String(members.length)}
+          hint={`${majority} majority · ${minority} minority`}
+        />
+        <StatTile label="With disclosed trades" value={String(traders)} hint="any counted trade" />
+        <StatTile
+          label="Volume (est.)"
+          value={usd(volume)}
+          hint={
+            transcribed
+              ? `bracket midpoints · ${transcribed} transcribed row${transcribed === 1 ? "" : "s"} not counted`
+              : "bracket midpoints, all members"
+          }
+        />
+        <StatTile label="Late disclosures" value={String(late)} hint="past 45 days" />
+      </section>
+
+      {subs.length ? (
+        <section>
+          <SectionTitle>Subcommittees</SectionTitle>
+          <Card className="p-0">
+            <ul className="divide-y divide-border/50 text-[13px]">
+              {subs.map((s) => (
+                <li key={s.thomas_id} className="flex items-center justify-between gap-3 px-4 py-2">
+                  <a href={committeeHref(s.thomas_id)} className="font-medium hover:text-primary">
+                    {s.name}
+                  </a>
+                  <span className="tabular text-[11px] text-muted-foreground">
+                    {s.members} member{s.members === 1 ? "" : "s"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </section>
+      ) : null}
+
+      <section>
+        <SectionTitle
+          right={
+            <span className="text-[11px] text-muted-foreground">
+              delay = mean days from trade to filing
+            </span>
+          }
+        >
+          Members
+        </SectionTitle>
+        {members.length ? (
+          <Card className="overflow-x-auto p-0">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.06em] text-muted-foreground">
+                  <th className="px-4 py-2.5 font-medium">Member</th>
+                  <th className="px-4 py-2.5 font-medium">Seat</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Trades</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Tickers</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Buy / Sell</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Volume (est.)</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Delay</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Late</th>
+                </tr>
+              </thead>
+              <tbody>
+                {members.map((r) => (
+                  <tr
+                    key={r.bioguide_id ?? r.member_name}
+                    className="border-b border-border/50 last:border-0 hover:bg-muted/50"
+                  >
+                    <td className="px-4 py-2">
+                      <div className="flex items-center gap-2">
+                        <PartyBadge party={r.party} />
+                        {r.trades > 0 ? (
+                          <a href={memberHref(r.member_name)} className="font-medium hover:text-primary">
+                            {r.member_name}
+                          </a>
+                        ) : (
+                          <span className="font-medium">{r.member_name}</span>
+                        )}
+                        <span className="text-[11px] text-muted-foreground">
+                          {r.state}
+                          {r.district && r.district !== "0" ? r.district : ""}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2">
+                      <SeatTag seat={r} />
+                    </td>
+                    <td className="tabular px-4 py-2 text-right">{r.trades || "—"}</td>
+                    <td className="tabular px-4 py-2 text-right text-muted-foreground">
+                      {r.tickers || "—"}
+                    </td>
+                    <td className="tabular px-4 py-2 text-right text-muted-foreground">
+                      {r.trades ? `${r.buys} / ${r.sells}` : "—"}
+                    </td>
+                    <td className="tabular px-4 py-2 text-right">{r.trades ? usd(r.volume_mid) : "—"}</td>
+                    <td className="tabular px-4 py-2 text-right text-muted-foreground">
+                      {r.avg_delay == null ? "—" : `${Math.round(r.avg_delay)}d`}
+                    </td>
+                    <td
+                      className={`tabular px-4 py-2 text-right ${
+                        r.late_count > 0
+                          ? "font-medium text-red-600 dark:text-red-400"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {r.late_count || "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        ) : (
+          <Empty>No seats recorded for this committee.</Empty>
+        )}
+        <p className="mt-3 text-[11px] text-muted-foreground">
+          Seats are the current Congress&rsquo;s roster from congress-legislators, refreshed
+          with the pipeline. Each member&rsquo;s figures cover every trade they disclosed, not
+          only trades touching this committee&rsquo;s jurisdiction; a member with no disclosed
+          trades is listed with dashes. &ldquo;Late&rdquo; counts trades filed more than 45
+          days after the trade — a reporting fact, not an allegation of wrongdoing.
+        </p>
+      </section>
+    </div>
   );
 }
 

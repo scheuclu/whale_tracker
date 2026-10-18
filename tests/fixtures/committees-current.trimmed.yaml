@@ -1,0 +1,52 @@
+# Trimmed from unitedstates/congress-legislators committees-current.yaml
+- type: house
+  name: House Committee on Energy and Commerce
+  url: https://energycommerce.house.gov/
+  minority_url: https://republicans-energycommerce.house.gov/
+  thomas_id: HSIF
+  house_committee_id: IF
+  subcommittees:
+  - name: Commerce, Manufacturing, and Trade
+    thomas_id: '17'
+    address: 2125 RHOB; Washington, DC 20515
+    phone: (202) 225-3641
+  - name: Communications and Technology
+    thomas_id: '16'
+    address: 2125 RHOB; Washington, DC 20515
+    phone: (202) 225-3641
+  address: 2125 RHOB; Washington, DC 20515-6115
+  phone: (202) 225-3641
+  jurisdiction: The House Committee on Energy and Commerce has legislative jurisdiction on matters related
+    to telecommunications, consumer protection, food and drug safety, public health research, environmental
+    quality, energy policy, and interstate and foreign commerce. It oversees multiple cabinet-level Departments
+    and independent agencies, including the Departments of Energy, Health and Human Services, Commerce,
+    and Transportation, as well as the Environmental Protection Agency, the Federal Trade Commission,
+    the Food and Drug Administration, and the Federal Communications Commission.
+  jurisdiction_source: https://energycommerce.house.gov/committee-history/
+  youtube_id: UCCbD3bkHRcwiBsaL1lWE_QQ
+- type: joint
+  name: Joint Economic Committee
+  url: http://www.jec.senate.gov/
+  thomas_id: JSEC
+  house_committee_id: EC
+  senate_committee_id: JSEC
+  rss_url: http://www.jec.senate.gov/republicans/public/?a=RSS.Feed
+  minority_rss_url: http://www.jec.senate.gov/public/?a=RSS.Feed
+  wikipedia: Joint Economic Committee
+  youtube_id: UCbNWSrKyYBP5iIZKT35LSGA
+  address: SD-G01 DSOB; Washington, DC 20510-6432
+  phone: (202) 224-5171
+- type: senate
+  name: Senate Committee on Banking, Housing, and Urban Affairs
+  url: http://banking.senate.gov/
+  thomas_id: SSBK
+  senate_committee_id: SSBK
+  subcommittees:
+  - name: Economic Policy
+    thomas_id: '12'
+    wikipedia: United States Senate Banking Subcommittee on Economic Policy
+  wikipedia: United States Senate Committee on Banking, Housing, and Urban Affairs
+  jurisdiction: The Senate Committee on Banking, Housing, and Urban Affairs not only has legislative jurisdiction
+    on the topics listed in its name, but also on a range of other topics such as economic stability,
+    federal monetary policy, and government contracts.
+  jurisdiction_source: https://www.banking.senate.gov/public/index.cfm/about
