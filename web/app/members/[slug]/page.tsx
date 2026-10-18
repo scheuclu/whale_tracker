@@ -103,7 +103,7 @@ export default async function MemberPage(props: Props) {
   const { action } = await props.searchParams;
   const path = `/members/${ref.slug}`;
   const crumbs = breadcrumbLd([
-    { name: "Whale Tracker", path: "/" },
+    { name: "FatCat Watch", path: "/" },
     { name: "Politicians", path: "/politicians" },
     { name: ref.name, path },
   ]);

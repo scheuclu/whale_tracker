@@ -12,7 +12,10 @@
  * the test suite can import it directly.
  */
 
-export const SITE_NAME = "Whale Tracker";
+import { SITE_NAME } from "./site";
+
+// One name for every surface: re-exported rather than restated.
+export { SITE_NAME };
 
 export const SITE_SUMMARY =
   "US congressional (STOCK Act) and corporate-insider (SEC Form 4) stock trades, reproduced as filed. " +

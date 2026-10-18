@@ -30,7 +30,7 @@ export function pageMetadata({
   noindex?: boolean;
   /** The page's own share card (`entityCard`); the site card otherwise. */
   card?: { og: Card; twitter: Card };
-  /** Use `title` as is, without the "· Whale Tracker" template (the home page). */
+  /** Use `title` as is, without the "· FatCat Watch" template (the home page). */
   absoluteTitle?: boolean;
 }): Metadata {
   const shared = absoluteTitle ? title : `${title} · ${SITE_NAME}`;
@@ -60,7 +60,7 @@ export function entityCard(path: string, alt: string): { og: Card; twitter: Card
 }
 
 const SITE_CARD_ALT =
-  "Whale Tracker — US congressional and corporate-insider stock trades, from STOCK Act and SEC Form 4 filings";
+  "FatCat Watch — US congressional and corporate-insider stock trades, from STOCK Act and SEC Form 4 filings";
 
 /** The site-wide share card (app/opengraph-image.tsx, app/twitter-image.tsx). */
 const SITE_CARD = {

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, Briefcase, ChevronRight, Landmark, LineChart, Receipt } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { WhaleMark } from "./brand";
+import { BrandMark } from "./brand";
 
 /**
  * The shared body of not-found.tsx, error.tsx and the "database
@@ -50,7 +50,7 @@ export function StatusScreen({
   return (
     <div className="mx-auto flex max-w-xl flex-col items-center pb-4 pt-6 text-center sm:pt-12">
       <div className="status-mark">
-        <WhaleMark className="size-12" />
+        <BrandMark className="size-12" />
       </div>
       <p
         className={cn(

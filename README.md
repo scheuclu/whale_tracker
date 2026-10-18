@@ -1,4 +1,13 @@
-# whale_tracker
+# FatCat Watch
+
+**[www.fatcatwatch.com](https://www.fatcatwatch.com)** — what members of
+Congress and corporate insiders are trading, from the filings they are
+required to make. A disclosed trade is a public record, not evidence of
+wrongdoing.
+
+The code still goes by `whale` (this repo, the Python package and
+`python -m whale`, workflow and database names): the product was called
+Whale Tracker until October 2026, and renaming identifiers would buy nothing.
 
 Watches US congressional stock-trade disclosures and SEC Form 4 insider
 filings, sends each new congressional filing to Telegram, alerts when several
@@ -439,7 +448,9 @@ the table is the docstring of `src/whale/issuers.py`.
 
 ## Dashboard
 
-A Next.js app in `web/`, hosted on Vercel, reading the committed database.
+A Next.js app in `web/`, hosted on Vercel at
+[www.fatcatwatch.com](https://www.fatcatwatch.com), reading the committed
+database.
 
 - **Feed** — every disclosed trade, filterable by member and direction
 - **Tickers** — volume and participation leaderboards, plus per-ticker detail
@@ -479,15 +490,22 @@ all absolute, built on one origin (`web/lib/site.ts`):
 
 | Env var | Value |
 |---|---|
-| `NEXT_PUBLIC_SITE_URL` | `https://whaletracker-blue.vercel.app` (the public domain) |
+| `NEXT_PUBLIC_SITE_URL` | `https://www.fatcatwatch.com` (the public domain) |
 
-Set it for **Production and Preview**. Without it the app falls back to
-Vercel's `VERCEL_PROJECT_PRODUCTION_URL`, then to `http://localhost:3000`.
-It must name the public domain, never a deployment URL
-(`whaletracker-<team>.vercel.app`, `-git-main-`, PR previews): those sit
+It is set to that for **Production and Preview** in Vercel. Without it the
+app falls back to Vercel's `VERCEL_PROJECT_PRODUCTION_URL`, then to
+`http://localhost:3000`. It must name the public domain, never a deployment
+URL (`whaletracker-<team>.vercel.app`, `-git-main-`, PR previews): those sit
 behind Vercel SSO and answer crawlers with a redirect and `noindex`, so a
 canonical or sitemap entry pointing at one is unreachable. `robots.txt` is
 rendered at build time, so a change needs a redeploy.
+
+The www host is canonical. The apex `fatcatwatch.com` and the old
+`whaletracker-blue.vercel.app` both answer with a permanent (308) redirect to
+`https://www.fatcatwatch.com`, path and query string kept. Those redirects
+live in Vercel (Project → Settings → Domains), not in `next.config.ts`:
+Vercel applies a domain redirect at the edge before the app sees the
+request, so a copy in code would never run.
 
 Entity pages have path URLs — `/members/<name>-<bioguide id>` (e.g.
 `/members/nancy-pelosi-p000197`; a filer the roster could not match has the

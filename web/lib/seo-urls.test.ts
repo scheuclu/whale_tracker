@@ -49,8 +49,8 @@ test("ticker URLs are upper case and keep class suffixes", () => {
 });
 
 test("siteUrl prefers the explicit URL, then Vercel's production domain, then localhost", () => {
-  assert.equal(siteUrl({ NEXT_PUBLIC_SITE_URL: "https://whaletracker-blue.vercel.app/" }), "https://whaletracker-blue.vercel.app");
-  assert.equal(siteUrl({ NEXT_PUBLIC_SITE_URL: "  ", VERCEL_PROJECT_PRODUCTION_URL: "whaletracker-blue.vercel.app" }), "https://whaletracker-blue.vercel.app");
+  assert.equal(siteUrl({ NEXT_PUBLIC_SITE_URL: "https://www.fatcatwatch.com/" }), "https://www.fatcatwatch.com");
+  assert.equal(siteUrl({ NEXT_PUBLIC_SITE_URL: "  ", VERCEL_PROJECT_PRODUCTION_URL: "www.fatcatwatch.com" }), "https://www.fatcatwatch.com");
   assert.equal(siteUrl({}), "http://localhost:3000");
   assert.equal(absoluteUrl("/tickers/MSFT", { NEXT_PUBLIC_SITE_URL: "https://x.test" }), "https://x.test/tickers/MSFT");
 });
@@ -59,7 +59,7 @@ test("pageMetadata sets canonical, robots and the social copies together", () =>
   const m = pageMetadata({ title: "MSFT trades", description: "d", path: "/tickers/MSFT" });
   assert.deepEqual(m.alternates, { canonical: "/tickers/MSFT" });
   assert.equal(m.robots, undefined);
-  assert.equal((m.openGraph as { siteName?: string }).siteName, "Whale Tracker", "a page's openGraph replaces the layout's");
+  assert.equal((m.openGraph as { siteName?: string }).siteName, "FatCat Watch", "a page's openGraph replaces the layout's");
   assert.equal((m.openGraph as { url?: string }).url, "/tickers/MSFT");
   const search = pageMetadata({ title: "Search", description: "d", path: "/search", noindex: true });
   assert.deepEqual(search.robots, { index: false, follow: true });
@@ -109,7 +109,7 @@ test("Person carries only what the roster says", () => {
 
 test("breadcrumbs are absolute and numbered from 1", () => {
   const b = breadcrumbLd([
-    { name: "Whale Tracker", path: "/" },
+    { name: "FatCat Watch", path: "/" },
     { name: "Tickers", path: "/tickers" },
   ]) as { itemListElement: { position: number; item: string }[] };
   assert.deepEqual(b.itemListElement.map((i) => i.position), [1, 2]);

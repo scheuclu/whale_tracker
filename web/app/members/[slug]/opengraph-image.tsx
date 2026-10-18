@@ -4,7 +4,7 @@ import { getPoliticianDetail } from "@/lib/queries";
 import { chamberTitle } from "@/lib/site";
 import { BUY, CARD_SIZE, SELL, count, renderCard, renderPlainCard } from "../../share-card";
 
-export const alt = "A member of Congress's disclosed stock trades on Whale Tracker: trade, ticker and buy/sell counts";
+export const alt = "A member of Congress's disclosed stock trades on FatCat Watch: trade, ticker and buy/sell counts";
 export const size = CARD_SIZE;
 export const contentType = "image/png";
 // Counts move only when the pipeline commits; link previews are cached by

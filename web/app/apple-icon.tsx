@@ -1,5 +1,5 @@
 import { ImageResponse } from "next/og";
-import { BRAND_GRADIENT, FLUKE_PATH, SEA_OPACITY, SEA_PATH } from "@/lib/brand";
+import { BRAND_GRADIENT, markGlyph } from "@/lib/brand";
 
 export const size = { width: 180, height: 180 };
 export const contentType = "image/png";
@@ -8,8 +8,8 @@ export const contentType = "image/png";
  * Home-screen icon. Full-bleed (radius 0): iOS applies its own rounded mask,
  * and a pre-rounded tile would show the background in the corners.
  *
- * The same drawing as lib/brand.ts, with the fluke scaled to 84% about the
- * tile centre: at full size its tips run into the corner mask, and a
+ * The same drawing as lib/brand.ts, scaled to 84% about the tile centre:
+ * at full size the ear tips and cheeks run close to the corner mask, and a
  * home-screen icon reads better with a margin round the glyph.
  */
 function appleIconSvg(): string {
@@ -20,8 +20,7 @@ function appleIconSvg(): string {
     `<stop offset="0" stop-color="${a}"/><stop offset=".45" stop-color="${b}"/><stop offset="1" stop-color="${c}"/>` +
     `</linearGradient></defs>` +
     `<rect width="32" height="32" fill="url(#t)"/>` +
-    `<path d="${SEA_PATH}" fill="#fff" opacity="${SEA_OPACITY}"/>` +
-    `<path d="${FLUKE_PATH}" fill="#fff" transform="translate(16 15.5) scale(0.84) translate(-16 -15.5)"/>` +
+    markGlyph("translate(16 16.8) scale(0.84) translate(-16 -16.8)") +
     `</svg>`
   );
 }

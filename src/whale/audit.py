@@ -1422,7 +1422,7 @@ def report(db_path: Path, today: date | None = None) -> tuple[str, list[Finding]
 
     counts = {sev: sum(1 for f in findings if f.severity == sev) for sev in (ERROR, WARN, INFO)}
     lines = [
-        "# Whale Tracker — data audit",
+        "# FatCat Watch — data audit",
         "",
         f"Generated {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
         "",

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { Analytics } from "@vercel/analytics/next";
-import { WhaleMark, Wordmark } from "./brand";
+import { BrandMark, Wordmark } from "./brand";
 import { HeaderShell } from "./header-shell";
 import { SiteFooter } from "./site-footer";
 import { AgentAlternates } from "./agent-alternates";
@@ -88,9 +88,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <Link
                 href="/"
                 className="group -m-1 flex min-w-0 items-center gap-2.5 rounded-[10px] p-1 outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring"
-                aria-label="Whale Tracker — feed"
+                aria-label="FatCat Watch — feed"
               >
-                <WhaleMark className="site-header-mark size-8 motion-safe:group-hover:-rotate-6" />
+                <BrandMark className="site-header-mark size-8 motion-safe:group-hover:-rotate-6" />
                 <div className="min-w-0">
                   <Wordmark className="block" />
                   {/* Each count stays whole; on a phone the second wraps under the first. */}
