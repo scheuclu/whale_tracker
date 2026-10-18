@@ -1,3 +1,5 @@
+import { MoneyText } from "../money";
+import { assetLabel } from "@/lib/asset-label";
 import {
   getInsiderClusters,
   getInsiderIssuer,
@@ -14,6 +16,8 @@ import { memberHref, memberLabel, price, range, shares, shortDate, usd } from "@
 import { Card, DivergingSplit, Empty, MagnitudeBars, SectionTitle, StatTile } from "../charts";
 import { ActionBadge, Amount, InsiderDelayTag, PartyBadge, PlanTag, ResponsiveTable, RoleTag, SectorTag, TickerChip } from "../ui";
 import { MemberAvatar } from "../avatar";
+import { Disclosure } from "../disclosure";
+import { PAGE_STACK, PageHeader, PillLinks, Quiet } from "../page-header";
 import {
   ISSUER_SORT,
   ROW_LIMITS,
@@ -69,20 +73,21 @@ const WINDOWS = [
   { days: undefined, label: "All" },
 ];
 
-const VALUE_NOTE =
-  "Values are shares × the price as filed; a filer may report a weighted average. " +
-  "A row whose as-filed value is implausible is shown as filed and counted in no total.";
+/** The value caveat at the reading measure: the first sentence in view, the second folded. */
+function ValueNote({ className }: { className?: string }) {
+  return (
+    <Disclosure
+      size="sm"
+      className={className}
+      lead="Values are shares × the price as filed; a filer may report a weighted average."
+    >
+      <p>A row whose as-filed value is implausible is shown as filed and counted in no total.</p>
+    </Disclosure>
+  );
+}
 
 function issuerHref(ticker: string) {
   return `/insiders?t=${encodeURIComponent(ticker)}`;
-}
-
-function pill(active: boolean) {
-  return `rounded-full border px-2.5 py-1 transition-colors ${
-    active
-      ? "border-primary/40 bg-primary/10 text-foreground"
-      : "border-border text-muted-foreground hover:bg-muted"
-  }`;
 }
 
 export default async function InsidersPage({
@@ -163,8 +168,12 @@ export default async function InsidersPage({
   const filteredInsider = params.cik ? trades[0]?.insider_name : null;
 
   return (
-    <div className="space-y-8">
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+    <div className={PAGE_STACK}>
+      <PageHeader
+        title="Corporate insiders"
+        subtitle="Officers, directors and 10% owners trading their own company’s stock on the open market, from SEC Form 4. Only filings of $50k or more in one direction are kept."
+      >
+      <section aria-label="All stored insider filings" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <StatTile label="Filings kept" value={totals.filings.toLocaleString()} hint="open-market ≥ $50k" />
         <StatTile
           label="Insider trades"
@@ -176,6 +185,7 @@ export default async function InsidersPage({
         <StatTile label="Sold" value={usd(totals.sell_value)} hint="shares × reported price" />
         <StatTile label="Late filings" value={totals.late_trades.toLocaleString()} hint="past 2 business days" />
       </section>
+      </PageHeader>
 
       <section>
         <SectionTitle right={<span className="text-[11px] text-muted-foreground">last 30 days · 3+ insiders</span>}>
@@ -207,31 +217,39 @@ export default async function InsidersPage({
               }))}
             />
           ) : (
-            <Empty>No issuer has three or more insiders trading in one direction this month.</Empty>
+            <Quiet>No issuer has three or more insiders trading in one direction this month.</Quiet>
           )}
-          <p className="mt-3 text-[11px] text-muted-foreground">
-            Bought bars extend left, sold bars right. Insiders sell far more often than they buy —{" "}
-            {totals.sells.toLocaleString()} of the {totals.trades.toLocaleString()} stored trades are
-            sales — so a cluster of buyers is the scarcer signal. Counts primary reporting owners: a
-            founder and their holding company on one filing are one insider; related parties filing
-            separately still count twice.
-          </p>
+          <Disclosure
+            size="sm"
+            className="mt-3"
+            lead={
+              <>
+                Insiders sell far more often than they buy — {totals.sells.toLocaleString()} of the{" "}
+                {totals.trades.toLocaleString()} stored trades are sales — so a cluster of buyers is the
+                scarcer signal.
+              </>
+            }
+          >
+            <p>Bought bars extend left, sold bars right.</p>
+            <p>
+              Counts primary reporting owners: a founder and their holding company on one filing are one
+              insider; related parties filing separately still count twice.
+            </p>
+          </Disclosure>
         </Card>
       </section>
 
-      <div className="flex flex-wrap items-center gap-1 text-[11px]">
-        {WINDOWS.map((w) => {
+      <div className="space-y-4">
+      <PillLinks
+        label="Window"
+        note="window measured on trade date · applies to every section below"
+        items={WINDOWS.map((w) => {
           const key = w.days ? String(w.days) : "all";
-          return (
-            <a key={w.label} href={query({ w: key })} className={pill(windowKey === key)}>
-              {w.label}
-            </a>
-          );
+          return { href: query({ w: key }), label: w.label, active: windowKey === key };
         })}
-        <span className="ml-2 text-muted-foreground">window measured on trade date</span>
-      </div>
+      />
 
-      <section className="grid gap-6 lg:grid-cols-2">
+      <section className="grid gap-x-6 gap-y-7 lg:grid-cols-2">
         <div>
           <SectionTitle>Most bought</SectionTitle>
           <Card>
@@ -240,7 +258,7 @@ export default async function InsidersPage({
               data={mostBought.slice(0, 12).map((r) => ({
                 key: r.issuer_cik,
                 label: r.ticker ?? "—",
-                sublabel: `${r.issuer_name?.slice(0, 22) ?? ""} · ${r.buy_insiders} insider${r.buy_insiders === 1 ? "" : "s"}`,
+                sublabel: `${assetLabel(r.issuer_name).slice(0, 22)} · ${r.buy_insiders} insider${r.buy_insiders === 1 ? "" : "s"}`,
                 value: r.buy_value,
                 valueLabel: usd(r.buy_value),
                 title: r.issuer_name ?? undefined,
@@ -248,7 +266,6 @@ export default async function InsidersPage({
                 href: r.ticker ? issuerHref(r.ticker) : undefined,
               }))}
             />
-            <p className="mt-3 text-[11px] text-muted-foreground">{VALUE_NOTE}</p>
           </Card>
         </div>
         <div>
@@ -259,7 +276,7 @@ export default async function InsidersPage({
               data={mostSold.slice(0, 12).map((r) => ({
                 key: r.issuer_cik,
                 label: r.ticker ?? "—",
-                sublabel: `${r.issuer_name?.slice(0, 22) ?? ""} · ${r.sell_insiders} insider${r.sell_insiders === 1 ? "" : "s"}`,
+                sublabel: `${assetLabel(r.issuer_name).slice(0, 22)} · ${r.sell_insiders} insider${r.sell_insiders === 1 ? "" : "s"}`,
                 value: r.sell_value,
                 valueLabel: usd(r.sell_value),
                 title: r.issuer_name ?? undefined,
@@ -267,10 +284,11 @@ export default async function InsidersPage({
                 href: r.ticker ? issuerHref(r.ticker) : undefined,
               }))}
             />
-            <p className="mt-3 text-[11px] text-muted-foreground">{VALUE_NOTE}</p>
           </Card>
         </div>
       </section>
+      <ValueNote />
+      </div>
 
       <section id="all-issuers" className="table-anchor">
         <SectionTitle>All issuers</SectionTitle>
@@ -340,24 +358,25 @@ export default async function InsidersPage({
             />
           </>
         ) : (
-          <Empty>No insider trades in this window.</Empty>
+          <Quiet>No insider trades in this window.</Quiet>
         )}
       </section>
 
       <section>
         <SectionTitle
           right={
-            <div className="flex gap-1 text-[11px]">
-              {[
+            <PillLinks
+              label="Direction"
+              items={[
                 { k: undefined, label: "All" },
                 { k: "buy", label: "Buys" },
                 { k: "sell", label: "Sells" },
-              ].map((f) => (
-                <a key={f.label} href={query({ action: f.k })} className={pill((params.action ?? undefined) === f.k)}>
-                  {f.label}
-                </a>
-              ))}
-            </div>
+              ].map((f) => ({
+                href: query({ action: f.k }),
+                label: f.label,
+                active: (params.action ?? undefined) === f.k,
+              }))}
+            />
           }
         >
           {filteredInsider ? `Trades — ${filteredInsider}` : "Recent trades"}
@@ -369,13 +388,12 @@ export default async function InsidersPage({
         ) : null}
         {trades.length ? (
           <>
-            <p className="mb-3 text-xs text-muted-foreground">
-              {trades.length} trades shown · {VALUE_NOTE}
-            </p>
+            <p className="mb-1 text-[13px] text-muted-foreground">{trades.length} trades shown, newest first</p>
+            <ValueNote className="mb-3" />
             <TradeList trades={trades} showIssuer />
           </>
         ) : (
-          <Empty>No insider trades match this filter.</Empty>
+          <Quiet>No insider trades match this filter.</Quiet>
         )}
       </section>
 
@@ -424,9 +442,8 @@ function InsiderSectors({ sectors }: { sectors: InsiderSectorRow[] }) {
             {list("buy_value").length ? (
               <MagnitudeBars variant="name" note="shares × reported price" data={bars("buy_value")} />
             ) : (
-              <Empty>No priced insider purchase in this window.</Empty>
+              <Quiet>No priced insider purchase in this window.</Quiet>
             )}
-            <p className="mt-3 text-[11px] text-muted-foreground">{VALUE_NOTE}</p>
           </Card>
           <Card>
             <h3 className="mb-3 text-[11px] font-medium uppercase tracking-[0.07em] text-muted-foreground">
@@ -435,24 +452,24 @@ function InsiderSectors({ sectors }: { sectors: InsiderSectorRow[] }) {
             {list("sell_value").length ? (
               <MagnitudeBars variant="name" note="shares × reported price" data={bars("sell_value")} />
             ) : (
-              <Empty>No priced insider sale in this window.</Empty>
+              <Quiet>No priced insider sale in this window.</Quiet>
             )}
-            <p className="mt-3 text-[11px] text-muted-foreground">{VALUE_NOTE}</p>
           </Card>
         </div>
       ) : (
-        <Card>
-          <Empty>
-            No sector is known for any issuer yet. The pipeline classifies issuers from their
-            EDGAR SIC codes after each run.
-          </Empty>
-        </Card>
+        <Quiet>
+          No sector is known for any issuer yet. The pipeline classifies issuers from their
+          EDGAR SIC codes after each run.
+        </Quiet>
       )}
-      <p className="mt-3 text-[11px] text-muted-foreground">
-        Industry groups fold each issuer&rsquo;s EDGAR SIC code into twelve sectors.{" "}
-        {issuersKnown} of {issuersTotal} issuers in this window are classified; the rest are
-        issuers EDGAR lists no SIC for, or ones the fill has not reached yet.
-      </p>
+      <ValueNote className="mt-3" />
+      <Disclosure
+        size="sm"
+        className="mt-2"
+        lead={`Industry groups fold each issuer’s EDGAR SIC code into twelve sectors; ${issuersKnown} of ${issuersTotal} issuers in this window are classified.`}
+      >
+        <p>The rest are issuers EDGAR lists no SIC for, or ones the fill has not reached yet.</p>
+      </Disclosure>
     </section>
   );
 }
@@ -548,31 +565,34 @@ async function IssuerDetail({ ticker }: { ticker: string }) {
   if (!issuer) return <Empty>No stored insider trades for {ticker}.</Empty>;
 
   return (
-    <div className="space-y-8">
-      <div>
-        <a href="/insiders" className="text-xs text-muted-foreground hover:text-primary">
-          ← all insiders
-        </a>
-        <h1 className="mt-2 font-mono text-3xl font-semibold tracking-tight">{issuer.ticker ?? ticker}</h1>
-        <p className="flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
-          <span>
-            {issuer.issuer_name} · CIK {issuer.issuer_cik}
-          </span>
+    <div className={PAGE_STACK}>
+      <PageHeader
+        back={{ href: "/insiders", label: "all insiders" }}
+        eyebrow="Insider issuer · SEC Form 4"
+        title={issuer.ticker ?? ticker}
+        titleClassName="font-mono"
+        badges={
           <SectorTag
             group={trades[0]?.industry_group}
             sic={trades[0]?.sic}
             description={trades[0]?.sic_description}
           />
-        </p>
-      </div>
-
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        }
+        subtitle={
+          <>
+            <span className="text-ink-2">{issuer.issuer_name}</span>
+            <span className="tabular"> · CIK {issuer.issuer_cik}</span>
+          </>
+        }
+      >
+      <section aria-label="Issuer totals" className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <StatTile label="Insiders" value={String(issuer.insiders)} hint="primary filers" />
         <StatTile label="Filings" value={String(issuer.filings)} hint="stored Form 4s" />
         <StatTile label="Trades" value={String(issuer.trades)} hint={`${issuer.buys} buy / ${issuer.sells} sell`} />
         <StatTile label="Bought" value={issuer.buy_value ? usd(issuer.buy_value) : "—"} hint="shares × reported price" />
         <StatTile label="Sold" value={issuer.sell_value ? usd(issuer.sell_value) : "—"} hint="shares × reported price" />
       </section>
+      </PageHeader>
 
       <section>
         <SectionTitle>Who traded</SectionTitle>
@@ -604,9 +624,10 @@ async function IssuerDetail({ ticker }: { ticker: string }) {
 
       <section>
         <SectionTitle>Every stored trade</SectionTitle>
-        <p className="mb-3 text-xs text-muted-foreground">
-          Open-market buys and sells from filings that cleared the $50k floor. {VALUE_NOTE}
+        <p className="mb-1 text-[13px] text-muted-foreground">
+          Open-market buys and sells from filings that cleared the $50k floor.
         </p>
+        <ValueNote className="mb-3" />
         <TradeList trades={trades} showIssuer={false} />
       </section>
 
@@ -670,7 +691,7 @@ async function MembersInTicker({ ticker }: { ticker: string }) {
                 .join(", ")}
               <span className="text-muted-foreground">
                 {" "}
-                · disclosed range {range(stat.volume_min, stat.volume_max)} · last trade{" "}
+                · disclosed range <MoneyText value={range(stat.volume_min, stat.volume_max)} /> · last trade{" "}
                 {shortDate(stat.last_tx_date)}
                 {stat.transcribed ? ` · ${stat.transcribed} transcribed from scans, not in the range` : ""}
               </span>
@@ -690,25 +711,32 @@ async function MembersInTicker({ ticker }: { ticker: string }) {
                   <span className="tabular text-xs text-muted-foreground">
                     {m.buys} buy / {m.sells} sell
                   </span>
-                  <span className="tabular w-28 text-right text-xs">{range(m.volume_min, m.volume_max)}</span>
+                  <span className="tabular w-28 text-right text-xs"><MoneyText value={range(m.volume_min, m.volume_max)} /></span>
                   <span className="tabular w-16 text-right text-xs text-muted-foreground">
                     {shortDate(m.last_tx_date)}
                   </span>
                 </div>
               ))}
             </div>
-            <p className="mt-3 text-[11px] text-muted-foreground">
-              Distinct filers on periodic transaction reports; each figure is the disclosed
-              bracket range, never a computed value. Kept apart from the Form 4 figures above —
-              nothing here enters them. A report may take 45 days to reach the Clerk, so the
-              most recent weeks are still arriving.{" "}
-              <a href={href} className="underline-offset-2 hover:text-primary hover:underline">
-                every disclosed trade in {ticker} →
-              </a>
-            </p>
+            <Disclosure
+              size="sm"
+              className="mt-3"
+              lead="Each figure is the disclosed bracket range, never a computed value. Kept apart from the Form 4 figures above — nothing here enters them."
+            >
+              <p>
+                Distinct filers on periodic transaction reports. A report may take 45 days to reach the Clerk,
+                so the most recent weeks are still arriving.
+              </p>
+            </Disclosure>
+            <a
+              href={href}
+              className="mt-2 inline-block text-[12px] text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
+            >
+              every disclosed trade in {ticker} →
+            </a>
           </>
         ) : (
-          <Empty>
+          <Quiet>
             No disclosed member trade in {ticker} in the last {CROSS_WINDOW_DAYS} days.{" "}
             {allTime ? (
               <>
@@ -721,7 +749,7 @@ async function MembersInTicker({ ticker }: { ticker: string }) {
             ) : (
               "No member has disclosed a trade in this symbol."
             )}
-          </Empty>
+          </Quiet>
         )}
       </Card>
     </section>

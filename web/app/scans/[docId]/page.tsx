@@ -3,7 +3,17 @@ import { getScanFiling, parsePageNo, type ScanPage, type ScanRow } from "@/lib/s
 import { ACTION_LABEL, OWNER_LABEL, isBuy, isSell, memberLabel, range, shortDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Card, Empty, SectionTitle, StatTile } from "../../charts";
+import { Disclosure } from "../../disclosure";
+import { PAGE_STACK, PageHeader, Quiet } from "../../page-header";
 import { PartyBadge, StatusBadge, ResponsiveTable } from "../../ui";
+
+/** The read path as words; the raw `parse_method` stays in the label's title. */
+const METHOD_LABEL: Record<string, string> = {
+  scanned: "scan — not transcribed",
+  vision: "transcribed from scan (quarantined from totals)",
+  error: "transcription errored",
+  vision_failed: "transcription refused",
+};
 
 export const dynamic = "force-dynamic";
 
@@ -78,36 +88,53 @@ export default async function ScanDetailPage({
   const disputed = rows.filter((r) => r.type_disputed || r.amount_disputed).length;
 
   return (
-    <div className="space-y-8">
-      <div>
-        <a href="/scans" className="text-xs text-muted-foreground hover:text-primary">
-          ← all scans
-        </a>
-        <h1 className="mt-2 font-mono text-3xl font-semibold tracking-tight">{filing.doc_id}</h1>
-        <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
-          <PartyBadge party={filing.party} />
-          <a
-            href={`/politicians?m=${encodeURIComponent(filing.member_name)}`}
-            className="font-medium text-foreground hover:text-primary"
-          >
-            {memberLabel(filing.member_name, null, filing.state, filing.district, "house")}
-          </a>
-          <span>· filed {shortDate(filing.filing_date)}</span>
-          <StatusBadge value={filing.status} />
-          <span className="font-mono text-[11px]">{filing.parse_method}</span>
-          {filing.last_error ? <span className="break-all font-mono text-[11px]">{filing.last_error}</span> : null}
-          <a
-            href={filing.pdf_url}
-            target="_blank"
-            rel="noreferrer"
-            className="underline-offset-2 hover:text-primary hover:underline"
-          >
-            · Clerk PDF
-          </a>
-        </p>
-      </div>
-
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div className={PAGE_STACK}>
+      <PageHeader
+        back={{ href: "/scans", label: "all scans" }}
+        eyebrow="Scanned filing"
+        title={filing.doc_id}
+        titleClassName="font-mono"
+        badges={
+          <span className="inline-flex flex-wrap items-center gap-2">
+            <StatusBadge value={filing.status} />
+            {filing.parse_method ? (
+              <span
+                className="rounded-md border border-border px-2 py-0.5 text-[12px] text-muted-foreground"
+                title={`parse_method: ${filing.parse_method}`}
+              >
+                {METHOD_LABEL[filing.parse_method] ?? filing.parse_method}
+              </span>
+            ) : null}
+          </span>
+        }
+        subtitle={
+          <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+            <PartyBadge party={filing.party} />
+            <a
+              href={`/politicians?m=${encodeURIComponent(filing.member_name)}`}
+              className="font-medium text-foreground hover:text-primary"
+            >
+              {memberLabel(filing.member_name, null, filing.state, filing.district, "house")}
+            </a>
+            <span>· filed {shortDate(filing.filing_date)}</span>
+            <span aria-hidden>·</span>
+            <a
+              href={filing.pdf_url}
+              target="_blank"
+              rel="noreferrer"
+              className="underline underline-offset-2 hover:text-primary"
+            >
+              Clerk PDF
+            </a>
+          </span>
+        }
+      >
+        {filing.last_error ? (
+          <p className="max-w-[68ch] text-[13px] text-attention">
+            Last error: <span className="break-words font-mono text-[12px]">{filing.last_error}</span>
+          </p>
+        ) : null}
+      <section aria-label="Scan totals" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile
           label="Pages"
           value={String(pages.length)}
@@ -121,22 +148,24 @@ export default async function ScanDetailPage({
           hint={filing.transactions ? `of ${filing.transactions} transactions` : "no transcription yet"}
         />
       </section>
+      </PageHeader>
 
       {pages.length === 0 ? (
-        <Empty>
+        <Quiet>
           Not captured yet. Run <code className="font-mono">python -m whale capture-scans</code>.
-        </Empty>
-      ) : (
-        <Pager base={base} pages={pages} current={pageNo} prev={prev} next={next} />
-      )}
+        </Quiet>
+      ) : null}
 
       {pages.length > 0 && !page ? (
-        <Empty>
-          No page {pageNo} — this filing has {pages.length} page{pages.length === 1 ? "" : "s"}.{" "}
-          <Link href={base} className="underline underline-offset-2 hover:text-primary">
-            Page 1
-          </Link>
-        </Empty>
+        <div className="space-y-3">
+          <Pager base={base} pages={pages} current={pageNo} prev={prev} next={next} />
+          <Quiet>
+            No page {pageNo} — this filing has {pages.length} page{pages.length === 1 ? "" : "s"}.{" "}
+            <Link href={base} className="underline underline-offset-2 hover:text-primary">
+              Page 1
+            </Link>
+          </Quiet>
+        </div>
       ) : null}
 
       {page ? (
@@ -153,8 +182,9 @@ export default async function ScanDetailPage({
             {page.unknown_rows ? ` · ${page.unknown_rows} unknown` : ""}
             {disputed ? ` · ${disputed} disputed` : ""}
           </SectionTitle>
+          <Pager base={base} pages={pages} current={pageNo} prev={prev} next={next} />
           {page.error ? (
-            <p className="mb-2 text-xs text-amber-600 dark:text-amber-400">
+            <p className="mb-2 text-xs text-attention">
               This page yielded no rows: <span className="break-all font-mono">{page.error}</span>
             </p>
           ) : null}
@@ -205,7 +235,10 @@ export default async function ScanDetailPage({
         </section>
       ) : null}
 
-      <div className="space-y-2 text-[11px] text-muted-foreground">
+      <Disclosure
+        size="sm"
+        lead="Each row the reader counted as a transaction is boxed and the cell it read as ticked is filled — blue for a buy, red for a sell, grey for an exchange. A row with no tick or more than one is outlined dashed and stored as unknown, never guessed."
+      >
         <p>
           Overlay: each row the reader counted as a transaction is boxed; its amount and type
           column edges are drawn; the cell it read as ticked is filled — blue for a buy, red for a
@@ -233,7 +266,7 @@ export default async function ScanDetailPage({
           wrong ones, if the counts no longer match). The transactions are untouched. Page images
           are cached for a week, so a hard reload may be needed to see the new capture.
         </p>
-      </div>
+      </Disclosure>
     </div>
   );
 }
@@ -256,30 +289,23 @@ function Pager({
   prev: ScanPage | null;
   next: ScanPage | null;
 }) {
-  const navCls = "rounded-md border border-border px-2.5 py-1 text-xs hover:border-primary/40 hover:bg-accent";
-  const offCls = "rounded-md border border-transparent px-2.5 py-1 text-xs text-muted-foreground";
+  const focus =
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+  const navCls = cn(
+    "shrink-0 whitespace-nowrap rounded-md border border-border px-2.5 py-1 text-xs transition-colors duration-150 hover:border-primary/40 hover:bg-accent",
+    focus
+  );
+  const offCls = "shrink-0 whitespace-nowrap rounded-md border border-transparent px-2.5 py-1 text-xs text-muted-foreground";
   return (
-    <nav aria-label="Pages" className="space-y-2">
-      <div className="flex items-center justify-between gap-3">
-        {prev ? (
-          <Link href={`${base}?page=${prev.page_no}`} className={navCls} rel="prev">
-            ← Page {prev.page_no}
-          </Link>
-        ) : (
-          <span className={offCls}>← first page</span>
-        )}
-        <span className="tabular text-xs text-muted-foreground">
-          Page {current} of {pages.length}
-        </span>
-        {next ? (
-          <Link href={`${base}?page=${next.page_no}`} className={navCls} rel="next">
-            Page {next.page_no} →
-          </Link>
-        ) : (
-          <span className={offCls}>last page →</span>
-        )}
-      </div>
-      <ol className="flex flex-wrap gap-1">
+    <nav aria-label={`Pages — page ${current} of ${pages.length}`} className="mb-3 flex items-start gap-3">
+      {prev ? (
+        <Link href={`${base}?page=${prev.page_no}`} className={navCls} rel="prev">
+          ← Page {prev.page_no}
+        </Link>
+      ) : (
+        <span className={offCls}>← first page</span>
+      )}
+      <ol className="flex min-w-0 flex-1 flex-wrap justify-center gap-1 pt-0.5">
         {pages.map((p) => {
           const isCurrent = p.page_no === current;
           const title = p.error
@@ -292,12 +318,13 @@ function Pager({
                 aria-current={isCurrent ? "page" : undefined}
                 title={title}
                 className={cn(
-                  "tabular inline-block min-w-8 rounded-md border px-1.5 py-0.5 text-center text-[11px]",
+                  "tabular inline-block min-w-8 rounded-md border px-1.5 py-0.5 text-center text-[11px] transition-colors duration-150",
+                  focus,
                   isCurrent
                     ? "border-foreground bg-foreground font-semibold text-background"
                     : "border-border hover:border-primary/40 hover:bg-accent",
                   !isCurrent && p.error ? "text-red-600 dark:text-red-400" : "",
-                  !isCurrent && !p.error && p.unknown_rows ? "text-amber-600 dark:text-amber-400" : ""
+                  !isCurrent && !p.error && p.unknown_rows ? "text-attention" : ""
                 )}
               >
                 {p.page_no}
@@ -307,6 +334,13 @@ function Pager({
           );
         })}
       </ol>
+      {next ? (
+        <Link href={`${base}?page=${next.page_no}`} className={navCls} rel="next">
+          Page {next.page_no} →
+        </Link>
+      ) : (
+        <span className={offCls}>last page →</span>
+      )}
     </nav>
   );
 }
@@ -320,7 +354,7 @@ function RowLine({ r }: { r: ScanRow }) {
       className={cn(
         // scroll-mt clears the sticky site header (~117px) when the row is the URL's anchor.
         "scroll-mt-32 border-b border-border/50 last:border-0 target:bg-primary/10",
-        flagged ? "bg-amber-500/5" : ""
+        flagged ? "bg-attention-soft" : ""
       )}
     >
       <td className="tabular px-3 py-1.5 text-muted-foreground">
@@ -335,7 +369,7 @@ function RowLine({ r }: { r: ScanRow }) {
             <span className="text-muted-foreground">{BRACKET[r.amount_letter]}</span>
           </span>
         ) : (
-          <span className="text-amber-600 dark:text-amber-400">
+          <span className="text-attention">
             unknown
             {r.amount_marks.length > 1
               ? ` (${r.amount_marks.map((i) => LETTERS[i]).join(", ")} ticked)`
@@ -360,7 +394,7 @@ function RowLine({ r }: { r: ScanRow }) {
             {ACTION_LABEL[r.action] ?? r.action}
           </span>
         ) : (
-          <span className="text-amber-600 dark:text-amber-400">
+          <span className="text-attention">
             unknown{r.type_marks.length > 1 ? " (several ticked)" : " (no tick)"}
           </span>
         )}
@@ -379,18 +413,18 @@ function RowLine({ r }: { r: ScanRow }) {
               <span className="tabular">{range(r.amount_min_cents, r.amount_max_cents)}</span>
             </div>
             {r.type_disputed ? (
-              <div className="text-amber-600 dark:text-amber-400">
+              <div className="text-attention">
                 type disputed: model read {ACTION_LABEL[r.model_action ?? ""] ?? r.model_action}; grid&rsquo;s{" "}
                 {ACTION_LABEL[r.action ?? ""] ?? r.action} kept
               </div>
             ) : null}
             {r.amount_disputed ? (
-              <div className="text-amber-600 dark:text-amber-400">
+              <div className="text-attention">
                 amount: model read {r.model_amount_letter}; grid&rsquo;s {r.amount_letter} kept
               </div>
             ) : null}
             {r.status !== "read" ? (
-              <div className="text-amber-600 dark:text-amber-400">{statusLabel(r.status)}</div>
+              <div className="text-attention">{statusLabel(r.status)}</div>
             ) : null}
           </div>
         ) : (

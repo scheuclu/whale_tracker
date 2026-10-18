@@ -1,6 +1,8 @@
 import { getScanFilings, getScanTotals } from "@/lib/scan-queries";
 import { shortDate } from "@/lib/format";
-import { Card, Empty, SectionTitle, StatTile } from "../charts";
+import { Empty, SectionTitle, StatTile } from "../charts";
+import { Disclosure } from "../disclosure";
+import { PAGE_STACK, PageHeader, Quiet } from "../page-header";
 import { PartyBadge, StatusBadge, ResponsiveTable } from "../ui";
 
 export const dynamic = "force-dynamic";
@@ -25,8 +27,13 @@ export default async function ScansPage({
   }
 
   return (
-    <div className="space-y-8">
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div className={PAGE_STACK}>
+      <PageHeader
+        back={params.m ? { href: "/scans", label: "all scans" } : undefined}
+        title="Scanned filings"
+        subtitle="Paper filings with no text layer, and what the grid reader made of each — the audit trail for the transcription path, not a statistic."
+      >
+      <section aria-label="Scan totals" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile
           label="Scanned filings"
           value={String(totals.filings)}
@@ -44,20 +51,17 @@ export default async function ScansPage({
           hint="amount or type left unknown, not guessed"
         />
       </section>
+      </PageHeader>
 
       <section>
         <SectionTitle
           right={
-            params.m ? (
-              <a href="/scans" className="text-[11px] text-muted-foreground hover:text-primary">
-                all members
-              </a>
-            ) : (
-              <span className="text-[11px] text-muted-foreground">newest filing first</span>
-            )
+            <span className="text-[12px] text-muted-foreground">
+              {filings.length.toLocaleString()} filing{filings.length === 1 ? "" : "s"} · newest first
+            </span>
           }
         >
-          {params.m ? `Scanned filings — ${params.m}` : "Scanned filings"}
+          {params.m ? `Filings by ${params.m}` : "Every scanned filing"}
         </SectionTitle>
         {filings.length ? (
           <ResponsiveTable wrap>
@@ -127,7 +131,7 @@ export default async function ScansPage({
                     <td className="tabular px-4 py-2 text-right">{f.pages ? f.rows : "—"}</td>
                     <td
                       className={`tabular px-4 py-2 text-right ${
-                        f.unknown_rows ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"
+                        f.unknown_rows ? "text-attention" : "text-muted-foreground"
                       }`}
                     >
                       {f.pages ? f.unknown_rows : "—"}
@@ -149,16 +153,24 @@ export default async function ScansPage({
             </table>
           </ResponsiveTable>
         ) : (
-          <Empty>No scanned filings{params.m ? ` for ${params.m}` : ""}.</Empty>
+          <Quiet>No scanned filings{params.m ? ` for ${params.m}` : ""}.</Quiet>
         )}
-        <p className="mt-3 text-[11px] text-muted-foreground">
-          A scanned filing has no text layer. The grid reader finds the printed rules and
-          reads the ticked amount and type boxes; a vision model, when enabled, transcribes the
-          written text. &ldquo;Rows read&rdquo; is what the reader found; an unknown row is a box
-          it would not call. Transactions exist only for filings the transcription path has
-          read, and those are quarantined from every total. Capture with{" "}
-          <code className="font-mono">python -m whale capture-scans</code>.
-        </p>
+        <Disclosure
+          size="sm"
+          className="mt-3"
+          lead="Transactions exist only for filings the transcription path has read, and those are quarantined from every total."
+        >
+          <p>
+            A scanned filing has no text layer. The grid reader finds the printed rules and reads the ticked
+            amount and type boxes; a vision model, when enabled, transcribes the written text.
+          </p>
+          <p>
+            &ldquo;Rows read&rdquo; is what the reader found; an unknown row is a box it would not call.
+          </p>
+          <p>
+            Capture with <code className="font-mono">python -m whale capture-scans</code>.
+          </p>
+        </Disclosure>
       </section>
     </div>
   );
