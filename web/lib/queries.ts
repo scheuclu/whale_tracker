@@ -1,6 +1,7 @@
 import type Database from "better-sqlite3";
 
 import { getDb } from "./db";
+import type { TransactionFilters } from "./feed-filters";
 
 /**
  * Statuses whose transactions are real, parsed data. Mirrors
@@ -10,7 +11,7 @@ import { getDb } from "./db";
 export const COUNTED = `('parsed','notified','backfilled')`;
 
 /** Asset types eligible for the "conviction" views; mirrors config.yaml. */
-const CLUSTER_TYPES = `('ST','OP','EF','ET','CT','RS','SA')`;
+export const CLUSTER_TYPES = `('ST','OP','EF','ET','CT','RS','SA')`;
 
 export type Direction = "buy" | "sell" | "flat";
 
@@ -282,15 +283,16 @@ export async function getConsensusTickers(days = 90, limit = 12): Promise<Ticker
     .all(limit) as TickerRow[];
 }
 
-export async function getTransactions(opts: {
-  ticker?: string;
-  member?: string;
-  action?: string;
-  /** Only rows whose text named an option contract (the ticker page's Options section). */
-  options?: boolean;
-  limit?: number;
-} = {}): Promise<TransactionRow[]> {
-  const db = await getDb();
+/**
+ * WHERE clause for one filtered set of counted transactions. Shared by the
+ * trade list, its whole-match totals and the CSV export, so the three can
+ * never disagree about which rows a URL names.
+ *
+ * `chamber` is the filing's chamber, not the roster's: an unmatched filing
+ * has no roster row but still came from one Clerk. `owner` "self" is a row
+ * with no owner code — the member's own account.
+ */
+function transactionWhere(opts: TransactionFilters): { sql: string; params: unknown[] } {
   const where: string[] = [`f.status IN ${COUNTED}`];
   const params: unknown[] = [];
   if (opts.ticker) {
@@ -303,12 +305,53 @@ export async function getTransactions(opts: {
   }
   if (opts.action === "buy") where.push("t.action = 'purchase'");
   if (opts.action === "sell") where.push("t.action IN ('sale','sale_partial')");
+  if (opts.chamber) {
+    where.push("f.chamber = ?");
+    params.push(opts.chamber);
+  }
+  if (opts.party) {
+    where.push("p.party = ?");
+    params.push(opts.party);
+  }
+  if (opts.assetType) {
+    where.push("t.asset_type = ?");
+    params.push(opts.assetType);
+  }
+  if (opts.owner === "self") where.push("(t.owner IS NULL OR t.owner = '')");
+  else if (opts.owner) {
+    where.push("t.owner = ?");
+    params.push(opts.owner);
+  }
+  if (opts.from) {
+    where.push("t.tx_date >= ?");
+    params.push(opts.from);
+  }
+  if (opts.to) {
+    where.push("t.tx_date <= ?");
+    params.push(opts.to);
+  }
+  if (opts.transcribed === "only") where.push(TRANSCRIBED);
+  if (opts.transcribed === "exclude") where.push(`NOT ${TRANSCRIBED}`);
+  return { sql: where.join(" AND "), params };
+}
+
+export async function getTransactions(
+  opts: TransactionFilters & {
+    /** Only rows whose text named an option contract (the ticker page's Options section). */
+    options?: boolean;
+    limit?: number;
+    offset?: number;
+  } = {}
+): Promise<TransactionRow[]> {
+  const db = await getDb();
+  const { sql, params } = transactionWhere(opts);
+  const where = [sql];
   if (opts.options) {
     // Before the migration no row can qualify, and the column cannot be named.
     if (!hasOptionColumns(db)) return [];
     where.push("t.option_kind IS NOT NULL");
   }
-  params.push(opts.limit ?? 100);
+  params.push(opts.limit ?? 100, opts.offset ?? 0);
   const sectors = hasIssuerTables(db);
 
   return db
@@ -333,9 +376,150 @@ export async function getTransactions(opts: {
        ${sectors ? SECTOR_JOIN : ""}
        WHERE ${where.join(" AND ")}
        ORDER BY t.tx_date DESC, t.id DESC
-       LIMIT ?`
+       LIMIT ? OFFSET ?`
     )
     .all(...params) as TransactionRow[];
+}
+
+export type TransactionTotals = {
+  trades: number;
+  /** Sum of the disclosed floors of every counted, non-transcribed row. */
+  volume_min: number;
+  /** Sum of the disclosed ceilings — NULL once any row is open-ended. */
+  volume_max: number | null;
+  /** Bracket midpoints — an estimate, never a reported figure. */
+  volume_mid: number;
+  /** Rows transcribed from scans: in `trades`, in no volume. */
+  transcribed: number;
+};
+
+/**
+ * What the whole filtered set adds up to, not the page of it being
+ * rendered — the feed paginates, and a "total" summed over one page would
+ * understate what it claims to report. The range is what the disclosures
+ * permit; the midpoint is an estimate and is labelled as one wherever shown.
+ */
+export async function getTransactionTotals(opts: TransactionFilters = {}): Promise<TransactionTotals> {
+  const db = await getDb();
+  const { sql, params } = transactionWhere(opts);
+  return db
+    .prepare(
+      `SELECT COUNT(*) AS trades,
+              COALESCE(SUM(COALESCE(${VOL_MIN},0)),0) AS volume_min,
+              ${VOLUME_MAX} AS volume_max,
+              COALESCE(SUM(COALESCE(${MID},0)),0) AS volume_mid,
+              COALESCE(SUM(${TRANSCRIBED}),0) AS transcribed
+       FROM transactions t
+       JOIN filings f ON f.id = t.filing_id
+       LEFT JOIN politicians p ON p.id = t.politician_id
+       WHERE ${sql}`
+    )
+    .get(...params) as TransactionTotals;
+}
+
+/* ------------------------------------------------------------------ search */
+
+/** Case-insensitive substring match; `%`, `_` and `\` in the query are literal. */
+export function likePattern(q: string): string {
+  return `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+}
+
+export type MemberSearchRow = {
+  member_name: string;
+  party: string | null;
+  state: string | null;
+  district: string | null;
+  chamber: string | null;
+  trades: number;
+  tickers: number;
+  last_tx_date: string | null;
+};
+
+/**
+ * Members whose disclosed trades the dashboard can show, by name. Grouped
+ * exactly as the leaderboard is (`getPoliticians`), so every hit links to a
+ * member page that exists.
+ */
+export async function searchMembers(q: string, limit = 20): Promise<MemberSearchRow[]> {
+  const db = await getDb();
+  return db
+    .prepare(
+      `SELECT COALESCE(p.full_name, f.filer_name) AS member_name,
+              p.party, p.state, p.district, p.chamber,
+              COUNT(*) AS trades,
+              COUNT(DISTINCT t.ticker) AS tickers,
+              MAX(t.tx_date) AS last_tx_date
+       FROM transactions t
+       JOIN filings f ON f.id = t.filing_id
+       LEFT JOIN politicians p ON p.id = t.politician_id
+       WHERE f.status IN ${COUNTED}
+         AND COALESCE(p.full_name, f.filer_name) LIKE ? ESCAPE '\\'
+       GROUP BY member_name
+       ORDER BY trades DESC, member_name
+       LIMIT ?`
+    )
+    .all(likePattern(q), limit) as MemberSearchRow[];
+}
+
+export type RosterRow = {
+  full_name: string;
+  party: string | null;
+  state: string | null;
+  district: string | null;
+  chamber: string | null;
+};
+
+/**
+ * Roster members matching the query who have no counted trade in this
+ * database. Listed so a search for a sitting member with nothing to show
+ * reads "no disclosed trades", not "no such person".
+ */
+export async function searchRoster(q: string, limit = 10): Promise<RosterRow[]> {
+  const db = await getDb();
+  return db
+    .prepare(
+      `SELECT p.full_name, p.party, p.state, p.district, p.chamber
+       FROM politicians p
+       WHERE p.full_name LIKE ? ESCAPE '\\'
+         AND NOT EXISTS (
+           SELECT 1 FROM transactions t
+           JOIN filings f ON f.id = t.filing_id
+           WHERE t.politician_id = p.id AND f.status IN ${COUNTED}
+         )
+       ORDER BY p.active DESC, p.full_name
+       LIMIT ?`
+    )
+    .all(likePattern(q), limit) as RosterRow[];
+}
+
+export type TickerSearchRow = {
+  ticker: string;
+  asset_name: string | null;
+  politicians: number;
+  trades: number;
+  last_tx_date: string | null;
+};
+
+/** Tickers by symbol or asset name; an exact symbol match ranks first. */
+export async function searchTickers(q: string, limit = 20): Promise<TickerSearchRow[]> {
+  const db = await getDb();
+  const pattern = likePattern(q);
+  return db
+    .prepare(
+      `SELECT t.ticker,
+              MIN(t.asset_name) AS asset_name,
+              COUNT(DISTINCT t.politician_id) AS politicians,
+              COUNT(*) AS trades,
+              MAX(t.tx_date) AS last_tx_date
+       FROM transactions t
+       JOIN filings f ON f.id = t.filing_id
+       WHERE f.status IN ${COUNTED} AND t.ticker IS NOT NULL AND t.ticker != ''
+         AND (t.ticker LIKE ? ESCAPE '\\' OR t.asset_name LIKE ? ESCAPE '\\')
+       GROUP BY t.ticker
+       ORDER BY (t.ticker = ?) DESC, trades DESC, t.ticker
+       LIMIT ?`
+    )
+    .all(pattern, pattern, q.toUpperCase(), limit) as TickerSearchRow[];
 }
 
 export async function getPoliticians(days?: number, limit = 60): Promise<PoliticianRow[]> {
@@ -485,8 +669,9 @@ export async function getPoliticianTickers(member: string, limit = 40): Promise<
     .all(member, limit) as PoliticianTickerRow[];
 }
 
-export async function getTickerDetail(ticker: string) {
-  const rows = await getTickers(undefined, 5000);
+/** One ticker's congressional aggregate, over everything or a trade-date window. */
+export async function getTickerDetail(ticker: string, days?: number) {
+  const rows = await getTickers(days, 5000);
   return rows.find((r) => r.ticker === ticker.toUpperCase()) ?? null;
 }
 
@@ -557,6 +742,56 @@ export async function getSectorLeaderboard(days?: number): Promise<SectorRow[]> 
        ORDER BY s.industry_group IS NULL, politicians DESC, trades DESC`
     )
     .all() as SectorRow[];
+}
+
+export type TickerMemberRow = {
+  member_name: string;
+  party: string | null;
+  state: string | null;
+  district: string | null;
+  chamber: string | null;
+  trades: number;
+  buys: number;
+  sells: number;
+  volume_min: number;
+  /** NULL when any trade sits in the open-ended top bracket. */
+  volume_max: number | null;
+  volume_mid: number;
+  transcribed: number;
+  last_tx_date: string | null;
+};
+
+/**
+ * The members behind one ticker's trades, each with their own disclosed
+ * range. Grouped on the display name like `getPoliticians`, so an unmatched
+ * filing still appears under the name printed on the PDF. This is the
+ * congressional side of the issuer page's cross-link and must stay a view of
+ * these tables alone — the Form 4 books are shown beside it, never in it.
+ */
+export async function getTickerMembers(ticker: string, days?: number, limit = 40): Promise<TickerMemberRow[]> {
+  const db = await getDb();
+  return db
+    .prepare(
+      `SELECT COALESCE(p.full_name, f.filer_name) AS member_name,
+              p.party, p.state, p.district, p.chamber,
+              COUNT(*) AS trades,
+              SUM(t.action='purchase') AS buys,
+              SUM(t.action IN ('sale','sale_partial')) AS sells,
+              SUM(COALESCE(${VOL_MIN},0)) AS volume_min,
+              ${VOLUME_MAX} AS volume_max,
+              SUM(COALESCE(${MID},0)) AS volume_mid,
+              SUM(${TRANSCRIBED}) AS transcribed,
+              MAX(t.tx_date) AS last_tx_date
+       FROM transactions t
+       JOIN filings f ON f.id = t.filing_id
+       LEFT JOIN politicians p ON p.id = t.politician_id
+       WHERE f.status IN ${COUNTED} AND t.ticker = ?
+       ${sinceClause(days)}
+       GROUP BY member_name
+       ORDER BY volume_mid DESC, trades DESC
+       LIMIT ?`
+    )
+    .all(ticker.toUpperCase(), limit) as TickerMemberRow[];
 }
 
 export type Pipeline = {
