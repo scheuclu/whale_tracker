@@ -9,8 +9,23 @@ import { cn } from "@/lib/utils";
  * Rendered edge in CSS pixels. next/image picks the 1x/2x candidates from
  * `images.imageSizes` (32, 48, 64, 96, 128, 256), so a 24px avatar costs a
  * ~2 KB 48px WebP instead of the 56 KB 225×275 JPEG.
+ *
+ * The scale, on the 4px grid: xs 20 (dense inline mentions) · sm 24 (table
+ * and list rows) · md 32 (cards, search results) · lg 40 (roster tiles) ·
+ * xl 88/112 (the member hero).
  */
-const PX = { sm: 24, md: 32, lg: 44, xl: 112 } as const;
+const PX = { xs: 20, sm: 24, md: 32, lg: 40, xl: 112 } as const;
+
+/**
+ * Monogram type per size: small sizes get a touch more weight and less
+ * relative size so two capitals do not crowd the circle.
+ */
+const MONO_TYPE: Record<Exclude<AvatarSize, "xl">, string> = {
+  xs: "text-[8px] tracking-[0.02em]",
+  sm: "text-[9.5px] tracking-[0.02em]",
+  md: "text-[12px] tracking-[0.01em]",
+  lg: "text-[14px]",
+};
 
 export type AvatarSize = keyof typeof PX;
 
@@ -57,16 +72,18 @@ export function MemberAvatar({
       aria-hidden
       data-avatar={src ? "portrait" : "monogram"}
       className={cn(
-        "member-avatar relative inline-flex shrink-0 select-none items-center justify-center overflow-hidden",
+        "relative inline-flex shrink-0 select-none items-center justify-center overflow-hidden",
+        // Monogram surface: the card surface with a few percent of ink mixed
+        // in, initials at mid ink. Neutral in both modes, never a party hue.
+        "bg-[color-mix(in_oklab,var(--foreground)_6%,var(--card-solid))] text-[color-mix(in_oklab,var(--foreground)_58%,var(--card-solid))]",
+        "dark:bg-[color-mix(in_oklab,var(--foreground)_9%,var(--card-solid))] dark:text-[color-mix(in_oklab,var(--foreground)_66%,var(--card-solid))]",
         // The hero portrait steps down on a phone so the name keeps its line.
-        xl ? "size-[88px] rounded-[30%] text-[28px] sm:size-[112px] sm:text-[34px]" : "rounded-full",
+        xl ? "size-[88px] rounded-[30%] text-[28px] sm:size-[112px] sm:text-[34px]" : cn("rounded-full", MONO_TYPE[size]),
         className
       )}
-      style={xl ? undefined : { width: px, height: px, fontSize: Math.round(px * 0.4) }}
+      style={xl ? undefined : { width: px, height: px }}
     >
-      <span className="font-semibold leading-none tracking-tight">
-        {initials(name)}
-      </span>
+      <span className="font-semibold leading-none">{initials(name)}</span>
       {src ? (
         <Image
           src={src}
@@ -91,6 +108,8 @@ export function MemberAvatar({
           )}
         />
       ) : null}
+      {/* The hairline ring sits above the photo, so it stays crisp on both. */}
+      <span className="pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-inset ring-black/[0.08] dark:ring-white/[0.1]" />
     </span>
   );
 }
