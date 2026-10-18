@@ -14,7 +14,8 @@ import { getDb } from "./db";
  * keep it that way until the committed database is past schema 13.
  */
 
-export const ALERT_KINDS = ["cluster", "insider_cluster", "filing", "watchlist", "insider_filing"] as const;
+/** The message kinds — `stats.ALERT_KINDS` in Python. */
+export const ALERT_KINDS = ["cluster", "insider_cluster", "filing", "watchlist", "insider_filing", "options"] as const;
 export type AlertKind = (typeof ALERT_KINDS)[number];
 
 export const KIND_LABEL: Record<AlertKind, string> = {
@@ -23,6 +24,7 @@ export const KIND_LABEL: Record<AlertKind, string> = {
   filing: "Filing",
   watchlist: "Watchlist",
   insider_filing: "Insider filing",
+  options: "Options",
 };
 
 /** What `politician_count` counts for each kind — mirrors the db.py docstring. */
@@ -32,6 +34,7 @@ export const COUNT_NOUN: Record<AlertKind, string> = {
   filing: "member",
   watchlist: "member",
   insider_filing: "insider",
+  options: "member",
 };
 
 /** Insider kinds carry exact values (shares × reported price) and link to the Insiders tab. */

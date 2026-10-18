@@ -42,11 +42,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -110,9 +110,10 @@ jobs:
           print(f"- runs in window: **{len(recent)}**{capped}")
           print(f"- outcomes: {by or 'none'}")
 
-          # The cron asks for every 3 h, but GitHub delivers scheduled runs late
-          # and unevenly — a 5.3 h median gap over Sep–Oct 2026 — so report the
-          # measured cadence rather than a count against the cron's promise.
+          # Two cron lines ask for a run every 90 min, but GitHub delivers
+          # scheduled runs late and unevenly — a 5.3 h median gap over Sep–Oct
+          # 2026 on the earlier single 3 h line — so report the measured
+          # cadence rather than a count against the cron's promise.
           # The longest gap is the one that matters: past ~2 days the EDGAR
           # feed's memory is exceeded and filings are missed.
           sched = sorted(ts(r["createdAt"]) for r in recent if r["event"] == "schedule")
@@ -120,7 +121,7 @@ jobs:
           if gaps:
               print(f"- scheduled runs: {len(sched)}; gap between them: "
                     f"median {statistics.median(gaps):.1f} h, max {max(gaps):.1f} h "
-                    f"(cron is every 3 h; GitHub delivers it late)")
+                    f"(cron asks for every 90 min; GitHub delivers it late)")
               print(f"- hours since the last scheduled run: "
                     f"{(now - sched[-1]).total_seconds() / 3600:.1f}")
           else:
@@ -199,7 +200,7 @@ jobs:
           wc -c /tmp/evidence.md
 
       # Keep the evidence whatever else happens — it is the week's record.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
           name: weekly-evidence

@@ -135,6 +135,15 @@ parser stays faithful to the PDF and the UI flags the row rather than
   deliberately no shape check on `insider_filings.ticker`: it comes from an XML
   element rather than a column split, and real values include exchange-prefixed
   foreign symbols like `ASX:LNW`.
+- A ticker read from the asset name — `(BHP)` on a row whose ticker column
+  is empty (#50) — is marked by appending `ptr.TICKER_FROM_NAME_NOTE` to
+  `description`; that is the only provenance (no schema column) and
+  `audit.check_tickers_from_asset_names` counts on it. On a House row only
+  the form's own `(SYM) [XX]` slot counts, wherever it sits in the cell —
+  `(THE)` and `(AMI) Labs` are not tickers; the Senate name column has no
+  slot, so any single parenthesised symbol counts. Two different symbols
+  mean no ticker. `pipeline._derive_tickers_from_names` re-derives stored
+  rows on every sync and backfill, idempotently.
 - Tests: `.venv/bin/python -m pytest -q` (run before every PR).
 
 ## Watchlist (per-member alerting)
@@ -249,8 +258,10 @@ parser stays faithful to the PDF and the UI flags the row rather than
 ## Alert log (`/alerts`)
 
 - `alerts` is **one row per message sent**, of every kind (`stats.ALERT_KINDS`:
-  `cluster`, `insider_cluster`, `filing`, `watchlist`, `insider_filing`), and
-  still the dedupe store for the two cluster kinds. `db.last_alert` **must**
+  `cluster`, `insider_cluster`, `filing`, `watchlist`, `insider_filing`,
+  `options`), and still the dedupe store for the two cluster kinds. A new
+  delivery path must log its messages or `audit.check_alert_recording` will
+  name the filing. `db.last_alert` **must**
   keep being called with a kind. `politician_count` holds whatever the kind
   counts; a watched filing logs one row per transaction because each is its
   own message.

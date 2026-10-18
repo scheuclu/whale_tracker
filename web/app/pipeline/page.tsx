@@ -1,7 +1,7 @@
-import { getPipeline } from "@/lib/queries";
+import { getPipeline, medianGapHours, type PipelineRun } from "@/lib/queries";
 import { getInsiderPipeline } from "@/lib/insider-queries";
 import { getAlertTotals, KIND_LABEL, type AlertKind } from "@/lib/alert-queries";
-import { relativeTime } from "@/lib/format";
+import { duration, relativeTime } from "@/lib/format";
 import { Card, Empty, SectionTitle, StatTile } from "../charts";
 import { StatusBadge } from "../ui";
 
@@ -100,7 +100,8 @@ export default async function PipelinePage() {
                   ) : null}
                   {ins.state.edgar_gap ? (
                     <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
-                      Feed gap {ins.state.edgar_gap} — repair with{" "}
+                      Feed gap {ins.state.edgar_gap} — each run walks the daily index for it
+                      until it clears (progress in the status above); to finish by hand:{" "}
                       <code className="font-mono">
                         backfill-insiders --from {ins.state.edgar_gap.split("..")[0]} --to{" "}
                         {ins.state.edgar_gap.split("..")[1]}
@@ -267,8 +268,92 @@ export default async function PipelinePage() {
           </Card>
         </section>
       ) : null}
+
+      <section>
+        <SectionTitle>Recent runs</SectionTitle>
+        <Card className="space-y-3">
+          {p.runs.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="text-left text-[11px] font-medium uppercase tracking-[0.07em] text-muted-foreground">
+                    <th className="pb-2 pr-3 font-medium">Started</th>
+                    <th className="pb-2 pr-3 font-medium">Took</th>
+                    <th className="pb-2 pr-3 text-right font-medium">Parsed</th>
+                    <th className="pb-2 pr-3 text-right font-medium">Alerts</th>
+                    <th className="pb-2 pr-3 text-right font-medium">Scans</th>
+                    <th className="pb-2 pr-3 text-right font-medium">Form 4s</th>
+                    <th className="pb-2 font-medium">Outcome</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {p.runs.map((r) => (
+                    <tr key={r.started} className="border-t border-border/60">
+                      <td className="py-1.5 pr-3 whitespace-nowrap">
+                        <span title={r.started}>{relativeTime(r.started)}</span>
+                        <span className="ml-2 font-mono text-[11px] text-muted-foreground">
+                          {r.started.slice(0, 16).replace("T", " ")}
+                        </span>
+                      </td>
+                      <td className="py-1.5 pr-3 tabular whitespace-nowrap">{duration(r.duration_s)}</td>
+                      <td className="py-1.5 pr-3 text-right tabular">{r.filings_parsed}</td>
+                      <td className="py-1.5 pr-3 text-right tabular">{r.alerts_sent}</td>
+                      <td className="py-1.5 pr-3 text-right tabular">{r.scans_transcribed}</td>
+                      <td className="py-1.5 pr-3 text-right tabular">{r.insiders_stored}</td>
+                      <td className="py-1.5">
+                        <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                          <span
+                            className={`size-1.5 shrink-0 rounded-full ${
+                              r.outcome === "ok" ? "bg-emerald-500" : "bg-red-500"
+                            }`}
+                          />
+                          <span
+                            className={
+                              r.outcome === "ok" ? "" : "font-medium text-red-600 dark:text-red-400"
+                            }
+                          >
+                            {r.outcome}
+                          </span>
+                          {r.error ? (
+                            <span className="max-w-[28rem] truncate font-mono text-[11px] text-muted-foreground" title={r.error}>
+                              {r.error}
+                            </span>
+                          ) : null}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-[13px] text-muted-foreground">
+              No run has written the log yet — it starts with the first scheduled run after this
+              version of the pipeline is deployed.
+            </p>
+          )}
+          <p className="text-[11px] text-muted-foreground">
+            Columns: filings parsed (House and Senate), Telegram alerts sent, scans transcribed by
+            the vision model, Form 4 filings stored (live feed and gap repair). Dry runs and runs
+            killed by the job timeout leave no entry; the GitHub Actions history has those.
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            Cadence: scheduled at :17 past every third hour and :47 past the hours between (UTC), a
+            run every 90 minutes on paper. GitHub delivers scheduled runs late and drops some under
+            load — on the earlier single three-hourly schedule the gap between runs was a median 5.3 h
+            (p90 8.5 h, max 10.6 h) over 100 runs.
+            {cadenceNote(p.runs)}
+          </p>
+        </Card>
+      </section>
     </div>
   );
+}
+
+function cadenceNote(runs: PipelineRun[]): string {
+  const gap = medianGapHours(runs);
+  if (gap == null) return "";
+  return ` Measured over the ${runs.length} runs above: a median ${gap.toFixed(1)} h between runs.`;
 }
 
 const METHOD_LABEL: Record<string, string> = {

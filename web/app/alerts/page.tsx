@@ -72,7 +72,7 @@ export default async function AlertsPage({
           : "Until the pipeline next runs, only the cluster dedupe rows exist here; from then on every kind is logged with its message text."}
       </p>
 
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {ALERT_KINDS.map((k) => {
           const t = byKind.get(k);
           return (
