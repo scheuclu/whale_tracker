@@ -58,8 +58,7 @@ export function Disclosure({
               aria-hidden
               className="size-3.5 shrink-0 transition-transform duration-150 ease-out group-open/disclosure:rotate-90 motion-reduce:transition-none"
             />
-            <span className="group-open/disclosure:hidden">{summary}</span>
-            <span className="hidden group-open/disclosure:inline">Hide</span>
+            {summary}
           </summary>
           <div className="mt-2 space-y-2 border-l border-border pl-3">{children}</div>
         </details>
