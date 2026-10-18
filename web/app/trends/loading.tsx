@@ -11,7 +11,7 @@ import {
 export default function Loading() {
   return (
     <SkeletonPage label="trends">
-      <PillsSkeleton />
+      <PillsSkeleton count={3} />
       <TilesSkeleton cols="lg:grid-cols-4" />
       <section>
         <SectionTitleSkeleton width="w-48" right />

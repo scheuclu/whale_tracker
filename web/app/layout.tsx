@@ -12,6 +12,7 @@ import { getInsiderTotals } from "@/lib/insider-queries";
 import { relativeTime } from "@/lib/format";
 import { SearchForm, SyncStatus, Tabs, ThemeToggle } from "./nav";
 import "./globals.css";
+import "./motion.css";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" });
