@@ -29,8 +29,8 @@ export const metadata: Metadata = {
 // Browser chrome follows the page surface (--background) in each scheme.
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fbfbfd" },
-    { media: "(prefers-color-scheme: dark)", color: "#08080c" },
+    { media: "(prefers-color-scheme: light)", color: "#f6f7f9" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b0c0f" },
   ],
 };
 
@@ -113,7 +113,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <SearchForm className="order-first basis-full sm:order-none sm:mb-1 sm:ml-auto sm:w-72 sm:shrink-0 sm:basis-auto lg:w-80" />
             </div>
           </HeaderShell>
-          <main className="mx-auto max-w-6xl px-4 py-8 pb-28 sm:px-6">{children}</main>
+          {/* page-flow sets the section rhythm (globals.css): 28px apart on a phone, 40px from sm. */}
+          <main className="page-flow mx-auto w-full max-w-6xl px-4 pb-20 pt-7 sm:px-6 sm:pb-24 sm:pt-10">{children}</main>
           <SiteFooter />
         </ThemeProvider>
         <Analytics />
