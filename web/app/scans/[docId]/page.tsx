@@ -210,7 +210,7 @@ export default async function ScanDetailPage({
               {rows.length ? (
                 <table className="w-full text-[12px]">
                   <thead>
-                    <tr className="border-b border-border text-left text-[10px] uppercase tracking-[0.06em] text-muted-foreground">
+                    <tr className="border-b border-border text-left text-[12px] font-medium text-muted-foreground">
                       <th className="px-3 py-2 font-medium">#</th>
                       <th className="px-3 py-2 font-medium">Amount</th>
                       <th className="px-3 py-2 text-right font-medium">margin</th>

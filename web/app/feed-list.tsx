@@ -14,23 +14,19 @@
  *   ≥1024px   member column | one line per trade
  *   ≥640px    member line above | one line per trade
  *   <640px    member line above | two lines per trade
- * The member cell leaves room at its start for a ~24px avatar.
+ * The member cell starts with the member's 24px portrait (or monogram).
  */
 
 import type { TransactionRow } from "@/lib/queries";
-import {
-  filedBeforeTrade,
-  groupFeed,
-  monthDay,
-  todayIso,
-  type DayGroup,
-  type FilingBlock,
-} from "@/lib/feed";
-import { ASSET_TYPE_LABEL, memberHref, memberLabel } from "@/lib/format";
+import { groupFeed, monthDay, todayIso, type DayGroup, type FilingBlock } from "@/lib/feed";
+import { memberHref, memberLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { MemberAvatar } from "./avatar";
 import { BracketAmount, BracketLegend } from "./bracket-glyph";
+import { Card } from "./charts";
 import { StickyOffset } from "./sticky-offset";
-import { ActionBadge, DelayTag, OptionBadge, OwnerTag, PartyBadge, ScanTag, TickerChip } from "./ui";
+import { AssetName, TickerCell, TradeDelay } from "./trade-row";
+import { ActionBadge, OptionBadge, OwnerTag, PartyBadge, ScanTag } from "./ui";
 
 /* ------------------------------------------------------------- header */
 
@@ -96,7 +92,8 @@ export function FeedList({
   const today = todayIso();
   const days = groupFeed(rows, today);
   return (
-    <div className="glass rounded-2xl border border-border bg-card">
+    // The shared Card surface, unpadded: the list's own rows carry the inset.
+    <Card className="p-0 sm:p-0">
       <StickyOffset />
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border px-3 py-3 sm:px-4">
         {toolbar}
@@ -109,44 +106,46 @@ export function FeedList({
       {rows.length ? (
         days.map((day, i) => <DaySection key={`${day.key}-${i}`} day={day} today={today} index={i} />)
       ) : (
-        <div className="px-4 py-10 text-center text-sm text-muted-foreground">{empty}</div>
+        <div className="px-4 py-10 text-center text-[13px] text-muted-foreground">{empty}</div>
       )}
-    </div>
+    </Card>
   );
 }
 
 function DaySection({ day, today, index }: { day: DayGroup<TransactionRow>; today: string; index: number }) {
   const id = `feed-day-${index}`;
   return (
-    <section aria-labelledby={id} className="feed-day relative last:rounded-b-2xl">
+    <section aria-labelledby={id} className="feed-day relative last:rounded-b-[inherit]">
+      {/* One hairline above each day (none above the first: the toolbar's
+          rule is already there) and one below; the label carries the day. */}
       <h3
         id={id}
         className={cn(
-          "feed-day-head sticky z-20 flex h-8 items-center gap-2 border-b border-border px-3 text-xs sm:px-4",
-          index > 0 && "border-t"
+          "feed-day-head sticky z-20 flex h-9 items-center gap-2 border-b border-border/70 px-3 text-[12px] sm:px-4",
+          index > 0 && "border-t border-t-border"
         )}
       >
-        <span className="font-semibold tracking-tight text-foreground">{day.label}</span>
-        {day.date ? <span className="text-muted-foreground">{day.date}</span> : null}
+        <span className="font-semibold text-foreground">{day.label}</span>
+        {day.date ? <span className="tabular text-muted-foreground">{day.date}</span> : null}
         {day.future ? (
           <span
-            className="rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-px text-[10px] font-medium text-amber-700 dark:text-amber-300"
+            className="rounded-md border bg-attention-soft px-1.5 py-px text-[11px] font-medium text-attention"
             title="This trade date is later than today: the filing's own date, reproduced as filed rather than corrected"
           >
             future date as filed
           </span>
         ) : null}
         {day.key === null ? null : (
-          <span className="hidden text-[11px] text-muted-foreground/80 sm:inline">traded</span>
+          <span className="hidden text-muted-foreground sm:inline">traded</span>
         )}
         <span className="flex-1" />
-        <span className="tabular text-[11px] text-muted-foreground">
+        <span className="tabular text-muted-foreground">
           {day.trades} {day.trades === 1 ? "trade" : "trades"}
-          <span aria-hidden> · </span>
+          <span aria-hidden className="text-muted-foreground"> · </span>
           {day.filings} {day.filings === 1 ? "filing" : "filings"}
         </span>
       </h3>
-      <ol className="divide-y divide-border">
+      <ol className="divide-y divide-border/60">
         {day.blocks.map((b, i) => (
           <FilingBlockView key={`${b.key}-${i}`} block={b} today={today} />
         ))}
@@ -155,41 +154,54 @@ function DaySection({ day, today, index }: { day: DayGroup<TransactionRow>; toda
   );
 }
 
+/**
+ * One filing's trades on one day. From 1024px the member sits in a left
+ * column whose first line is the same 36px tall as a trade row, so the
+ * avatar and name centre on the first trade; the meta line sits under the
+ * name, indented to it. Below that the member is one line above the rows.
+ */
 function FilingBlockView({ block, today }: { block: FilingBlock<TransactionRow>; today: string }) {
   const r0 = block.rows[0];
   const n = block.rows.length;
   const label = memberLabel(r0.member_name, null, r0.state, r0.district, r0.chamber);
   const filed = r0.filing_date ? monthDay(r0.filing_date, today) : null;
   return (
-    <li className="feed-block lg:grid lg:grid-cols-[15rem_minmax(0,1fr)]">
-      <div className="px-3 pt-2 sm:px-4 lg:py-2 lg:pr-2">
-        <div className="feed-member flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 lg:flex-col lg:flex-nowrap lg:items-start">
-          {/* An avatar (~24px) slots in at the start of this row. */}
-          <div className="flex min-w-0 max-w-full items-center gap-1.5 lg:w-full lg:items-start">
-            <span className="flex shrink-0 lg:mt-px">
-              <PartyBadge party={r0.party} />
+    <li className="feed-block lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]">
+      <div className="px-3 pt-2.5 sm:px-4 lg:py-1.5 lg:pr-3">
+        <div className="feed-member flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 lg:flex-col lg:flex-nowrap lg:items-start lg:gap-0">
+          <div className="flex min-w-0 max-w-full items-center gap-2 lg:w-full lg:items-start">
+            <span className="flex shrink-0 items-center lg:h-9">
+              <MemberAvatar name={r0.member_name} bioguideId={r0.bioguide_id} size="sm" />
             </span>
             <a
               href={memberHref(r0.member_name)}
-              className="min-w-0 truncate text-[13px] font-medium hover:text-primary focus-visible:text-primary lg:line-clamp-2 lg:whitespace-normal lg:leading-snug"
+              className="min-w-0 truncate rounded-sm text-[13px] font-medium transition-colors duration-(--dur-fast) hover:text-primary focus-visible:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring lg:line-clamp-2 lg:whitespace-normal lg:py-[9px] lg:leading-[18px]"
               title={label}
             >
               {label}
             </a>
+            <span className="flex shrink-0 items-center lg:h-9">
+              <PartyBadge party={r0.party} />
+            </span>
           </div>
-          <div className="ml-auto flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground lg:ml-0">
+          <div className="tabular ml-auto flex shrink-0 items-center gap-1 text-[12px] text-muted-foreground lg:-mt-1.5 lg:ml-8">
             {n > 1 ? (
-              <span className="tabular">
+              <span>
                 {n} trades
-                <span aria-hidden> · </span>
+                <span aria-hidden className="text-muted-foreground"> · </span>
               </span>
             ) : null}
-            {filed ? <span className="tabular">filed {filed}</span> : null}
+            {filed ? (
+              <span>
+                filed {filed}
+                <span aria-hidden className="text-muted-foreground"> · </span>
+              </span>
+            ) : null}
             <a
               href={r0.pdf_url}
               target="_blank"
               rel="noreferrer"
-              className="underline decoration-border underline-offset-2 hover:text-primary hover:decoration-primary"
+              className="rounded-sm underline decoration-border underline-offset-[3px] transition-colors duration-(--dur-fast) hover:text-primary hover:decoration-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
               filing<span aria-hidden>&nbsp;↗</span>
               <span className="sr-only"> (opens the original filing)</span>
@@ -197,60 +209,18 @@ function FilingBlockView({ block, today }: { block: FilingBlock<TransactionRow>;
           </div>
         </div>
       </div>
-      <ul className={cn("px-1.5 pb-1.5 pt-1 sm:px-2 lg:py-1.5 lg:pl-0", n > 1 && "feed-run")}>
+      <ul className="px-1.5 pb-2 pt-1 sm:px-2 lg:py-1.5 lg:pl-0">
         {block.rows.map((r) => (
-          <TradeRow key={r.id} r={r} />
+          <FeedRow key={r.id} r={r} />
         ))}
       </ul>
     </li>
   );
 }
 
-/**
- * Short names for the asset-type label shown where a row has no ticker, so
- * "Government / agency debt" fits the ticker column; the full label stays
- * in the title. Unknown codes fall back to the full label.
- */
-const SHORT_TYPE: Record<string, string> = {
-  GS: "Gov. debt",
-  CS: "Corp. bond",
-  MF: "Mutual fund",
-  HN: "Fund",
-  PS: "Private",
-  OL: "Business",
-  AB: "ABS",
-  VA: "Annuity",
-  BA: "Bank acct.",
-  SA: "SAR",
-};
-
-function TickerCell({ ticker, type }: { ticker: string | null; type: string | null }) {
-  if (ticker) return <TickerChip ticker={ticker} type={type} />;
-  const full = type ? ASSET_TYPE_LABEL[type] ?? type : "no ticker";
+function FeedRow({ r }: { r: TransactionRow }) {
   return (
-    <span className="text-xs text-muted-foreground" title={full}>
-      {type ? SHORT_TYPE[type] ?? full : full}
-    </span>
-  );
-}
-
-function Delay({ r }: { r: TransactionRow }) {
-  if (!r.dates_inconsistent && filedBeforeTrade(r.tx_date, r.filing_date)) {
-    return (
-      <span
-        className="text-[11px] text-amber-600 dark:text-amber-400"
-        title="The filing is dated before the trade it reports — reproduced as filed"
-      >
-        date as filed
-      </span>
-    );
-  }
-  return <DelayTag days={r.delay_days} inconsistent={r.dates_inconsistent} />;
-}
-
-function TradeRow({ r }: { r: TransactionRow }) {
-  return (
-    <li className="feed-row rounded-lg px-1.5 py-1 transition-colors hover:bg-[var(--feed-hover)] focus-within:bg-[var(--feed-hover)] sm:px-2">
+    <li className="feed-row rounded-md px-1.5 py-1 transition-colors duration-(--dur-fast) hover:bg-raised focus-within:bg-raised sm:min-h-9 sm:px-2">
       <span className="[grid-area:act]">
         <ActionBadge action={r.action} />
       </span>
@@ -264,10 +234,8 @@ function TradeRow({ r }: { r: TransactionRow }) {
         exact={r.amount_exact_cents}
         transcribed={r.transcribed}
       />
-      <span className="flex min-w-0 items-center gap-1.5 text-[12.5px] [grid-area:asset]">
-        <span className="min-w-0 truncate text-muted-foreground" title={r.asset_name}>
-          {r.asset_name}
-        </span>
+      <span className="flex min-w-0 items-center gap-1.5 text-[13px] [grid-area:asset]">
+        <AssetName name={r.asset_name} ticker={r.ticker} />
         <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap empty:hidden">
           <OptionBadge kind={r.option_kind} strikeCents={r.strike_cents} expiry={r.expiry} />
           <OwnerTag owner={r.owner} />
@@ -275,11 +243,11 @@ function TradeRow({ r }: { r: TransactionRow }) {
         </span>
         {/* Below 640px the delay ends the asset line; above, it has a column. */}
         <span className="ml-auto shrink-0 pl-1 sm:hidden">
-          <Delay r={r} />
+          <TradeDelay r={r} />
         </span>
       </span>
       <span className="hidden justify-self-end whitespace-nowrap text-right [grid-area:delay] sm:block">
-        <Delay r={r} />
+        <TradeDelay r={r} />
       </span>
     </li>
   );

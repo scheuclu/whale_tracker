@@ -133,7 +133,7 @@ export function OutcomeSummarySection({ summary: s }: { summary: OutcomeSummary 
           <ResponsiveTable>
             <table className="w-full text-[13px]" data-outcome-summary>
             <thead>
-              <tr className="text-left text-[11px] font-medium uppercase tracking-[0.07em] text-muted-foreground">
+              <tr className="text-left text-[12px] font-medium text-muted-foreground">
                 <th scope="col" className="px-4 py-2.5 font-medium">
                   Kind
                 </th>
