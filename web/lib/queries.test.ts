@@ -5,6 +5,7 @@ import * as q from "./queries.ts";
 import * as iq from "./insider-queries.ts";
 import * as sq from "./scan-queries.ts";
 import * as aq from "./alert-queries.ts";
+import * as oq from "./outcome-queries.ts";
 
 // Every query the dashboard runs, executed against the committed database.
 // A page renders its error inside a 200 response, so a broken query is
@@ -51,6 +52,10 @@ const calls: Array<[string, () => Promise<unknown>]> = [
   ["getAlerts(cluster)", () => aq.getAlerts({ kind: "cluster", limit: 5 })],
   ["getAlertTotals", () => aq.getAlertTotals()],
   ["getAlertsPerWeek", () => aq.getAlertsPerWeek(8)],
+  // The committed database predates the price tables: these must answer
+  // "nothing yet", not throw, until the pipeline migrates it.
+  ["getAlertOutcomes", () => oq.getAlertOutcomes()],
+  ["getOutcomeSummary", () => oq.getOutcomeSummary()],
 ];
 
 for (const [name, run] of calls) {

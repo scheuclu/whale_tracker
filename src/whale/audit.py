@@ -757,6 +757,96 @@ def check_alert_recording(conn, today: date | None = None) -> list[Finding]:
     )]
 
 
+# Trading days a price series may lag before it is stale. Measured in business
+# days (weekends and federal holidays out), which is the market calendar to
+# within the two days a year NYSE and the federal list disagree on — five
+# days of slack absorbs that.
+PRICE_STALE_DAYS = 5
+
+
+def check_price_coverage(conn, today: date | None = None) -> list[Finding]:
+    """How many alerts can be measured, and whether the price series are alive.
+
+    `alert_outcomes` measures what an alerted ticker did next, which needs a
+    close on or after the alert's date: the INFO reports how many alerts have
+    one. A ticker whose newest close is more than `PRICE_STALE_DAYS` trading
+    days old while the pipeline has not successfully asked for it since is
+    the price step failing — a wall, a throttle, a budget always spent on
+    the same tickers — and warns. A ticker the source *has* answered for
+    recently with nothing newer is a series that ended (delisted, acquired)
+    and is listed as evidence, not a warning, so a buyout does not fire
+    every week. Silent on a database with no alerts: there is nothing to
+    measure yet, and `check_alert_health` already says so.
+    """
+    from .db import get_state
+    from .stats import BENCHMARK_TICKER, business_days_between, is_listed_ticker
+
+    today = today or date.today()
+    alerts = _rows(conn, "SELECT ticker FROM alerts")
+    if not alerts:
+        return []
+    total = len(alerts)
+    listed = sum(1 for a in alerts if is_listed_ticker(a["ticker"]))
+    tickers = {a["ticker"] for a in alerts if is_listed_ticker(a["ticker"])} | {BENCHMARK_TICKER}
+    priced = conn.execute("SELECT COUNT(*) n FROM alert_outcomes").fetchone()["n"]
+    newest = {r["ticker"]: r["newest"] for r in _rows(
+        conn, "SELECT ticker, MAX(date) newest FROM prices GROUP BY ticker")}
+    fetches = {r["ticker"]: r for r in _rows(conn, "SELECT * FROM price_fetches")}
+    status = get_state(conn, "prices_status")
+
+    no_series = sorted(t for t in tickers if t not in newest)
+    evidence = [f"source status: {status or 'never run'}",
+                f"{BENCHMARK_TICKER} closes through {newest.get(BENCHMARK_TICKER) or 'none'}"]
+    if no_series:
+        evidence.append(f"no price series: {', '.join(no_series)}")
+
+    stale, ended = [], []
+    for ticker in sorted(tickers):
+        last = newest.get(ticker)
+        if last is None:
+            continue
+        age = business_days_between(date.fromisoformat(last), today)
+        if age <= PRICE_STALE_DAYS:
+            continue
+        fetch = fetches.get(ticker)
+        asked = fetch and business_days_between(
+            date.fromisoformat(fetch["fetched_at"][:10]), today) <= PRICE_STALE_DAYS
+        line = (f"{ticker}  newest close {last} ({age} trading days ago)  last fetch "
+                f"{fetch['fetched_at'][:10] + ' ' + fetch['status'] if fetch else 'never'}")
+        if asked and fetch["status"] in ("ok", "no_data"):
+            ended.append(line)
+        else:
+            stale.append(line)
+    if ended:
+        evidence.append(f"series ended at the source ({len(ended)}): "
+                        + "; ".join(e.split("  ")[0] + " " + e.split("  ")[1] for e in ended))
+
+    findings = [Finding(
+        INFO, "price_coverage",
+        f"{priced} of {total} alert(s) have a close at t0 ({listed} name a listed ticker)",
+        "An alert is measurable once its ticker has a close on or after the "
+        "alert's date; the rest name no one ticker, a CIK-keyed issuer, or a "
+        "symbol the price source does not carry. Figures on /alerts are the "
+        "ticker's move after the alert against the benchmark — descriptive, "
+        "from an unofficial series, never a trade's return.",
+        evidence,
+    )]
+    if stale:
+        findings.append(Finding(
+            WARN, "prices_stale",
+            f"{len(stale)} alerted ticker(s) have no close for more than "
+            f"{PRICE_STALE_DAYS} trading days",
+            "The market was open and the price step did not bring back a newer "
+            "close, nor successfully ask: a source wall or throttle "
+            "(`sync_state.prices_status`), a budget spent on the same tickers "
+            "every run, or the step not running. Outcomes for these alerts stop "
+            "advancing. A series the source answered for recently with nothing "
+            "newer is listed under the coverage finding instead.",
+            stale,
+        ))
+    return findings
+
+
 def check_senate(conn, today: date | None = None) -> list[Finding]:
     """The Senate side's last attempt, read from `sync_state.senate_status`.
 
@@ -1274,6 +1364,7 @@ CHECKS = (
     check_issuer_classification,
     check_alert_health,
     check_alert_recording,
+    check_price_coverage,
     check_senate,
     check_senate_parse_coverage,
     check_pipeline_runs,

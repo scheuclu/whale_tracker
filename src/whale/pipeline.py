@@ -1,4 +1,4 @@
-"""Pipeline orchestration: sync → parse → notify → cluster → insiders.
+"""Pipeline orchestration: sync → parse → notify → cluster → insiders → prices.
 
 Every step commits DB state before the next runs, so a crash at any point
 resumes cleanly on the next cron tick via the filing status state machine.
@@ -14,8 +14,8 @@ import time
 from dataclasses import dataclass, field
 from datetime import date
 
-from . import (db, house, insider_alerts, insiders, issuers, options, roster, senate, senate_ptr,
-               stats, telegram)
+from . import (db, house, insider_alerts, insiders, issuers, options, prices, roster, senate,
+               senate_ptr, stats, telegram)
 from .amounts import parse_amount
 from .config import Config
 from .ptr import (PAREN_SYMBOL_RE, SLOT_SYMBOL_RE, ParsedFiling, ScannedFilingError, parse_pdf,
@@ -36,6 +36,7 @@ def run(config: Config, dry_run: bool = False) -> None:
         tally.alerts_sent += notify_clusters(conn, config, dry_run=dry_run)
         tally.insiders_stored = _sync_insiders(conn, config)
         tally.alerts_sent += notify_insiders(conn, config, dry_run=dry_run)
+        _sync_prices(conn, config, dry_run=dry_run)
         _classify_issuers(conn, config)
         tally.outcome = "ok"
     except Exception as exc:
@@ -131,6 +132,24 @@ def record_run(conn: sqlite3.Connection, tally: RunTally, dry_run: bool = False)
         conn.commit()
     except Exception:
         log.exception("could not record the run in sync_state %r", RUN_LOG_STATE)
+
+
+def _sync_prices(conn: sqlite3.Connection, config: Config, dry_run: bool = False) -> None:
+    """Best-effort, and after every alert step: an alert that fired this run
+    is priced this run, and a price source going dark must never delay or
+    fail an alert. `prices.sync` absorbs the failures it knows about; this
+    guard is for everything else. Skipped on a dry run, which previews the
+    queue and writes nothing."""
+    if dry_run:
+        return
+    try:
+        result = prices.sync(conn, config)
+    except Exception as exc:
+        log.exception("price sync failed unexpectedly")
+        db.set_state(conn, prices.STATE_STATUS, f"error: {exc}")
+        conn.commit()
+        return
+    log.info("prices: %s", result.summary())
 
 
 # --- sync -------------------------------------------------------------------

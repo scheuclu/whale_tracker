@@ -44,6 +44,7 @@ def steps(monkeypatch):
     # #55's issuer classification is a step of `run` too; its own status
     # write would otherwise reach the real `db.set_state`.
     monkeypatch.setattr(pipeline, "_classify_issuers", step("classify_issuers", None))
+    monkeypatch.setattr(pipeline, "_sync_prices", step("sync_prices", None))  # #53, likewise
     return calls
 
 
