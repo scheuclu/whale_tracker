@@ -348,3 +348,100 @@ body::before {
   --viz-grid: #2c2c2a;
   --viz-axis: #898781;
 }
+
+/* ------------------------------------------------------------------
+   Chart motion (app/charts.tsx).
+
+   Bars grow out of their baseline once, on first paint: a short ease-out,
+   no overshoot. Rows stagger by `--viz-i` (capped, so a long list does not
+   keep animating). Bars use clip-path rather than a scale so the rounded
+   data-end never distorts; SVG and column marks use a scale from the
+   baseline. Stat tiles fade and rise 4px. Everything here is off under
+   prefers-reduced-motion — the chart is simply there.
+   ------------------------------------------------------------------ */
+:root {
+  --viz-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --viz-dur: 640ms;
+}
+
+@keyframes viz-grow-x {
+  from { clip-path: inset(0 100% 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+@keyframes viz-grow-x-end {
+  from { clip-path: inset(0 0 0 100%); }
+  to { clip-path: inset(0 0 0 0); }
+}
+@keyframes viz-grow-y {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+@keyframes viz-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes viz-rise {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .viz-grow-x,
+  .viz-grow-x-end,
+  .viz-grow-y,
+  .viz-fade {
+    animation-duration: var(--viz-dur);
+    animation-timing-function: var(--viz-ease);
+    animation-fill-mode: both;
+    animation-delay: calc(min(var(--viz-i, 0), 14) * 28ms + 60ms);
+  }
+  .viz-grow-x { animation-name: viz-grow-x; }
+  .viz-grow-x-end { animation-name: viz-grow-x-end; }
+  .viz-grow-y {
+    animation-name: viz-grow-y;
+    transform-origin: 50% 100%;
+    transform-box: fill-box;
+  }
+  /* Labels at a bar's tip arrive as the bar reaches them. */
+  .viz-fade {
+    animation-name: viz-fade;
+    animation-duration: 360ms;
+    animation-delay: calc(min(var(--viz-i, 0), 14) * 28ms + 380ms);
+  }
+  .viz-rise {
+    animation: viz-rise 420ms var(--viz-ease) both;
+  }
+  :nth-child(2) > .viz-rise, .viz-rise:nth-child(2) { animation-delay: 40ms; }
+  :nth-child(3) > .viz-rise, .viz-rise:nth-child(3) { animation-delay: 80ms; }
+  :nth-child(4) > .viz-rise, .viz-rise:nth-child(4) { animation-delay: 120ms; }
+  :nth-child(5) > .viz-rise, .viz-rise:nth-child(5) { animation-delay: 160ms; }
+  :nth-child(6) > .viz-rise, .viz-rise:nth-child(6) { animation-delay: 200ms; }
+
+  .viz-tip {
+    transition:
+      opacity 140ms ease,
+      visibility 140ms,
+      transform 140ms var(--viz-ease);
+  }
+}
+
+/* Bar hover/focus detail: a solid popover panel, hidden until its row
+   (`group/bar` in charts.tsx) is hovered or keyboard-focused. */
+.viz-tip {
+  background: var(--card-solid, var(--popover));
+  opacity: 0;
+  visibility: hidden;
+  /* transform, not translate: the anchor classes (-translate-x-*) own it. */
+  transform: translateY(2px);
+}
+.group\/bar:hover .viz-tip,
+.group\/bar:focus-visible .viz-tip {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+}
+/* The hovered bar lifts a step so the reader sees it respond. */
+.group\/bar:hover .viz-bar,
+.group\/bar:focus-visible .viz-bar {
+  filter: brightness(1.12) saturate(1.05);
+}
