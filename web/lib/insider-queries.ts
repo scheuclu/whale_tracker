@@ -1,5 +1,6 @@
 import { getDb } from "./db";
 import { COUNTED, DELAY, sinceClause } from "./queries";
+import { dense, monthKeys, monthStart } from "./months";
 
 /**
  * SEC Form 4 insider trades — separate tables, separate queries (see
@@ -314,4 +315,60 @@ export async function getInsiderPipeline(): Promise<InsiderPipeline | null> {
   } catch {
     return null;
   }
+}
+
+export type InsiderMonthly = {
+  month: string;
+  filings: number;
+  trades: number;
+  buys: number;
+  sells: number;
+  buy_value: number;
+  sell_value: number;
+  /** Rows with no price: counted in `trades`, worth nothing to either value. */
+  unpriced: number;
+  /** Rows shown as filed and kept out of every value. */
+  implausible: number;
+};
+
+/**
+ * Buy and sell value per calendar month of TRADE date, for /trends. This is
+ * the one monthly series on the site that sums dollars: Form 4 values are
+ * exact (shares × price as filed), where congressional amounts are
+ * brackets. Form 4's two-business-day deadline means a month is complete
+ * within days of ending, so the series has no reporting lag to caveat —
+ * its coverage edge is where the daily-index backfill starts.
+ */
+export async function getInsiderMonthly(months = 12): Promise<InsiderMonthly[]> {
+  const keys = monthKeys(months);
+  const db = await getDb();
+  const rows = db
+    .prepare(
+      `SELECT substr(t.tx_date, 1, 7) AS month,
+              COUNT(DISTINCT f.id) AS filings,
+              COUNT(*) AS trades,
+              SUM(t.action = 'purchase') AS buys,
+              SUM(t.action = 'sale') AS sells,
+              ${BUY_VALUE} AS buy_value,
+              ${SELL_VALUE} AS sell_value,
+              COALESCE(SUM(t.amount_exact_cents IS NULL), 0) AS unpriced,
+              COALESCE(SUM(t.implausible = 1), 0) AS implausible
+       FROM insider_transactions t
+       JOIN insider_filings f ON f.id = t.filing_id
+       WHERE f.status IN ${COUNTED} AND t.tx_date >= ? AND t.tx_date <= date('now')
+       GROUP BY month
+       ORDER BY month`
+    )
+    .all(monthStart(keys[0])) as InsiderMonthly[];
+  return dense(keys, rows, (month) => ({
+    month,
+    filings: 0,
+    trades: 0,
+    buys: 0,
+    sells: 0,
+    buy_value: 0,
+    sell_value: 0,
+    unpriced: 0,
+    implausible: 0,
+  }));
 }

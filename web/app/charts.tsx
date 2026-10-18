@@ -319,3 +319,451 @@ export function Card({ className, children }: { className?: string; children: Re
     </div>
   );
 }
+
+/* ------------------------------------------------------- monthly series */
+
+/**
+ * Change over time — the forms /trends introduced. Two conventions:
+ *
+ * - Columns grow from a shared baseline, bought up and sold down: the same
+ *   diverging blue/red polarity as `DivergingSplit`, turned vertical for a
+ *   time axis. Lines share one y-axis, always — two measures of different
+ *   scale get two charts, never a second axis.
+ * - A second identity inside a direction (party within "bought") is carried
+ *   by TEXTURE, not a third hue. There are two direction colours, and the
+ *   party badges already use the same blue and red, so a hue per party
+ *   would collide with both readings. Texture is the backup identity
+ *   channel: 45° and its 135° mirror only (horizontal or vertical reads as
+ *   gridlines), always tone-on-tone with the fill it sits in.
+ *
+ * Every value is in text three ways: a selective cap label, a per-period
+ * tooltip listing every series at that x (hover and keyboard focus — the
+ * whole slot is the hit target, never the mark), and the `DataTable` twin a
+ * page renders beneath each chart. Colour never carries meaning alone.
+ */
+
+export type Texture = "solid" | "hatch" | "hatch-mirror";
+
+/** The fill of a mark or a legend swatch: a `--viz-*` role, optionally hatched. */
+export function textureStyle(fill: string, texture: Texture = "solid"): React.CSSProperties {
+  if (texture === "solid") return { background: fill };
+  const angle = texture === "hatch" ? "45deg" : "135deg";
+  return {
+    backgroundColor: `color-mix(in oklab, ${fill} 28%, transparent)`,
+    backgroundImage: `repeating-linear-gradient(${angle}, ${fill} 0 2px, transparent 2px 6px)`,
+  };
+}
+
+export type ColumnSegment = {
+  key: string;
+  label: string;
+  value: number;
+  /** A `--viz-*` role. */
+  fill: string;
+  texture?: Texture;
+};
+
+export type ColumnDatum = {
+  key: string;
+  /** The x-axis tick ("Sep"). */
+  label: string;
+  /** The full name for the tooltip and assistive text ("September 2026"). */
+  name: string;
+  /** Segments from the baseline outward. */
+  up: ColumnSegment[];
+  down?: ColumnSegment[];
+  /** The one direct label per stack, on its cap. Empty string to skip. */
+  upLabel?: string;
+  downLabel?: string;
+  /** Every series at this x, one line each, for the tooltip. */
+  tip: string[];
+};
+
+/** The cap-label band inside each half of the plot. */
+const CAP_PX = 14;
+
+/**
+ * Stacked columns on a time axis: one slot per period, growing up and
+ * (when any datum has `down` segments) down from a shared baseline on one
+ * shared scale. Columns are ≤24px and the slot's leftover is air; the slot
+ * itself is the hover and focus target.
+ */
+export function MonthlyColumns({ data, height = 112 }: { data: ColumnDatum[]; height?: number }) {
+  if (!data.length) return <Empty />;
+  const sum = (s: ColumnSegment[] | undefined) => (s ?? []).reduce((a, x) => a + x.value, 0);
+  const max = Math.max(...data.map((d) => Math.max(sum(d.up), sum(d.down))), 1);
+  const hasDown = data.some((d) => d.down?.some((s) => s.value > 0));
+  // A present-but-tiny value keeps one pixel: the tooltip and table carry
+  // its size, and a column that vanished would read as "nothing happened".
+  const px = (v: number) => (v > 0 ? Math.max((v / max) * (height - CAP_PX), 1) : 0);
+  const n = data.length;
+  // Cap labels are the one direct label per stack. They need a desktop slot
+  // and no more than ~14 of them; past that (or on a phone) the tooltip and
+  // the table carry the values and the caps stay empty rather than collide.
+  const cap = cn("tabular hidden text-[10px] leading-[14px] text-muted-foreground", n <= 14 && "sm:block");
+
+  return (
+    <div className="flex gap-[2px]">
+      {data.map((d, i) => {
+        const up = d.up.filter((s) => s.value > 0);
+        const down = (d.down ?? []).filter((s) => s.value > 0);
+        return (
+          <div
+            key={d.key}
+            tabIndex={0}
+            aria-label={`${d.name}: ${d.tip.join("; ")}`}
+            className="group relative flex min-w-0 flex-1 flex-col rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <div className="flex flex-col items-center justify-end" style={{ height }}>
+              <span className={cap}>{d.upLabel ?? ""}</span>
+              <div className="flex w-full max-w-6 flex-col gap-[2px] transition-opacity group-hover:opacity-80">
+                {/* Tip first in the DOM: the column stacks top-down, the data grows bottom-up. */}
+                {[...up].reverse().map((s, j) => (
+                  <div
+                    key={s.key}
+                    style={{
+                      height: px(s.value),
+                      borderRadius: j === 0 ? "4px 4px 0 0" : 0,
+                      ...textureStyle(s.fill, s.texture),
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="h-px w-full" style={{ background: "var(--viz-axis)" }} />
+            {hasDown ? (
+              <div className="flex flex-col items-center" style={{ height }}>
+                <div className="flex w-full max-w-6 flex-col gap-[2px] transition-opacity group-hover:opacity-80">
+                  {down.map((s, j) => (
+                    <div
+                      key={s.key}
+                      style={{
+                        height: px(s.value),
+                        borderRadius: j === down.length - 1 ? "0 0 4px 4px" : 0,
+                        ...textureStyle(s.fill, s.texture),
+                      }}
+                    />
+                  ))}
+                </div>
+                <span className={cap}>{d.downLabel ?? ""}</span>
+              </div>
+            ) : null}
+            <AxisTick label={d.label} index={i} count={n} />
+            <Tip title={d.name} lines={d.tip} index={i} count={n} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export type LineSeries = {
+  key: string;
+  label: string;
+  /** A `--viz-*` role. */
+  stroke: string;
+  /** One value per period. null is a gap in the line, never a zero. */
+  values: (number | null)[];
+};
+
+const LINE_GUTTERS = "grid-cols-[2.25rem_1fr_3.25rem]";
+
+/**
+ * Lines on a time axis with one shared y-axis. The paths are SVG stretched
+ * to the plot (`preserveAspectRatio="none"` with non-scaling 2px strokes),
+ * everything else — ticks, gridlines, markers, labels, the hover layer — is
+ * HTML positioned in percent, so text keeps its size at every width.
+ * Series are named at their right-hand end, nudged apart when they meet.
+ */
+export function MonthlyLines({
+  labels,
+  names,
+  series,
+  reference,
+  tips,
+  height = 160,
+}: {
+  labels: string[];
+  names: string[];
+  series: LineSeries[];
+  /** A horizontal rule with its own label — a deadline, a target. */
+  reference?: { value: number; label: string };
+  /** Per period: every series at that x, one line each. */
+  tips: string[][];
+  height?: number;
+}) {
+  const n = labels.length;
+  if (!n) return <Empty />;
+  const present = series.flatMap((s) => s.values.filter((v): v is number => v != null));
+  const ticks = niceTicks(Math.max(...present, reference?.value ?? 0, 1));
+  const yMax = ticks[ticks.length - 1];
+  const x = (i: number) => ((i + 0.5) / n) * 100;
+  const y = (v: number) => 100 - (v / yMax) * 100;
+  const path = (values: (number | null)[]) => {
+    let d = "";
+    let open = false;
+    values.forEach((v, i) => {
+      if (v == null) {
+        open = false;
+        return;
+      }
+      d += `${open ? "L" : "M"}${x(i).toFixed(2)} ${y(v).toFixed(2)} `;
+      open = true;
+    });
+    return d.trim();
+  };
+  const ends = series
+    .flatMap((s) => {
+      for (let i = s.values.length - 1; i >= 0; i--) {
+        const v = s.values[i];
+        if (v != null) return [{ key: s.key, label: s.label, top: (y(v) / 100) * height }];
+      }
+      return [];
+    })
+    .sort((a, b) => a.top - b.top);
+  for (let i = 1; i < ends.length; i++) ends[i].top = Math.max(ends[i].top, ends[i - 1].top + 12);
+
+  return (
+    <div>
+      <div className={cn("grid", LINE_GUTTERS)}>
+        <div className="relative" style={{ height }}>
+          {ticks.map((t) => (
+            <span
+              key={t}
+              className="tabular absolute right-2 -translate-y-1/2 text-[10px] text-muted-foreground"
+              style={{ top: `${y(t)}%` }}
+            >
+              {compact(t)}
+            </span>
+          ))}
+        </div>
+        <div className="relative" style={{ height }}>
+          {ticks.map((t) => (
+            <div
+              key={t}
+              className="absolute inset-x-0 h-px"
+              style={{ top: `${y(t)}%`, background: "var(--viz-grid)" }}
+            />
+          ))}
+          {reference ? (
+            <>
+              <div
+                className="absolute inset-x-0 h-px"
+                style={{ top: `${y(reference.value)}%`, background: "var(--viz-axis)" }}
+              />
+              <span
+                className="absolute left-1 -translate-y-full pb-0.5 text-[10px] text-muted-foreground"
+                style={{ top: `${y(reference.value)}%` }}
+              >
+                {reference.label}
+              </span>
+            </>
+          ) : null}
+          <svg
+            className="absolute inset-0 h-full w-full overflow-visible"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            aria-hidden
+          >
+            {series.map((s) => (
+              <path
+                key={s.key}
+                d={path(s.values)}
+                fill="none"
+                stroke={s.stroke}
+                strokeWidth={2}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
+          </svg>
+          {series.map((s) =>
+            s.values.map((v, i) =>
+              v == null ? null : (
+                <span
+                  key={`${s.key}-${i}`}
+                  className="absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                  style={{
+                    left: `${x(i)}%`,
+                    top: `${y(v)}%`,
+                    background: s.stroke,
+                    // The 2px surface ring that keeps a marker legible on a line.
+                    boxShadow: "0 0 0 2px var(--background)",
+                  }}
+                />
+              )
+            )
+          )}
+          <div className="absolute inset-0 flex">
+            {labels.map((_, i) => (
+              <div
+                key={i}
+                tabIndex={0}
+                aria-label={`${names[i]}: ${tips[i].join("; ")}`}
+                className="group relative flex-1 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {/* Crosshair: snaps to the period, so the reader aims at a month, not a 2px line. */}
+                <div
+                  className="absolute inset-y-0 left-1/2 w-px opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                  style={{ background: "var(--viz-axis)" }}
+                />
+                <Tip title={names[i]} lines={tips[i]} index={i} count={n} />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="relative" style={{ height }}>
+          {ends.map((e) => (
+            <span
+              key={e.key}
+              className="absolute left-1.5 -translate-y-1/2 whitespace-nowrap text-[10px] text-muted-foreground"
+              style={{ top: e.top }}
+            >
+              {e.label}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className={cn("grid", LINE_GUTTERS)}>
+        <div />
+        <div className="flex">
+          {labels.map((l, i) => (
+            <div key={i} className="min-w-0 flex-1">
+              <AxisTick label={l} index={i} count={n} />
+            </div>
+          ))}
+        </div>
+        <div />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The table twin of a chart: every value, in text, reachable without a
+ * pointer. Collapsed by default so the chart leads; the content is in the
+ * DOM either way.
+ */
+export function DataTable({
+  caption,
+  columns,
+  rows,
+}: {
+  caption: string;
+  columns: string[];
+  rows: (string | number)[][];
+}) {
+  return (
+    <details className="mt-3 text-[11px] text-muted-foreground">
+      <summary className="cursor-pointer select-none hover:text-foreground">Show as table</summary>
+      <div className="mt-2 overflow-x-auto">
+        <table className="w-full text-[12px]">
+          <caption className="sr-only">{caption}</caption>
+          <thead>
+            <tr className="border-b border-border text-[11px] uppercase tracking-[0.06em]">
+              {columns.map((c) => (
+                <th key={c} scope="col" className="px-2 py-1 text-right font-medium first:text-left">
+                  {c}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={i} className="border-b border-border/50 last:border-0">
+                {r.map((c, j) =>
+                  j === 0 ? (
+                    <th key={j} scope="row" className="px-2 py-1 text-left font-medium text-foreground">
+                      {c}
+                    </th>
+                  ) : (
+                    <td key={j} className="tabular px-2 py-1 text-right">
+                      {c}
+                    </td>
+                  )
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  );
+}
+
+/** A legend whose swatches can carry a texture, and a line key for lines. */
+export function ChartLegend({
+  items,
+  note,
+}: {
+  items: { label: string; style: React.CSSProperties; kind?: "rect" | "line" }[];
+  note?: string;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+      {items.map((i) => (
+        <span key={i.label} className="inline-flex items-center gap-1.5">
+          <span className={i.kind === "line" ? "h-0.5 w-4 rounded-full" : "h-3 w-4 rounded-[3px]"} style={i.style} />
+          {i.label}
+        </span>
+      ))}
+      {note ? <span className="ml-auto">{note}</span> : null}
+    </div>
+  );
+}
+
+function AxisTick({ label, index, count }: { label: string; index: number; count: number }) {
+  // On a phone a slot is ~25px: the year suffix ("Nov '25") goes, and past
+  // eight slots every other tick steps aside as well.
+  const short = label.replace(/\s'\d\d$/, "");
+  // nowrap, not truncate: a tick may spill into its hidden neighbour's slot.
+  return (
+    <div
+      className={cn(
+        "mt-1.5 whitespace-nowrap text-center text-[10px] text-muted-foreground",
+        count > 8 && index % 2 === 1 && "max-sm:invisible"
+      )}
+    >
+      <span className="sm:hidden">{short}</span>
+      <span className="max-sm:hidden">{label}</span>
+    </div>
+  );
+}
+
+/** One tooltip, every series at this x. Hidden from the tree: the slot's aria-label says the same. */
+function Tip({ title, lines, index, count }: { title: string; lines: string[]; index: number; count: number }) {
+  const align = index < 2 ? "left-0" : index > count - 3 ? "right-0" : "left-1/2 -translate-x-1/2";
+  return (
+    <div
+      aria-hidden
+      className={cn(
+        "pointer-events-none absolute bottom-full z-20 mb-1 w-max max-w-[18rem] rounded-lg border border-border bg-popover px-2.5 py-1.5 text-left text-[11px] leading-snug text-popover-foreground opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100",
+        align
+      )}
+    >
+      <div className="font-medium">{title}</div>
+      {lines.map((l, i) => (
+        <div key={i} className="tabular text-muted-foreground">
+          {l}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** 0 … a round number at or above `top`, in 1/2/5 steps, about four of them. */
+function niceTicks(top: number): number[] {
+  const raw = top / 4;
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 5, 10].map((m) => m * mag).find((s) => s >= raw) ?? 10 * mag;
+  const ticks: number[] = [];
+  for (let k = 0; k * step < top + step; k++) ticks.push(k * step);
+  return ticks;
+}
+
+function compact(v: number): string {
+  if (v >= 1_000_000) return `${v / 1_000_000}M`;
+  if (v >= 1_000) return `${v / 1_000}k`;
+  return String(v);
+}
