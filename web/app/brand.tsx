@@ -25,8 +25,8 @@ export function WhaleMark({ className, title }: { className?: string; title?: st
 /** Mark + wordmark, as in the header. */
 export function Wordmark({ className }: { className?: string }) {
   return (
-    <span className={cn("text-[15px] font-semibold leading-tight tracking-tight", className)}>
-      Whale <span className="text-primary">Tracker</span>
+    <span className={cn("text-[15px] font-semibold leading-tight tracking-[-0.015em] text-foreground", className)}>
+      Whale <span className="font-medium text-muted-foreground">Tracker</span>
     </span>
   );
 }

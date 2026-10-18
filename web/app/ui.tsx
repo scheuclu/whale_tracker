@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ArrowDownRight, ArrowLeftRight, ArrowUpRight, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   ACTION_LABEL,
@@ -12,6 +13,9 @@ import {
 import { PARTY_LABEL } from "@/lib/members";
 import { Card } from "./charts";
 import { ScrollX } from "./scroll-area";
+import { MoneyText } from "./money";
+
+export { MoneyText };
 
 /**
  * The card every `<table>` goes in. The leaderboards are 7–9 columns wide
@@ -65,105 +69,128 @@ export function ScrollRow({ children, className }: { children: React.ReactNode; 
   );
 }
 
-/**
- * Direction pills. The dot carries the diverging colour and the word carries
- * the meaning, so a colour-blind reader loses nothing.
- */
-const ACTION_TONE: Record<string, { cls: string; dot: string }> = {
-  purchase: {
-    cls: "text-[#1c5cab] dark:text-[#86b6ef] bg-[#2a78d6]/10 border-[#2a78d6]/25",
-    dot: "bg-[var(--viz-buy)]",
-  },
-  sale: {
-    cls: "text-[#a32c2c] dark:text-[#e89f9f] bg-[#d03b3b]/10 border-[#d03b3b]/25",
-    dot: "bg-[var(--viz-sell)]",
-  },
-  sale_partial: {
-    cls: "text-[#a32c2c] dark:text-[#e89f9f] bg-[#d03b3b]/10 border-[#d03b3b]/25",
-    dot: "bg-[var(--viz-sell)]",
-  },
-  exchange: { cls: "text-muted-foreground bg-muted border-border", dot: "bg-zinc-400" },
-};
+/* ------------------------------------------------------------------
+   The badge system. Every inline marker on a row — direction, party,
+   owner, sector, option, role, plan, scan — is one of three shapes at one
+   height (20px), one type size (11px) and one horizontal padding:
 
-const STATUS_TONE: Record<string, { label: string; cls: string; dot: string }> = {
-  notified: {
-    label: "alerted",
-    cls: "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/25",
-    dot: "bg-emerald-500",
-  },
-  backfilled: {
-    label: "history",
-    cls: "text-muted-foreground bg-muted border-border",
-    dot: "bg-zinc-400",
-  },
-  parsed: { label: "sending", cls: "text-primary bg-primary/10 border-primary/25", dot: "bg-primary" },
-  new: {
-    label: "processing",
-    cls: "text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/25",
-    dot: "bg-amber-500 animate-pulse",
-  },
-  backfill_queued: {
-    label: "queued",
-    cls: "text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/25",
-    dot: "bg-amber-500",
-  },
-  failed: {
-    label: "unreadable",
-    cls: "text-red-600 dark:text-red-400 bg-red-500/10 border-red-500/25",
-    dot: "bg-red-500",
-  },
-  seen_skipped: {
-    label: "indexed",
-    cls: "text-muted-foreground bg-muted border-border",
-    dot: "bg-zinc-400",
-  },
-  // A scan the grid reader has captured but no model has transcribed: the
-  // filing's status is still `failed`, yet "unreadable" would be false — its
-  // boxes were read, only the written text is missing.
-  not_transcribed: {
-    label: "not transcribed",
-    cls: "text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/25",
-    dot: "bg-amber-500",
-  },
-};
+     chip    6px radius   facts about the trade (direction, ticker, tags)
+     pill    fully round  states of a filing (StatusBadge), with a dot
+     text    no box       figures (DelayTag, Amount): numbers are not chips
 
-function Pill({
-  tone,
-  dot,
+   Tone is a soft tint with no border, except where a hairline is the point
+   (the ticker link, a filer-asserted plan, an option contract). Colour is
+   never the only carrier: every badge spells its meaning in words.
+   ------------------------------------------------------------------ */
+
+const CHIP = "inline-flex h-5 shrink-0 align-middle items-center gap-1 whitespace-nowrap rounded-chip px-1.5 text-[11px] leading-none";
+const NEUTRAL = "bg-muted text-muted-foreground";
+const HAIRLINE = "ring-1 ring-inset ring-border";
+const AMBER = "bg-attention-soft text-attention";
+/** Focus ring for every link and control: 2px primary, offset off the surface. */
+export const FOCUS_RING =
+  "outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
+
+/** A neutral chip; `variant` picks the hairline or mono flavours. */
+export function Tag({
   children,
+  title,
+  variant = "soft",
+  className,
 }: {
-  tone: string;
-  dot: string;
   children: React.ReactNode;
+  title?: string;
+  variant?: "soft" | "outline" | "mono";
+  className?: string;
 }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11px] font-medium",
-        tone
+        CHIP,
+        variant === "soft" && NEUTRAL,
+        variant === "outline" && cn(HAIRLINE, "text-muted-foreground"),
+        variant === "mono" && cn(HAIRLINE, "bg-muted font-mono font-medium tracking-tight text-ink-2"),
+        className
       )}
+      title={title}
     >
-      <span className={cn("size-1.5 rounded-full", dot)} />
       {children}
     </span>
   );
 }
 
+/**
+ * Direction chips: a soft tint of the diverging buy/sell role, a direction
+ * glyph and the word. The word carries the meaning, so a colour-blind reader
+ * loses nothing; the ink is the role mixed toward the foreground so 11px text
+ * clears contrast on both surfaces without inventing a new colour.
+ */
+const BUY_TONE =
+  "bg-[color-mix(in_oklab,var(--viz-buy)_12%,transparent)] text-[color-mix(in_oklab,var(--viz-buy)_74%,var(--foreground))]";
+const SELL_TONE =
+  "bg-[color-mix(in_oklab,var(--viz-sell)_11%,transparent)] text-[color-mix(in_oklab,var(--viz-sell)_76%,var(--foreground))]";
+
+const ACTION_TONE: Record<string, { cls: string; glyph: LucideIcon }> = {
+  purchase: { cls: BUY_TONE, glyph: ArrowUpRight },
+  sale: { cls: SELL_TONE, glyph: ArrowDownRight },
+  sale_partial: { cls: SELL_TONE, glyph: ArrowDownRight },
+  exchange: { cls: NEUTRAL, glyph: ArrowLeftRight },
+};
+
 export function ActionBadge({ action }: { action: string }) {
   const t = ACTION_TONE[action] ?? ACTION_TONE.exchange;
+  const Glyph = t.glyph;
   return (
-    <Pill tone={t.cls} dot={t.dot}>
+    <span className={cn(CHIP, "gap-0.5 pl-1 pr-1.5 font-medium", t.cls)}>
+      <Glyph className="size-3 shrink-0" strokeWidth={2.25} aria-hidden />
       {ACTION_LABEL[action] ?? action}
-    </Pill>
+    </span>
+  );
+}
+
+/**
+ * Filing states. Round pills with a dot, in the muted status set: green ok,
+ * primary in flight, attention (amber), error, grey history — the status
+ * tokens, never the buy/sell pair.
+ */
+const OK = { cls: "bg-ok-soft text-ok", dot: "bg-ok" };
+const GREY = { cls: NEUTRAL, dot: "bg-muted-foreground" };
+const WARN = { cls: AMBER, dot: "bg-attention" };
+
+const STATUS_TONE: Record<string, { label: string; cls: string; dot: string }> = {
+  notified: { label: "alerted", ...OK },
+  backfilled: { label: "history", ...GREY },
+  parsed: { label: "sending", cls: "bg-primary/10 text-primary", dot: "bg-primary" },
+  new: { label: "processing", cls: AMBER, dot: "bg-attention motion-safe:animate-pulse" },
+  backfill_queued: { label: "queued", ...WARN },
+  failed: {
+    label: "unreadable",
+    cls: "bg-error-soft text-error",
+    dot: "bg-error",
+  },
+  seen_skipped: { label: "indexed", ...GREY },
+  // A scan the grid reader has captured but no model has transcribed: the
+  // filing's status is still `failed`, yet "unreadable" would be false — its
+  // boxes were read, only the written text is missing.
+  not_transcribed: { label: "not transcribed", ...WARN },
+};
+
+export function Pill({ tone, dot, children }: { tone: string; dot: string; children: React.ReactNode }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex h-5 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full align-middle px-2 text-[11px] font-medium leading-none",
+        tone
+      )}
+    >
+      <span className={cn("size-1.5 shrink-0 rounded-full", dot)} aria-hidden />
+      {children}
+    </span>
   );
 }
 
 export function StatusBadge({ value }: { value: string }) {
-  const s = STATUS_TONE[value] ?? {
-    label: value,
-    cls: "text-muted-foreground bg-muted border-border",
-    dot: "bg-zinc-400",
-  };
+  const s = STATUS_TONE[value] ?? { label: value, ...GREY };
   return (
     <Pill tone={s.cls} dot={s.dot}>
       {s.label}
@@ -181,7 +208,12 @@ export function PartyBadge({ party, full = false }: { party: string | null; full
   const label = PARTY_LABEL[party] ?? party;
   return (
     <span
-      className="rounded border border-border bg-muted px-1.5 py-px text-[10px] font-semibold tracking-wide text-foreground/75"
+      className={cn(
+        CHIP,
+        HAIRLINE,
+        "justify-center bg-muted font-semibold text-ink-2",
+        full ? "px-1.5" : "w-5 px-0 text-[10.5px]"
+      )}
       title={label}
     >
       {full ? label : party}
@@ -212,7 +244,14 @@ export function TickerChip({
   return (
     <Link
       href={href ?? `/tickers?t=${encodeURIComponent(ticker)}`}
-      className="inline-flex items-center rounded-md border border-border bg-card px-2 py-0.5 font-mono text-xs font-semibold tracking-tight transition-colors hover:border-primary/40 hover:bg-accent"
+      className={cn(
+        CHIP,
+        HAIRLINE,
+        FOCUS_RING,
+        "bg-[var(--card-solid)] px-1.5 font-mono text-[11.5px] font-semibold tracking-tight text-foreground",
+        "transition-[background-color,box-shadow,color] duration-(--dur) ease-(--ease-out)",
+        "hover:bg-accent hover:text-accent-foreground hover:ring-primary/35 active:bg-primary/15"
+      )}
     >
       {ticker}
     </Link>
@@ -233,13 +272,16 @@ export function ScanTag({
   docId?: string;
 }) {
   if (!transcribed) return null;
-  const cls =
-    "rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-px text-[10px] text-amber-700 dark:text-amber-300";
+  const cls = cn(CHIP, AMBER);
   const title =
     "Read from a scanned paper filing (text by a vision model, ticked boxes by the grid reader). Counted as a trade; excluded from every volume total.";
   if (docId) {
     return (
-      <Link href={`/scans/${encodeURIComponent(docId)}`} className={cn(cls, "hover:bg-amber-500/20")} title={`${title} Click to inspect the scan.`}>
+      <Link
+        href={`/scans/${encodeURIComponent(docId)}`}
+        className={cn(cls, FOCUS_RING, "transition-[filter] duration-(--dur) ease-(--ease-out) hover:brightness-95 dark:hover:brightness-125")}
+        title={`${title} Click to inspect the scan.`}
+      >
         transcribed from scan
       </Link>
     );
@@ -269,12 +311,11 @@ export function SectorTag({
   if (!group) return null;
   const detail = [description, sic ? `SIC ${sic}` : null].filter(Boolean).join(" · ");
   return (
-    <span
-      className="rounded bg-muted px-1.5 py-px text-[10px] text-muted-foreground"
+    <Tag
       title={detail ? `${detail} — industry group from the issuer's EDGAR SIC code` : "Industry group from the issuer's EDGAR SIC code"}
     >
       {group}
-    </span>
+    </Tag>
   );
 }
 
@@ -295,21 +336,33 @@ export function OptionBadge({
   const label = optionLabel(kind ?? null, strikeCents ?? null, expiry ?? null);
   if (!label) return null;
   return (
-    <span
-      className="whitespace-nowrap rounded border border-border bg-muted px-1.5 py-px font-mono text-[10px] font-medium tracking-tight"
+    <Tag
+      variant="mono"
+      className="tabular"
       title="Option contract as the filing's own text describes it: kind, strike and expiry are shown only when printed"
     >
       {label}
-    </span>
+    </Tag>
   );
 }
 
 export function OwnerTag({ owner }: { owner: string | null }) {
   if (!owner || !OWNER_LABEL[owner]) return null;
+  return <Tag>{OWNER_LABEL[owner]}</Tag>;
+}
+
+/** The error status ink: muted, and AA as text on every surface. */
+const LATE_INK = "text-error";
+const AS_FILED_INK = "text-attention";
+
+/** "13d" / "49d late": the figure at full weight, the unit and verdict lighter. */
+function Days({ days, late }: { days: number; late: boolean }) {
   return (
-    <span className="rounded bg-muted px-1.5 py-px text-[10px] text-muted-foreground">
-      {OWNER_LABEL[owner]}
-    </span>
+    <>
+      {days}
+      <span className={cn("text-[0.9em]", !late && "text-muted-foreground")}>d</span>
+      {late ? <span className="font-normal"> late</span> : null}
+    </>
   );
 }
 
@@ -321,7 +374,7 @@ export function DelayTag({ days, inconsistent }: { days: number | null; inconsis
   if (inconsistent) {
     return (
       <span
-        className="text-[11px] text-amber-600 dark:text-amber-400"
+        className={cn("whitespace-nowrap text-[11px]", AS_FILED_INK)}
         title="The filing's trade and notification dates contradict each other — reproduced as filed"
       >
         date as filed
@@ -333,8 +386,8 @@ export function DelayTag({ days, inconsistent }: { days: number | null; inconsis
   return (
     <span
       className={cn(
-        "tabular text-[11px]",
-        late ? "font-medium text-red-600 dark:text-red-400" : "text-muted-foreground"
+        "tabular whitespace-nowrap text-[11px]",
+        late ? cn("font-medium", LATE_INK) : "text-muted-foreground"
       )}
       title={
         late
@@ -342,7 +395,7 @@ export function DelayTag({ days, inconsistent }: { days: number | null; inconsis
           : "Days from the trade to the report reaching the Clerk"
       }
     >
-      {days}d{late ? " late" : ""}
+      <Days days={days} late={late} />
     </span>
   );
 }
@@ -365,7 +418,7 @@ export function InsiderDelayTag({
   if (days == null) {
     return (
       <span
-        className="text-[11px] text-amber-600 dark:text-amber-400"
+        className={cn("whitespace-nowrap text-[11px]", AS_FILED_INK)}
         title="The trade and filing dates could not be compared (malformed or contradictory) — reproduced as filed"
       >
         date as filed
@@ -377,8 +430,8 @@ export function InsiderDelayTag({
     <span className="inline-flex items-center gap-1.5">
       <span
         className={cn(
-          "tabular text-[11px]",
-          isLate ? "font-medium text-red-600 dark:text-red-400" : "text-muted-foreground"
+          "tabular whitespace-nowrap text-[11px]",
+          isLate ? cn("font-medium", LATE_INK) : "text-muted-foreground"
         )}
         title={
           isLate
@@ -386,13 +439,10 @@ export function InsiderDelayTag({
             : "Days from the trade to the filing reaching EDGAR"
         }
       >
-        {days}d{isLate ? " late" : ""}
+        <Days days={days} late={isLate} />
       </span>
       {timeliness === "L" ? (
-        <span
-          className="text-[10px] text-amber-600 dark:text-amber-400"
-          title="The filer ticked the form's own 'late' box"
-        >
+        <span className={cn(CHIP, AMBER)} title="The filer ticked the form's own 'late' box">
           marked late by filer
         </span>
       ) : null}
@@ -422,22 +472,16 @@ export function RoleTag({
   const joint = ownerCount && ownerCount > 1 ? `+${ownerCount - 1} joint` : null;
   if (!parts.length && !joint) return null;
   return (
-    <span className="inline-flex items-center gap-1">
+    <span className="inline-flex min-w-0 items-center gap-1">
       {parts.length ? (
-        <span
-          className="max-w-[16rem] truncate rounded bg-muted px-1.5 py-px text-[10px] text-muted-foreground"
-          title={parts.join(" · ")}
-        >
+        <Tag className="block max-w-[16rem] truncate leading-5" title={parts.join(" · ")}>
           {parts.join(" · ")}
-        </span>
+        </Tag>
       ) : null}
       {joint ? (
-        <span
-          className="rounded bg-muted px-1.5 py-px text-[10px] text-muted-foreground"
-          title="Filed jointly with related reporting owners — counted as one insider"
-        >
+        <Tag variant="outline" title="Filed jointly with related reporting owners — counted as one insider">
           {joint}
-        </span>
+        </Tag>
       ) : null}
     </span>
   );
@@ -447,15 +491,19 @@ export function RoleTag({
 export function PlanTag({ value }: { value: number | null }) {
   if (value !== 1) return null;
   return (
-    <span
-      className="rounded border border-border px-1.5 py-px text-[10px] text-muted-foreground"
+    <Tag
+      variant="outline"
       title="Filer asserts the trade was made under a pre-arranged Rule 10b5-1 trading plan"
     >
       10b5-1 plan
-    </span>
+    </Tag>
   );
 }
 
+/**
+ * The disclosed bracket (or the exact figure where one was filed), in
+ * tabular figures with the currency and unit set lighter. Never a midpoint.
+ */
 export function Amount({
   min,
   max,
@@ -465,7 +513,80 @@ export function Amount({
   max: number | null;
   exact: number | null;
 }) {
-  return <span className="tabular text-[13px]">{range(min, max, exact)}</span>;
+  return <MoneyText value={range(min, max, exact)} className="text-[13px]" />;
+}
+
+/* ------------------------------------------------------------------
+   Controls. One segmented control, one button, one field, at two sizes
+   that share a radius (8px) and a focus ring.
+   ------------------------------------------------------------------ */
+
+/** A secondary button / link-button: hairline, soft hover, pressed tint. */
+export const BUTTON = cn(
+  "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-control border border-border",
+  "bg-[var(--card-solid)] px-3 text-xs font-medium text-muted-foreground",
+  "transition-[background-color,border-color,color] duration-(--dur) ease-(--ease-out)",
+  "hover:border-border-strong hover:bg-raised hover:text-foreground active:bg-secondary",
+  FOCUS_RING
+);
+/** The one filled button in a form: its submit. */
+export const BUTTON_PRIMARY = cn(
+  "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-control bg-primary px-3.5",
+  "text-xs font-medium text-primary-foreground shadow-[inset_0_1px_0_0_rgb(255_255_255/0.12)]",
+  "transition-[filter,background-color] duration-(--dur) ease-(--ease-out) hover:brightness-110 active:brightness-95",
+  FOCUS_RING
+);
+
+/** Text inputs and selects: one height, radius, hover and focus treatment. */
+export const FIELD = cn(
+  "h-8 w-full min-w-0 rounded-control border border-input bg-[var(--card-solid)] px-2.5 text-[13px] text-foreground",
+  "transition-[border-color,box-shadow] duration-(--dur) ease-(--ease-out) dark:[color-scheme:dark]",
+  // Focus keeps the base 2px ring (offset 2px); the border firms to match it.
+  "hover:border-border-strong focus:border-ring",
+  "placeholder:text-muted-foreground"
+);
+
+/** One option of a segmented control (see `Segmented`). */
+export function segmentClass(active: boolean) {
+  return cn(
+    "inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-chip px-2.5 text-xs font-medium",
+    "transition-[background-color,color,box-shadow] duration-(--dur) ease-(--ease-out)",
+    FOCUS_RING,
+    "focus-visible:outline-offset-1",
+    active
+      ? "bg-[var(--card-solid)] text-foreground shadow-[0_1px_2px_rgb(0_0_0/0.06)] ring-1 ring-border"
+      : "text-muted-foreground hover:bg-secondary hover:text-foreground active:bg-foreground/[0.08]"
+  );
+}
+
+/**
+ * A segmented control of links: the state is the URL, so each option is a
+ * plain `<a>` and the active one carries `aria-current`. Use it for every
+ * All/Buys/Sells, window or kind switch so they look and behave as one.
+ */
+export function Segmented({
+  label,
+  items,
+  className,
+}: {
+  /** Names the group for assistive tech ("Trade direction"). */
+  label: string;
+  items: { key: string; label: React.ReactNode; href: string; active: boolean; dot?: string }[];
+  className?: string;
+}) {
+  return (
+    <nav
+      aria-label={label}
+      className={cn("inline-flex max-w-full items-center gap-0.5 rounded-control bg-muted p-0.5 ring-1 ring-inset ring-border/60", className)}
+    >
+      {items.map((it) => (
+        <a key={it.key} href={it.href} aria-current={it.active ? "page" : undefined} className={segmentClass(it.active)}>
+          {it.dot ? <span className="size-1.5 rounded-full" style={{ background: it.dot }} aria-hidden /> : null}
+          {it.label}
+        </a>
+      ))}
+    </nav>
+  );
 }
 
 export { isBuy, isSell };

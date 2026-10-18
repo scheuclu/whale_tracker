@@ -4,7 +4,8 @@ import { searchInsiderIssuers } from "@/lib/insider-queries";
 import { searchMembers, searchRoster, searchTickers } from "@/lib/queries";
 import { Card, Empty, SectionTitle } from "../charts";
 import { PAGE_STACK, PageHeader, Quiet } from "../page-header";
-import { PartyBadge } from "../ui";
+import { BUTTON_PRIMARY, FIELD, PartyBadge } from "../ui";
+import { cn } from "@/lib/utils";
 import { MemberAvatar } from "../avatar";
 
 export const dynamic = "force-dynamic";
@@ -44,15 +45,12 @@ export default async function SearchPage({
               name="q"
               defaultValue={q}
               maxLength={QUERY_MAX}
-              placeholder="Member, ticker or insider issuer"
+              placeholder="Search members, tickers, issuers"
               autoFocus={!q}
-              className="h-10 w-full rounded-lg border border-border bg-card pl-9 pr-4 text-sm text-foreground transition-colors duration-150 placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+              className={cn(FIELD, "h-10 pl-9 pr-3 text-sm")}
             />
           </label>
-          <button
-            type="submit"
-            className="h-10 shrink-0 rounded-lg border border-primary/40 bg-primary/10 px-4 text-sm font-medium transition-colors duration-150 hover:bg-primary/20 active:bg-primary/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          >
+          <button type="submit" className={cn(BUTTON_PRIMARY, "h-10 shrink-0 px-4 text-sm")}>
             Search
           </button>
         </form>

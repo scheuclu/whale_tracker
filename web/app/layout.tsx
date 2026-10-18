@@ -3,14 +3,13 @@ import Link from "next/link";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { Analytics } from "@vercel/analytics/next";
-import { cn } from "@/lib/utils";
 import { WhaleMark, Wordmark } from "./brand";
 import { HeaderShell } from "./header-shell";
 import { SiteFooter } from "./site-footer";
 import { getPipeline } from "@/lib/queries";
 import { getInsiderTotals } from "@/lib/insider-queries";
 import { relativeTime } from "@/lib/format";
-import { SearchForm, Tabs, ThemeToggle } from "./nav";
+import { SearchForm, SyncStatus, Tabs, ThemeToggle } from "./nav";
 import "./globals.css";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
@@ -63,7 +62,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   } catch {
     /* a database from before the insider source has no such tables */
   }
-  const syncTone =
+  const syncTone: "fresh" | "stale" | "unknown" =
     syncedHours === null
       ? "unknown"
       : syncedHours > STALE_AFTER_HOURS
@@ -79,9 +78,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="min-h-screen bg-background font-sans text-foreground antialiased">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <HeaderShell>
-            <div className="site-header-top mx-auto flex max-w-6xl items-center gap-3 px-4 pt-4 sm:px-6">
-              <Link href="/" className="group flex min-w-0 items-center gap-3 rounded-xl" aria-label="Whale Tracker — feed">
-                <WhaleMark className="site-header-mark motion-safe:group-hover:-rotate-6" />
+            <div className="site-header-top mx-auto flex max-w-6xl items-center gap-2 px-4 pt-3.5 sm:px-6">
+              <Link
+                href="/"
+                className="group -m-1 flex min-w-0 items-center gap-2.5 rounded-[10px] p-1 outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring"
+                aria-label="Whale Tracker — feed"
+              >
+                <WhaleMark className="site-header-mark size-8 motion-safe:group-hover:-rotate-6" />
                 <div className="min-w-0">
                   <Wordmark className="block" />
                   {/* Each count stays whole; on a phone the second wraps under the first. */}
@@ -99,35 +102,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 </div>
               </Link>
               <div className="flex-1" />
-              <Link
-                href="/pipeline"
-                title={syncedAt ? `Last pipeline write: ${syncedAt} — open Pipeline` : "Open Pipeline"}
-                className="inline-flex shrink-0 items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
-              >
-                <span className="relative flex size-1.5" aria-hidden>
-                  {syncTone === "fresh" ? (
-                    <span className="absolute inline-flex size-full rounded-full bg-emerald-500 opacity-60 motion-safe:animate-ping" />
-                  ) : null}
-                  <span
-                    className={cn(
-                      "relative inline-flex size-1.5 rounded-full",
-                      syncTone === "fresh" && "bg-emerald-500",
-                      syncTone === "stale" && "bg-amber-500",
-                      syncTone === "unknown" && "bg-zinc-400"
-                    )}
-                  />
-                </span>
-                <span className="tabular">
-                  <span className="sr-only sm:not-sr-only">synced </span>
-                  {synced}
-                  {syncTone === "stale" ? <span className="sr-only"> (stale)</span> : null}
-                </span>
-              </Link>
+              <SyncStatus synced={synced} syncedAt={syncedAt} tone={syncTone} />
+              <span className="h-4 w-px bg-border" aria-hidden />
               <ThemeToggle />
             </div>
-            <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
+            {/* Tabs sit on the header's bottom edge so the active underline meets
+                its hairline; on a phone the search takes its own row above them. */}
+            <div className="mx-auto flex max-w-6xl flex-wrap items-end gap-x-6 gap-y-2.5 px-4 pt-3 pb-0! sm:flex-nowrap sm:px-6">
               <Tabs />
-              <SearchForm className="ml-auto" />
+              <SearchForm className="order-first basis-full sm:order-none sm:mb-1 sm:ml-auto sm:w-72 sm:shrink-0 sm:basis-auto lg:w-80" />
             </div>
           </HeaderShell>
           {/* page-flow sets the section rhythm (globals.css): 28px apart on a phone, 40px from sm. */}
