@@ -565,6 +565,222 @@ body::before {
 }
 
 /* ------------------------------------------------------------------
+   Sortable leaderboards (app/sortable-table.tsx, app/table-client.tsx).
+
+   The header row sticks below the site header. `data-sticky` is set on the
+   table from live geometry: "css" when the table fits its card — the
+   ResponsiveTable wrapper stops being a scroll container so plain
+   `position: sticky` can reach the page — and "shift" when it must keep
+   scrolling sideways, where the header cells are translated instead.
+   Header cells carry the bottom rule as an inset shadow: a row border does
+   not travel with a stuck cell.
+   ------------------------------------------------------------------ */
+.data-table > thead > tr > th {
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+.data-table[data-sticky="css"] > thead > tr > th {
+  position: sticky;
+  top: var(--sticky-top, 0px);
+  z-index: 2;
+}
+.data-table[data-sticky="shift"] > thead > tr > th {
+  position: relative;
+  z-index: 2;
+  transform: translateY(var(--thead-shift, 0px));
+}
+.scroll-x[data-sticky-col] .data-table[data-sticky] > thead > tr > th:first-child {
+  position: sticky;
+  z-index: 3;
+}
+.scroll-x:has(> .scroll-x-viewport > .data-table[data-sticky="css"]) {
+  overflow: clip;
+}
+.scroll-x-viewport:has(> .data-table[data-sticky="css"]) {
+  overflow: visible;
+}
+
+/* A leaderboard's section: sort links carry its #fragment, so a re-sort
+   lands on the first rows. The site header's height is measured by
+   StickyThead; 9rem is the no-JS guess. */
+.table-anchor {
+  scroll-margin-top: calc(var(--table-anchor-top, 9rem) + 0.75rem);
+}
+
+/* Cells sit at px-3 to fit eight columns on a laptop; the outer edges keep the card's 1rem inset. */
+.data-table > tbody > tr > td:first-child,
+.data-table > thead > tr > th:first-child > a {
+  padding-left: 1rem;
+}
+.data-table > tbody > tr > td:last-child,
+.data-table > thead > tr > th:last-child > a {
+  padding-right: 1rem;
+}
+
+/* Whole-row target: the row is the click area, the name link stays the real link. */
+.data-table .data-row[data-href] {
+  cursor: pointer;
+}
+.data-table .data-row {
+  transition: background-color 120ms ease;
+}
+.data-table .data-row:hover {
+  background: color-mix(in srgb, var(--foreground) 4.5%, transparent);
+}
+.scroll-x[data-sticky-col][data-at-start="false"] .data-table .data-row:hover > td:first-child {
+  background: color-mix(in srgb, var(--card-solid) 95.5%, var(--foreground));
+}
+.data-table .data-row:hover .row-name {
+  color: var(--primary);
+}
+
+/* ------------------------------------------------------------------
+   Table chrome surfaces. --card is translucent glass over a gradient, so no
+   solid colour matches it — in dark mode a solid pinned column read as a
+   darker stripe. The pinned first column and the header row therefore stay
+   transparent (the card's own glass) and take the solid surface only while
+   something actually passes beneath them: the pinned column once the table
+   is scrolled sideways (data-at-start="false" from ScrollX), the header
+   while it is stuck over rows (data-stuck from StickyThead).
+   ------------------------------------------------------------------ */
+.scroll-x[data-sticky-col][data-at-start="true"] :is(th, td):first-child,
+.scroll-x[data-sticky-col][data-at-start="true"] tr:hover > :is(th, td):first-child {
+  background: transparent;
+}
+.data-table > thead > tr > th,
+.scroll-x[data-sticky-col] .data-table > thead > tr > th:first-child {
+  background: transparent;
+}
+.data-table[data-stuck] > thead > tr > th,
+.scroll-x[data-sticky-col] .data-table[data-stuck] > thead > tr > th:first-child {
+  background: var(--card-solid);
+}
+.data-table[data-stuck] > thead > tr > th {
+  box-shadow:
+    inset 0 -1px 0 var(--border),
+    0 6px 12px -10px rgba(0, 0, 0, 0.35);
+}
+/* Scrolled sideways: the pinned header cell is solid too, and keeps both its
+   bottom rule and the pinned column's edge shadow. */
+.scroll-x[data-sticky-col][data-at-start="false"] .data-table > thead > tr > th:first-child {
+  background: var(--card-solid);
+  box-shadow:
+    inset 0 -1px 0 var(--border),
+    8px 0 12px -8px rgba(0, 0, 0, 0.28);
+}
+
+/* In-cell magnitude bar (BarCell): a tint behind the number, anchored at the
+   column's right edge where the figures align and growing left — one common
+   baseline, no empty track, so a small value is a sliver of tint under its
+   own number rather than a grey pill. The number stays in text ink. */
+.cell-bar {
+  position: absolute;
+  inset-block: 0;
+  right: 0;
+  border-radius: 4px 1px 1px 4px;
+  pointer-events: none;
+}
+.cell-bar.bar-seq {
+  background: color-mix(in oklab, var(--viz-seq) 20%, transparent);
+}
+.cell-bar.bar-buy {
+  background: color-mix(in oklab, var(--viz-buy) 20%, transparent);
+}
+.cell-bar.bar-sell {
+  background: color-mix(in oklab, var(--viz-sell) 20%, transparent);
+}
+.dark .cell-bar.bar-seq {
+  background: color-mix(in oklab, var(--viz-seq) 24%, transparent);
+}
+.dark .cell-bar.bar-buy {
+  background: color-mix(in oklab, var(--viz-buy) 24%, transparent);
+}
+.dark .cell-bar.bar-sell {
+  background: color-mix(in oklab, var(--viz-sell) 24%, transparent);
+}
+
+/* Buy/sell split (SplitCell): the full diverging pair, 2px surface gap. */
+.split-track {
+  background: var(--viz-track);
+}
+.split-track > .bar-buy {
+  background: var(--viz-buy);
+}
+.split-track > .bar-sell {
+  background: var(--viz-sell);
+}
+.late-chip {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 7%, transparent);
+}
+
+/* ------------------------------------------------------------------
+   Home feed timeline (app/feed-list.tsx, app/bracket-glyph.tsx).
+
+   --viz-rung-*: the bracket ladder. Neutral ink, because blue<->red is
+   reserved for buy/sell; amber for a transcribed row, matching ScanTag.
+   below/on and scan-below/scan each validated as a two-step ordinal ramp
+   (dataviz validate_palette.js --ordinal: monotone L, dL >= 0.06, light end
+   >= 2:1 on --card-solid) in both modes; neutral vs amber separates by
+   CVD dE >= 16. --viz-rung-off is a track, not a data mark.
+   ------------------------------------------------------------------ */
+:root {
+  --viz-rung-off: #e6e6ec;
+  --viz-rung-below: #a3a3b4;
+  --viz-rung-on: #3a3a48;
+  --viz-rung-scan-below: #d4a453;
+  --viz-rung-scan: #9a6512;
+  --feed-hover: color-mix(in oklab, var(--primary) 7%, transparent);
+}
+
+.dark {
+  --viz-rung-off: #24242c;
+  --viz-rung-below: #5f5f72;
+  --viz-rung-on: #ececf2;
+  --viz-rung-scan-below: #7a5a26;
+  --viz-rung-scan: #e3a33b;
+  --feed-hover: color-mix(in oklab, var(--primary) 12%, transparent);
+}
+
+/* Day headers park under the site header (--sticky-top is measured by
+   app/sticky-offset.tsx; the fallback covers first paint). Opaque: rows
+   scrolling underneath must not read through the label. */
+.feed-day-head {
+  top: var(--sticky-top, 7rem);
+  background: var(--card-solid);
+}
+
+/* One trade: two lines on a phone, one line from 640px. On a phone the
+   amount sits in a fixed right-hand column so the ladders line up down the
+   list; the delay moves to the end of the asset line (feed-list.tsx
+   renders it there below 640px and in its own column above). */
+.feed-row {
+  display: grid;
+  align-items: center;
+  column-gap: 0.5rem;
+  row-gap: 0.125rem;
+  grid-template-columns: auto minmax(0, max-content) minmax(0, 1fr) 8.75rem;
+  grid-template-areas:
+    "act tick . amt"
+    "asset asset asset asset";
+}
+@media (min-width: 640px) {
+  .feed-row {
+    column-gap: 0.75rem;
+    grid-template-columns: 6.5rem 5.5rem 11rem minmax(0, 1fr) 5rem;
+    grid-template-areas: "act tick amt asset delay";
+  }
+}
+
+/* From 1024px the member sits in its own column and stays in view while a
+   long filing scrolls past, just under the day header (h-8 = 2rem). */
+@media (min-width: 1024px) {
+  .feed-member {
+    position: sticky;
+    top: calc(var(--sticky-top, 7rem) + 2.5rem);
+  }
+}
+
+/* ------------------------------------------------------------------
    Trade timeline (app/timeline.tsx). Axis text wears text tokens, never
    the series colour; a mark's 2px surface ring turns into the focus
    outline, so keyboard focus is visible without a box around the SVG.
