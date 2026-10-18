@@ -10,7 +10,9 @@ import {
 import { relativeTime } from "@/lib/format";
 import { getAlertOutcomes, getOutcomeSummary } from "@/lib/outcome-queries";
 import { Empty, SectionTitle, StatTile } from "../charts";
-import { AlertRowCard } from "./alert-row";
+import { Disclosure } from "../disclosure";
+import { PAGE_STACK, PageHeader, PillLinks, Quiet } from "../page-header";
+import { AlertLog, AlertRowCard } from "./alert-row";
 import { OutcomeLine, OutcomeSummarySection } from "./outcomes";
 import { pageMetadata } from "@/lib/seo";
 
@@ -34,12 +36,10 @@ export const metadata = pageMetadata({
 const WEEKS = 8;
 const PAGE = 200;
 
-function pill(active: boolean) {
-  return `rounded-full border px-2.5 py-1 transition-colors ${
-    active
-      ? "border-primary/40 bg-primary/10 text-foreground"
-      : "border-border text-muted-foreground hover:bg-muted"
-  }`;
+/** "Filing, watchlist and options" — a list in words, first letter capitalised. */
+function listOf(words: string[]): string {
+  const s = words.length <= 1 ? words.join("") : `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`;
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 export default async function AlertsPage({
@@ -74,62 +74,82 @@ export default async function AlertsPage({
   const byKind = new Map(totals.byKind.map((k) => [k.kind, k]));
   const shown = kind ? byKind.get(kind)?.total ?? 0 : totals.total;
   const noSeries = new Set(outcomeSummary.no_series);
+  // A kind that has never fired gets no tile: four zero tiles read as four
+  // broken features. They collapse into one line under the tiles instead.
+  const fired = ALERT_KINDS.filter((k) => (byKind.get(k)?.total ?? 0) > 0);
+  const silent = ALERT_KINDS.filter((k) => (byKind.get(k)?.total ?? 0) === 0);
 
   return (
-    <div className="space-y-8">
-      {/* Named by the active tab visually; the heading is for screen readers and crawlers. */}
-      <h1 className="sr-only">Alert log</h1>
-      <p className="max-w-3xl text-sm text-muted-foreground">
-        Every alert sent to Telegram, newest first, with the message as it went out. Congressional
-        amounts are disclosed brackets, so a range is shown and any midpoint is an estimate; insider
-        values are shares × the reported price.{" "}
-        {totals.recorded_since
-          ? `Participants, range and message text are logged for every alert since ${totals.recorded_since.slice(0, 10)}; earlier rows kept only the fields the cluster dedupe needed.`
-          : "Until the pipeline next runs, only the cluster dedupe rows exist here; from then on every kind is logged with its message text."}{" "}
-        Each alert also shows what its ticker did afterwards against SPY — the ticker&rsquo;s move,
-        not a trade&rsquo;s return.
-      </p>
-
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        {ALERT_KINDS.map((k) => {
-          const t = byKind.get(k);
-          return (
-            <StatTile
-              key={k}
-              label={KIND_LABEL[k]}
-              value={String(t?.last_7d ?? 0)}
-              hint={`last 7 days · ${(t?.total ?? 0).toLocaleString()} ever`}
-              trend={weeklySeries(weekly, k, WEEKS)}
-              trendLabel={`${KIND_LABEL[k]} alerts per week, last ${WEEKS} weeks`}
-            />
-          );
-        })}
-      </section>
+    <div className={PAGE_STACK}>
+      <PageHeader
+        title="Alerts"
+        subtitle="Every alert sent to Telegram, newest first, with the message as it went out."
+      >
+        <Disclosure
+          lead="Congressional amounts are disclosed brackets, so a range is shown and any midpoint is an estimate; insider values are shares × the reported price."
+        >
+          <p>
+            {totals.recorded_since
+              ? `Participants, range and message text are logged for every alert since ${totals.recorded_since.slice(0, 10)}; earlier rows kept only the fields the cluster dedupe needed.`
+              : "Until the pipeline next runs, only the cluster dedupe rows exist here; from then on every kind is logged with its message text."}
+          </p>
+          <p>
+            Each alert also shows what its ticker did afterwards against SPY — the ticker&rsquo;s move,
+            not a trade&rsquo;s return.
+          </p>
+        </Disclosure>
+        {fired.length ? (
+          <section aria-label="Alerts by kind" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {fired.map((k) => {
+              const t = byKind.get(k);
+              return (
+                <StatTile
+                  key={k}
+                  label={KIND_LABEL[k]}
+                  value={String(t?.last_7d ?? 0)}
+                  hint={`last 7 days · ${(t?.total ?? 0).toLocaleString()} ever`}
+                  trend={weeklySeries(weekly, k, WEEKS)}
+                  trendLabel={`${KIND_LABEL[k]} alerts per week, last ${WEEKS} weeks`}
+                />
+              );
+            })}
+          </section>
+        ) : null}
+        {silent.length ? (
+          <Quiet>
+            {listOf(silent.map((k) => KIND_LABEL[k].toLowerCase()))} alerts{" "}
+            {totals.recorded_since ? "have not fired yet." : "start logging on the next run."}
+          </Quiet>
+        ) : null}
+      </PageHeader>
 
       <OutcomeSummarySection summary={outcomeSummary} />
 
-      <section>
+      <section aria-labelledby="alert-log-title">
         <SectionTitle
           right={
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-[12px] text-muted-foreground">
               {totals.last_fired ? `last alert ${relativeTime(totals.last_fired)}` : "no alert yet"}
             </span>
           }
         >
-          Alert log
+          <span id="alert-log-title">Alert log</span>
         </SectionTitle>
-        <nav className="mb-3 flex flex-wrap gap-1.5 text-xs" aria-label="Filter by kind">
-          <a href={href()} className={pill(!kind)} aria-current={!kind ? "page" : undefined}>
-            All · {totals.total.toLocaleString()}
-          </a>
-          {ALERT_KINDS.map((k) => (
-            <a key={k} href={href(k)} className={pill(kind === k)} aria-current={kind === k ? "page" : undefined}>
-              {KIND_LABEL[k]} · {(byKind.get(k)?.total ?? 0).toLocaleString()}
-            </a>
-          ))}
-        </nav>
+        <PillLinks
+          label="Filter by kind"
+          className="mb-3"
+          items={[
+            { href: href(), label: `All · ${totals.total.toLocaleString()}`, active: !kind },
+            // A kind that never fired has nothing to filter; it stays only when the URL names it.
+            ...ALERT_KINDS.filter((k) => fired.includes(k) || kind === k).map((k) => ({
+              href: href(k),
+              label: `${KIND_LABEL[k]} · ${(byKind.get(k)?.total ?? 0).toLocaleString()}`,
+              active: kind === k,
+            })),
+          ]}
+        />
         {alerts.length ? (
-          <ol className="space-y-2">
+          <AlertLog>
             {alerts.map((a) => (
               <AlertRowCard
                 key={a.id}
@@ -137,13 +157,13 @@ export default async function AlertsPage({
                 extra={<OutcomeLine alert={a} outcome={outcomes.get(a.id)} noSeries={noSeries} />}
               />
             ))}
-          </ol>
+          </AlertLog>
         ) : (
-          <Empty>
+          <Quiet>
             {kind
               ? `No ${KIND_LABEL[kind as AlertKind].toLowerCase()} alert has fired yet.`
               : "No alert has fired yet."}
-          </Empty>
+          </Quiet>
         )}
         {!all && alerts.length < shown ? (
           <p className="mt-3 text-xs text-muted-foreground">

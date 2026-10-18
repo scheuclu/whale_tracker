@@ -13,6 +13,7 @@ import { relativeTime } from "@/lib/format";
 import { SITE_DESCRIPTION, SITE_NAME, siteUrl } from "@/lib/site";
 import { SearchForm, SyncStatus, Tabs, ThemeToggle } from "./nav";
 import "./globals.css";
+import "./motion.css";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" });

@@ -1,18 +1,32 @@
 import type { Metadata } from "next";
+import { assetLabel } from "@/lib/asset-label";
 import { redirect } from "next/navigation";
 import { getFilingSpan } from "@/lib/entities";
 import { getInsiderTotals } from "@/lib/insider-queries";
 import { pageMetadata } from "@/lib/seo";
 import { datasetLd, organizationLd, websiteLd } from "@/lib/structured-data";
 import { JsonLd } from "./json-ld";
-import { getConsensusTickers, getPipeline, getTransactionTotals, getTransactions, getWeeklyActivity } from "@/lib/queries";
-import { getBothSides, getSharedTickers, type BothSidesRow, type SharedTickers } from "@/lib/crossover-queries";
+import {
+  getConsensusTickers,
+  getPipeline,
+  getTransactionTotals,
+  getTransactions,
+  getWeeklyActivity,
+} from "@/lib/queries";
+import {
+  getBothSides,
+  getSharedTickers,
+  type BothSidesRow,
+  type SharedTickers,
+} from "@/lib/crossover-queries";
 import { FILTER_KEYS, feedHref, parseOffset, parseTransactionFilters } from "@/lib/feed-filters";
 import { tickerHref } from "@/lib/format";
 import { Card, DivergingSplit, Empty, SectionTitle, StatTile, type StatDelta } from "./charts";
 import { ExportLink, FilterBar, Pagination, ShownLine } from "./feed-controls";
 import { DirectionFilter, FeedList } from "./feed-list";
 import { ActionBadge, ResponsiveTable } from "./ui";
+import { Disclosure } from "./disclosure";
+import { PAGE_STACK, PageHeader } from "./page-header";
 import { AgentAlternates } from "./agent-alternates";
 
 export const dynamic = "force-dynamic";
@@ -123,13 +137,14 @@ export default async function FeedPage({
   const weekLabels = rollingWeekLabels(WEEKS);
 
   return (
-    <div className="space-y-8">
+    <div className={PAGE_STACK}>
       <SiteStructuredData />
-      {/* The wordmark and active tab name this page visually; the heading is
-          for screen readers and crawlers and changes nothing on screen. */}
-      <h1 className="sr-only">Stock trades by members of Congress and corporate insiders</h1>
       <AgentAlternates markdown="/api/v1/feed.md" json="/api/v1/trades" />
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <PageHeader
+        title="Congressional trades"
+        subtitle="Stock trades members of the House and Senate disclose under the STOCK Act, reproduced as filed. Amounts are the disclosed bracket, never one exact figure."
+      >
+      <section aria-label="All disclosed trades" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile
           label="Trades"
           value={pipeline.totals.transactions.toLocaleString()}
@@ -160,6 +175,7 @@ export default async function FeedPage({
           trendLabel={`Filings parsed per week, last ${WEEKS} weeks, by filing date`}
         />
       </section>
+      </PageHeader>
 
       {consensus.length ? (
         <section>
@@ -172,7 +188,7 @@ export default async function FeedPage({
               data={consensus.map((c) => ({
                 key: c.ticker,
                 label: c.ticker,
-                sublabel: c.asset_name ?? undefined,
+                sublabel: assetLabel(c.asset_name, { ticker: c.ticker }) || undefined,
                 buy: c.buy_politicians,
                 sell: c.sell_politicians,
                 href: tickerHref(c.ticker),
@@ -196,10 +212,7 @@ export default async function FeedPage({
           toolbar={
             <>
               <DirectionFilter current={filters.action} hrefFor={(k) => feedHref({ ...filters, action: k })} />
-              <ExportLink
-                filters={filters}
-                className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              />
+              <ExportLink filters={filters} />
             </>
           }
           summary={<ShownLine offset={offset} shown={rows.length} totals={totals} />}
@@ -298,21 +311,33 @@ async function BothSides() {
                   </a>
                   <span className="text-muted-foreground"> · {plural(r.insider_filings, "filing")}</span>
                 </td>
-                <td className="max-w-[18rem] truncate px-4 py-2 text-muted-foreground">
-                  {r.issuer_name ?? r.asset_name}
+                <td className="max-w-[18rem] truncate px-4 py-2 text-muted-foreground" title={r.issuer_name ?? r.asset_name ?? undefined}>
+                  {assetLabel(r.issuer_name ?? r.asset_name, { ticker: r.ticker })}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </ResponsiveTable>
-      <p className="mt-3 text-[11px] text-muted-foreground">
-        Two sets of books, never summed: members are distinct filers on House and Senate
-        disclosures, insiders are distinct primary reporting owners on SEC Form 4s, matched on
-        the listed symbol alone. Same direction, both inside the last {BOTH_SIDES_DAYS} days on
-        trade date. Form 4 is due in two business days and a member&apos;s report in 45, so the
-        member side of the most recent weeks is still arriving.
-      </p>
+      <Disclosure
+        size="sm"
+        className="mt-3"
+        lead={
+          <>
+            Two sets of books, never summed: members are distinct filers on House and Senate disclosures,
+            insiders are distinct primary reporting owners on SEC Form 4s.
+          </>
+        }
+      >
+        <p>
+          Matched on the listed symbol alone. Same direction, both inside the last {BOTH_SIDES_DAYS} days on
+          trade date.
+        </p>
+        <p>
+          Form 4 is due in two business days and a member&apos;s report in 45, so the member side of the most
+          recent weeks is still arriving.
+        </p>
+      </Disclosure>
     </section>
   );
 }

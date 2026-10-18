@@ -1,3 +1,4 @@
+import { MoneyText } from "../money";
 import Link from "next/link";
 import {
   type AlertKind,
@@ -7,7 +8,8 @@ import {
   isInsiderKind,
 } from "@/lib/alert-queries";
 import { memberHref, range, relativeTime, telegramPlainText, usd } from "@/lib/format";
-import { ActionBadge, PartyBadge, TickerChip } from "../ui";
+import { Card } from "../charts";
+import { ActionBadge, PartyBadge, Tag, TickerChip } from "../ui";
 
 /**
  * One alert, as sent. Exported so later pages — post-alert price outcomes
@@ -19,11 +21,20 @@ import { ActionBadge, PartyBadge, TickerChip } from "../ui";
  * schema 13 have neither range nor text, and say so rather than re-rendering
  * a message that cannot be reconstructed.
  */
+/** The log's container: one card, rows divided by hairlines rather than a stack of cards. */
+export function AlertLog({ children }: { children: React.ReactNode }) {
+  return (
+    <Card className="p-0 sm:p-0">
+      <ol className="divide-y divide-border/70">{children}</ol>
+    </Card>
+  );
+}
+
 export function AlertRowCard({ alert: a, extra }: { alert: AlertRow; extra?: React.ReactNode }) {
   const kind = a.kind as AlertKind;
   const action = a.direction === "buy" ? "purchase" : a.direction === "sell" ? "sale" : null;
   return (
-    <li data-alert-id={a.id} className="glass rounded-2xl border border-border bg-card px-5 py-4">
+    <li data-alert-id={a.id} className="px-4 py-3.5 sm:px-5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <KindBadge kind={a.kind} />
         {action ? (
@@ -58,17 +69,21 @@ export function AlertRowCard({ alert: a, extra }: { alert: AlertRow; extra?: Rea
         {a.issuer_name ? <span className="truncate text-muted-foreground">· {a.issuer_name}</span> : null}
         <SourceLink a={a} />
       </div>
-      <Message a={a} />
-      {extra}
+      {a.message ? <Message a={a} /> : null}
+      {/* One quiet meta line: what was not logged, then the move afterwards. */}
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-muted-foreground empty:hidden">
+        {a.message ? null : <span>Message text not logged — sent before the log kept it.</span>}
+        {extra}
+      </div>
     </li>
   );
 }
 
 export function KindBadge({ kind }: { kind: string }) {
   return (
-    <span className="inline-flex items-center whitespace-nowrap rounded-full border border-border bg-muted px-2.5 py-0.5 text-[11px] font-medium">
+    <Tag variant="outline" className="font-medium text-ink-2">
       {KIND_LABEL[kind as AlertKind] ?? kind}
-    </span>
+    </Tag>
   );
 }
 
@@ -110,8 +125,8 @@ function Volume({ a }: { a: AlertRow }) {
         className="tabular text-[13px]"
         title={insider ? "shares × reported price" : "the disclosed bracket range; the midpoint is an estimate"}
       >
-        {range(a.volume_min_cents, a.volume_max_cents)}
-        {!insider ? <span className="text-muted-foreground"> · est. {usd(a.volume_mid_cents)}</span> : null}
+        <MoneyText value={range(a.volume_min_cents, a.volume_max_cents)} />
+        {!insider ? <span className="text-muted-foreground"> · est. <MoneyText value={usd(a.volume_mid_cents)} /></span> : null}
       </span>
     );
   }
@@ -178,13 +193,7 @@ function SourceLink({ a }: { a: AlertRow }) {
 }
 
 function Message({ a }: { a: AlertRow }) {
-  if (!a.message) {
-    return (
-      <p className="mt-2 text-[11px] text-muted-foreground">
-        Message text not logged — sent before the log kept it.
-      </p>
-    );
-  }
+  if (!a.message) return null;
   const [headline, ...rest] = telegramPlainText(a.message).split("\n");
   return (
     <details className="group mt-2">

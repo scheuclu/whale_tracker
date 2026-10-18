@@ -1,9 +1,38 @@
 import type { Metadata } from "next";
-import { getSectorLeaderboard, getTickers, type SectorRow } from "@/lib/queries";
-import { range, tickerHref, usd } from "@/lib/format";
+import {
+  getSectorLeaderboard,
+  getTickers,
+  type SectorRow,
+  getTickerMembers,
+  getTransactions,
+} from "@/lib/queries";
+import { range, tickerHref, usd, memberHref, memberLabel, shortDate, ASSET_TYPE_LABEL } from "@/lib/format";
 import { pageMetadata } from "@/lib/seo";
-import { Card, DivergingSplit, Empty, MagnitudeBars, SectionTitle, VOLUME_NOTE } from "../charts";
-import { ResponsiveTable } from "../ui";
+import {
+  Card,
+  DivergingSplit,
+  Empty,
+  MagnitudeBars,
+  SectionTitle,
+  VOLUME_NOTE,
+  StatTile,
+  VolumeRange,
+} from "../charts";
+import { ResponsiveTable, ActionBadge, Amount, OptionBadge, OwnerTag, RoleTag, SectorTag } from "../ui";
+import { MoneyText } from "../money";
+import {
+  getInsiderIssuer,
+  getIssuerInsiders,
+  type IssuerInsiderRow,
+  type IssuerRow,
+} from "@/lib/insider-queries";
+import { AgentAlternates } from "../agent-alternates";
+import { ExportLink } from "../feed-controls";
+import { getTimelineTrades, type TimelineTrade } from "@/lib/timeline-queries";
+import { TradeTimeline } from "../timeline";
+import { Disclosure, RangeCaption } from "../disclosure";
+import { PAGE_STACK, PageHeader, PillLinks, Quiet } from "../page-header";
+import { TradeList, TradeRow } from "../trade-row";
 import { assetLabel } from "@/lib/asset-label";
 import {
   ROW_LIMITS,
@@ -112,29 +141,25 @@ export default async function TickersPage({
   const withRows = (count: string) => `/tickers${query({ w: params.w, ...keepSort, n: count })}#all-tickers`;
 
   return (
-    <div className="space-y-8">
-      {/* Named by the active tab visually; the heading is for screen readers and crawlers. */}
-      <h1 className="sr-only">Stocks traded by members of Congress</h1>
-      <div className="flex flex-wrap items-center gap-1 text-[11px]">
-        {WINDOWS.map((w) => {
-          const key = w.days ? String(w.days) : "all";
-          const active = (params.w ?? "90") === key;
-          return (
-            <a
-              key={w.label}
-              href={`/tickers${query({ w: key, ...keepSort })}`}
-              className={`rounded-full border px-2.5 py-1 transition-colors ${
-                active
-                  ? "border-primary/40 bg-primary/10 text-foreground"
-                  : "border-border text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              {w.label}
-            </a>
-          );
-        })}
-        <span className="ml-2 text-muted-foreground">window measured on trade date</span>
-      </div>
+    <div className={PAGE_STACK}>
+      <PageHeader
+        title="Tickers"
+        subtitle="What members of Congress trade, ranked over a window measured on trade date. Volumes are estimates from disclosed brackets."
+        aside={
+          <PillLinks
+            label="Window"
+            note="by trade date"
+            items={WINDOWS.map((w) => {
+              const key = w.days ? String(w.days) : "all";
+              return {
+                href: `/tickers${query({ w: key, ...keepSort })}`,
+                label: w.label,
+                active: (params.w ?? "90") === key,
+              };
+            })}
+          />
+        }
+      />
 
       <section className="grid gap-6 lg:grid-cols-2">
         <div>
@@ -144,7 +169,7 @@ export default async function TickersPage({
               data={rows.slice(0, 12).map((r) => ({
                 key: r.ticker,
                 label: r.ticker,
-                sublabel: r.asset_name?.slice(0, 28) ?? undefined,
+                sublabel: assetLabel(r.asset_name, { ticker: r.ticker }).slice(0, 28) || undefined,
                 title: r.asset_name ?? undefined,
                 value: r.volume_mid,
                 valueLabel: usd(r.volume_mid),
@@ -153,7 +178,7 @@ export default async function TickersPage({
               }))}
               note={VOLUME_NOTE}
             />
-            <p className="mt-3 text-[11px] text-muted-foreground">
+            <p className="mt-3 text-xs text-muted-foreground">
               Estimated from disclosure brackets — see each ticker for the disclosed range.
             </p>
           </Card>
@@ -219,7 +244,7 @@ export default async function TickersPage({
                     {usd(r.volume_mid)}
                   </BarCell>
                   <td className="tabular px-3 py-2 text-right text-muted-foreground">
-                    {r.volume_max == null ? `≥${usd(r.volume_min)}` : `${usd(r.volume_min)}–${usd(r.volume_max)}`}
+                    <MoneyText value={r.volume_max == null ? `≥${usd(r.volume_min)}` : `${usd(r.volume_min)}–${usd(r.volume_max)}`} />
                   </td>
                 </tr>
               ))}
@@ -293,25 +318,27 @@ function SectorLeaderboard({ sectors }: { sectors: SectorRow[] }) {
               }))}
               note={VOLUME_NOTE}
             />
-            <p className="mt-3 text-[11px] text-muted-foreground">
+            <p className="mt-3 text-xs text-muted-foreground">
               Bracket midpoints; the disclosed range is under each bar.
             </p>
           </Card>
         </div>
       ) : (
-        <Card>
-          <Empty>
-            No sector is known for any ticker yet. The pipeline classifies issuers from their
-            EDGAR SIC codes after each run.
-          </Empty>
-        </Card>
+        <Quiet>
+          No sector is known for any ticker yet. The pipeline classifies issuers from their
+          EDGAR SIC codes after each run.
+        </Quiet>
       )}
-      <p className="mt-3 text-[11px] text-muted-foreground">
-        Industry groups fold each issuer&rsquo;s EDGAR SIC code into twelve sectors.{" "}
-        {tickersKnown} of {tickersTotal} tickers in this window are classified; the rest are
-        ETF trusts and other issuers EDGAR lists no SIC for, symbols not in EDGAR&rsquo;s
-        company list, or issuers the fill has not reached yet.
-      </p>
+      <Disclosure
+        size="sm"
+        className="mt-3"
+        lead={`Industry groups fold each issuer’s EDGAR SIC code into twelve sectors; ${tickersKnown} of ${tickersTotal} tickers in this window are classified.`}
+      >
+        <p>
+          The rest are ETF trusts and other issuers EDGAR lists no SIC for, symbols not in EDGAR&rsquo;s
+          company list, or issuers the fill has not reached yet.
+        </p>
+      </Disclosure>
     </section>
   );
 }

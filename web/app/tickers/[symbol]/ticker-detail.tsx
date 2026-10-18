@@ -10,6 +10,9 @@ import { TradeTimeline } from "../../timeline";
 
 import { TickerMembers } from "../ticker-members";
 import { AgentAlternates } from "../../agent-alternates";
+import { assetLabel } from "@/lib/asset-label";
+import { Disclosure, RangeCaption } from "../../disclosure";
+import { PAGE_STACK, PageHeader, Quiet } from "../../page-header";
 
 /*
  * One ticker's page, `/tickers/<SYMBOL>`. Moved out of app/tickers/page.tsx
@@ -35,16 +38,14 @@ export async function TickerDetail({ stat }: { stat: TickerRow }) {
   const other = stat.trades - stat.buys - stat.sells;
 
   return (
-    <div className="space-y-8">
+    <div className={PAGE_STACK}>
       <AgentAlternates ticker={ticker} />
-      <div>
-        <a href="/tickers" className="text-xs text-muted-foreground hover:text-primary">
-          ← all tickers
-        </a>
-        <div className="mt-3 flex flex-wrap items-end justify-between gap-x-10 gap-y-5">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-              <h1 className="font-mono text-4xl font-semibold tracking-tight sm:text-5xl">{stat.ticker}</h1>
+      <PageHeader
+        back={{ href: "/tickers", label: "all tickers" }}
+        title={stat.ticker}
+        titleClassName="font-mono sm:text-[44px]"
+        badges={
+          <>
               {assetTypes.map((a) => (
                 <span
                   key={a.code}
@@ -59,9 +60,14 @@ export async function TickerDetail({ stat }: { stat: TickerRow }) {
                 sic={trades[0]?.sic}
                 description={trades[0]?.sic_description}
               />
-            </div>
-            <p className="mt-1.5 text-base text-ink-2">{stat.asset_name}</p>
-          </div>
+          </>
+        }
+        subtitle={
+          <span className="text-ink-2" title={stat.asset_name ?? undefined}>
+            {assetLabel(stat.asset_name, { ticker: stat.ticker })}
+          </span>
+        }
+        aside={
           <FlowSplit
             buys={stat.buys}
             sells={stat.sells}
@@ -69,10 +75,9 @@ export async function TickerDetail({ stat }: { stat: TickerRow }) {
             buyers={stat.buy_politicians}
             sellers={stat.sell_politicians}
           />
-        </div>
-      </div>
-
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        }
+      >
+      <section aria-label="Ticker totals" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile label="Members" value={String(stat.politicians)} hint="distinct filers" />
         <StatTile label="Trades" value={String(stat.trades)} hint={`${stat.buys} buy / ${stat.sells} sell`} />
         <StatTile
@@ -86,6 +91,7 @@ export async function TickerDetail({ stat }: { stat: TickerRow }) {
         />
         <StatTile label="Last trade" value={shortDate(stat.last_tx_date)} />
       </section>
+      </PageHeader>
 
       <section>
         <SectionTitle right={<span className="text-[11px] text-muted-foreground">by trade date</span>}>
@@ -103,11 +109,7 @@ export async function TickerDetail({ stat }: { stat: TickerRow }) {
             mid={stat.volume_mid}
             scaleMax={scaleMax}
           />
-          <p className="mt-3 text-[11px] text-muted-foreground">
-            The band is the full range these disclosures permit; the tick is the
-            midpoint estimate. Members report brackets, so the true figure lies
-            somewhere in the band.
-          </p>
+          <RangeCaption />
         </Card>
       </section>
 
@@ -185,11 +187,13 @@ export async function TickerDetail({ stat }: { stat: TickerRow }) {
               </tbody>
             </table>
           </ResponsiveTable>
-          <p className="mt-3 text-[11px] text-muted-foreground">
-            Kind, strike and expiry are read from each filing&apos;s own text and shown only when
-            printed; a put bought is listed as the purchase it was filed as. Amounts are the
-            disclosed brackets.
-          </p>
+          <Disclosure
+            size="sm"
+            className="mt-3"
+            lead="Kind, strike and expiry are read from each filing’s own text and shown only when printed; amounts are the disclosed brackets."
+          >
+            <p>A put bought is listed as the purchase it was filed as.</p>
+          </Disclosure>
         </section>
       ) : null}
     </div>
@@ -356,17 +360,22 @@ async function InsidersInIssuer({ ticker }: { ticker: string }) {
                 </div>
               ))}
             </div>
-            <p className="mt-3 text-[11px] text-muted-foreground">
-              Primary reporting owners from stored Form 4s; values are shares × the price as
-              filed, not a disclosed range. Kept apart from the member figures above — nothing
-              here enters them.{" "}
-              <a href={href} className="underline-offset-2 hover:text-primary hover:underline">
-                every stored insider trade in {ticker} →
-              </a>
-            </p>
+            <Disclosure
+              size="sm"
+              className="mt-3"
+              lead="Values are shares × the price as filed, not a disclosed range. Kept apart from the member figures above — nothing here enters them."
+            >
+              <p>Primary reporting owners from stored Form 4s.</p>
+            </Disclosure>
+            <a
+              href={href}
+              className="mt-2 inline-block text-[12px] text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
+            >
+              every stored insider trade in {ticker} →
+            </a>
           </>
         ) : (
-          <Empty>
+          <Quiet>
             No stored Form 4 trade in {ticker} in the last {CROSS_WINDOW_DAYS} days.{" "}
             {allTime ? (
               <>
@@ -379,7 +388,7 @@ async function InsidersInIssuer({ ticker }: { ticker: string }) {
             ) : (
               "No stored filing carries this symbol."
             )}
-          </Empty>
+          </Quiet>
         )}
       </Card>
     </section>

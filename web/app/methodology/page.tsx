@@ -12,6 +12,7 @@ import {
 } from "@/lib/methodology";
 import { Card, SectionTitle } from "../charts";
 import { AgentAlternates } from "../agent-alternates";
+import { PAGE_STACK, PageHeader } from "../page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,7 @@ function Prose({ text }: { text: string }) {
     <>
       {parts.map((p, i) =>
         p.startsWith("`") && p.endsWith("`") ? (
-          <code key={i} className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em] text-foreground/90">
+          <code key={i} className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em] text-ink-2">
             {p.slice(1, -1)}
           </code>
         ) : (
@@ -65,7 +66,7 @@ function CoverageList({ c }: { c: Coverage }) {
       {rows.map(([k, v]) => (
         <div key={k} className="contents">
           <dt className="text-muted-foreground">{k}</dt>
-          <dd className="tabular text-foreground/90">{v}</dd>
+          <dd className="tabular text-ink-2">{v}</dd>
         </div>
       ))}
     </dl>
@@ -86,19 +87,21 @@ export default async function MethodologyPage() {
   }
 
   return (
-    <article className="mx-auto max-w-3xl space-y-10">
+    <article className={`mx-auto max-w-3xl ${PAGE_STACK}`}>
       <AgentAlternates text="/llms-full.txt" />
-      <header className="space-y-3">
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Methodology</h1>
-        <p className="text-[15px] leading-relaxed text-muted-foreground">
-          Where the data comes from, how each figure is computed, and how to quote it without saying more than the
-          filings do. The same rules are published for language models in{" "}
-          <a href="/llms-full.txt" className="underline decoration-border underline-offset-2 hover:text-primary">
-            llms-full.txt
-          </a>{" "}
-          and repeated in every API response.
-        </p>
-      </header>
+      <PageHeader
+        title="Methodology"
+        subtitle={
+          <>
+            Where the data comes from, how each figure is computed, and how to quote it without saying more than the
+            filings do. The same rules are published for language models in{" "}
+            <a href="/llms-full.txt" className="underline decoration-border underline-offset-2 hover:text-primary">
+              llms-full.txt
+            </a>{" "}
+            and repeated in every API response.
+          </>
+        }
+      />
 
       <section aria-labelledby="rules">
         <SectionTitle>

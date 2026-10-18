@@ -4,7 +4,7 @@ import { SectionTitleSkeleton, SkeletonPage, TableSkeleton, TilesSkeleton } from
 export default function Loading() {
   return (
     <SkeletonPage label="scanned filings">
-      <TilesSkeleton />
+      <TilesSkeleton tall />
       <section>
         <SectionTitleSkeleton width="w-32" right />
         <TableSkeleton rows={10} cols={9} />

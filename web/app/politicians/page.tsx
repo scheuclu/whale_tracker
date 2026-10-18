@@ -1,3 +1,4 @@
+import { assetLabel } from "@/lib/asset-label";
 import {
   STOCK_ACT_DEADLINE_DAYS,
   getCommittee,
@@ -14,14 +15,46 @@ import type { Metadata } from "next";
 import { committeeHref, memberHref, range, shortDate, usd } from "@/lib/format";
 import { plural } from "@/lib/site";
 import { clip, pageMetadata } from "@/lib/seo";
-import { Card, ColumnSeries, Empty, SectionTitle, StatTile, VOLUME_NOTE } from "../charts";
-import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, ResponsiveTable, ScanTag, TickerChip } from "../ui";
-import { AssetName } from "../trade-row";
+import {
+  Card,
+  ColumnSeries,
+  Empty,
+  SectionTitle,
+  StatTile,
+  VOLUME_NOTE,
+  DivergingSplit,
+  MagnitudeBars,
+  VolumeRange,
+} from "../charts";
+import {
+  ActionBadge,
+  Amount,
+  DelayTag,
+  OwnerTag,
+  PartyBadge,
+  ResponsiveTable,
+  ScanTag,
+  TickerChip,
+  Segmented,
+} from "../ui";
+import { AssetName, TradeList, TradeRow } from "../trade-row";
+import { ExportLink } from "../feed-controls";
 import { MemberAvatar } from "../avatar";
+import { Disclosure, RangeCaption } from "../disclosure";
+import { PAGE_STACK, PageHeader, Quiet } from "../page-header";
 import { MemberBars } from "./member-bars";
 import { CHAMBER_LABEL, SeatTag } from "../members/[slug]/member-detail";
 import { POLITICIAN_SORT, isDefaultSort, parseSort, type PoliticianSortKey } from "@/lib/table-sort";
-import { BODY_ROW, BarCell, DATA_TABLE, HEAD_ROW, LateCell, SortHeader, SplitCell, sortHref } from "../sortable-table";
+import {
+  BODY_ROW,
+  BarCell,
+  DATA_TABLE,
+  HEAD_ROW,
+  LateCell,
+  SortHeader,
+  SplitCell,
+  sortHref,
+} from "../sortable-table";
 import { RowLinkBody, StickyThead } from "../table-client";
 
 export const dynamic = "force-dynamic";
@@ -138,11 +171,12 @@ export default async function PoliticiansPage({
   );
 
   return (
-    <div className="space-y-8">
-      {/* The active tab names this page visually; the heading names it for
-          screen readers and search engines without changing the layout. */}
-      <h1 className="sr-only">Members of Congress trading stocks</h1>
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div className={PAGE_STACK}>
+      <PageHeader
+        title="Members of Congress"
+        subtitle="Every member with a disclosed trade, by estimated volume and by number of trades. Amounts are disclosed brackets, so every volume here is an estimate."
+      >
+      <section aria-label="All members" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile label="Members" value={String(totals.members)} hint="with disclosed trades" />
         <StatTile label="Total volume" value={usd(totals.volume_mid)} hint="estimated" />
         <a href="/politicians?view=late" className="block" title="Ranked late-filing view">
@@ -160,6 +194,7 @@ export default async function PoliticiansPage({
           />
         </a>
       </section>
+      </PageHeader>
 
       <section className="grid gap-6 lg:grid-cols-2">
         <div>
@@ -191,7 +226,11 @@ export default async function PoliticiansPage({
                 key: r.member_name,
                 name: r.member_name,
                 bioguideId: r.bioguide_id,
-                sublabel: `${r.tickers} distinct tickers`,
+                // A scan-only member has trades but no symbol: paper forms do not print one.
+                sublabel:
+                  r.tickers === 0 && r.transcribed > 0
+                    ? "tickers not printed on paper filings"
+                    : `${r.tickers} distinct ticker${r.tickers === 1 ? "" : "s"}`,
                 value: r.trades,
                 valueLabel: String(r.trades),
                 href: memberHref(r.member_name, r.bioguide_id),
@@ -270,15 +309,24 @@ export default async function PoliticiansPage({
             </RowLinkBody>
           </table>
         </ResponsiveTable>
-        <p className="mt-3 text-[11px] text-muted-foreground">
-          &ldquo;Delay&rdquo; is measured from the trade to the date the report reached
-          the Clerk, and &ldquo;Late&rdquo; counts trades filed more than 45 days after
-          the trade — the STOCK Act&rsquo;s deadline. A late count is a reporting
-          fact, not an allegation of wrongdoing. &ldquo;Notify lag&rdquo; is a
-          different measure: how long until the member learned of the trade. A
-          nonzero lag means someone else placed it — a spouse, a trust or a
-          managed account — and carries no compliance meaning.
-        </p>
+        <Disclosure
+          size="sm"
+          className="mt-3"
+          lead={
+            <>
+              &ldquo;Delay&rdquo; is measured from the trade to the date the report reached the Clerk, and
+              &ldquo;Late&rdquo; counts trades filed more than 45 days after the trade — the STOCK Act&rsquo;s
+              deadline.
+            </>
+          }
+        >
+          <p>A late count is a reporting fact, not an allegation of wrongdoing.</p>
+          <p>
+            &ldquo;Notify lag&rdquo; is a different measure: how long until the member learned of the trade. A
+            nonzero lag means someone else placed it — a spouse, a trust or a managed account — and carries no
+            compliance meaning.
+          </p>
+        </Disclosure>
       </section>
     </div>
   );
@@ -319,13 +367,13 @@ async function CommitteeView({ id }: { id: string }) {
   const kind = committee.parent_id ? "subcommittee" : "committee";
 
   return (
-    <div className="space-y-8">
-      <div>
-        <a href="/politicians" className="text-xs text-muted-foreground hover:text-primary">
-          ← all members
-        </a>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight">{committee.name}</h1>
-        <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+    <div className={PAGE_STACK}>
+      <PageHeader
+        back={{ href: "/politicians", label: "all members" }}
+        eyebrow="Committee"
+        title={committee.name}
+        subtitle={
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span>
             {CHAMBER_LABEL[committee.chamber] ?? committee.chamber} {kind}
           </span>
@@ -348,9 +396,11 @@ async function CommitteeView({ id }: { id: string }) {
               · committee site
             </a>
           ) : null}
-        </p>
+        </span>
+        }
+      >
         {committee.jurisdiction ? (
-          <p className="mt-3 max-w-3xl text-sm text-muted-foreground">
+          <p className="max-w-[68ch] text-[14px] leading-relaxed text-muted-foreground">
             {committee.jurisdiction}
             {committee.jurisdiction_source ? (
               <>
@@ -367,9 +417,7 @@ async function CommitteeView({ id }: { id: string }) {
             ) : null}
           </p>
         ) : null}
-      </div>
-
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <section aria-label="Committee totals" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile
           label="Members"
           value={String(members.length)}
@@ -387,11 +435,12 @@ async function CommitteeView({ id }: { id: string }) {
         />
         <StatTile label="Late disclosures" value={String(late)} hint="past 45 days" />
       </section>
+      </PageHeader>
 
       {subs.length ? (
         <section>
           <SectionTitle>Subcommittees</SectionTitle>
-          <Card className="p-0">
+          <Card className="p-0 sm:p-0">
             <ul className="divide-y divide-border/50 text-[13px]">
               {subs.map((s) => (
                 <li key={s.thomas_id} className="flex items-center justify-between gap-3 px-4 py-2">
@@ -485,15 +534,27 @@ async function CommitteeView({ id }: { id: string }) {
             </table>
           </ResponsiveTable>
         ) : (
-          <Empty>No seats recorded for this committee.</Empty>
+          <Quiet>No seats recorded for this committee.</Quiet>
         )}
-        <p className="mt-3 text-[11px] text-muted-foreground">
-          Seats are the current Congress&rsquo;s roster from congress-legislators, refreshed
-          with the pipeline. Each member&rsquo;s figures cover every trade they disclosed, not
-          only trades touching this committee&rsquo;s jurisdiction; a member with no disclosed
-          trades is listed with dashes. &ldquo;Late&rdquo; counts trades filed more than 45
-          days after the trade — a reporting fact, not an allegation of wrongdoing.
-        </p>
+        <Disclosure
+          size="sm"
+          className="mt-3"
+          lead={
+            <>
+              Each member&rsquo;s figures cover every trade they disclosed, not only trades touching this
+              committee&rsquo;s jurisdiction.
+            </>
+          }
+        >
+          <p>
+            Seats are the current Congress&rsquo;s roster from congress-legislators, refreshed with the
+            pipeline. A member with no disclosed trades is listed with dashes.
+          </p>
+          <p>
+            &ldquo;Late&rdquo; counts trades filed more than 45 days after the trade — a reporting fact, not an
+            allegation of wrongdoing.
+          </p>
+        </Disclosure>
       </section>
     </div>
   );
@@ -554,22 +615,28 @@ async function LateView() {
   );
 
   return (
-    <div className="space-y-8">
-      <div>
-        <a href="/politicians" className="text-xs text-muted-foreground hover:text-primary">
-          ← all members
-        </a>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight">Late disclosures</h1>
-        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-          Trades disclosed more than {STOCK_ACT_DEADLINE_DAYS} days after they were made — the
-          STOCK Act&rsquo;s deadline. Delay is measured from the trade to the date the report
-          reached the Clerk, never the report&rsquo;s &ldquo;Notification Date&rdquo; column,
-          which reads 0 for a member trading their own account. A late count is a reporting
-          fact, not an allegation of wrongdoing.
-        </p>
-      </div>
-
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div className={PAGE_STACK}>
+      <PageHeader
+        back={{ href: "/politicians", label: "all members" }}
+        title="Late disclosures"
+        subtitle={
+          <>
+            Trades disclosed more than {STOCK_ACT_DEADLINE_DAYS} days after they were made — the STOCK
+            Act&rsquo;s deadline. A late count is a reporting fact, not an allegation of wrongdoing.
+          </>
+        }
+      >
+        <Disclosure
+          size="sm"
+          lead={
+            <>
+              Delay is measured from the trade to the date the report reached the Clerk, never the
+              report&rsquo;s &ldquo;Notification Date&rdquo; column, which reads 0 for a member trading their
+              own account.
+            </>
+          }
+        />
+      <section aria-label="Late totals" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile
           label="Late trades"
           value={String(totals.late_trades)}
@@ -591,6 +658,7 @@ async function LateView() {
           hint="trade to filing"
         />
       </section>
+      </PageHeader>
 
       <section className="grid gap-6 lg:grid-cols-2">
         <div>
@@ -684,11 +752,16 @@ async function LateView() {
             </tbody>
           </table>
         </ResponsiveTable>
-        <p className="mt-3 text-[11px] text-muted-foreground">
-          By month of filing, not of trade: a trade made last month cannot be late yet, and
-          the ones that will be are not in the database until they are filed. A month&rsquo;s
-          filings are complete once the month is over.
-        </p>
+        <Disclosure
+          size="sm"
+          className="mt-3"
+          lead="By month of filing, not of trade: a trade made last month cannot be late yet."
+        >
+          <p>
+            The ones that will be are not in the database until they are filed. A month&rsquo;s filings
+            are complete once the month is over.
+          </p>
+        </Disclosure>
       </section>
 
       <section>
@@ -749,11 +822,17 @@ async function LateView() {
             </tbody>
           </table>
         </ResponsiveTable>
-        <p className="mt-3 text-[11px] text-muted-foreground">
-          &ldquo;Worst delay&rdquo; is the longest gap from a trade to its filing;
-          &ldquo;Mean late delay&rdquo; averages the late trades only. A trade whose dates
-          contradict each other has no delay and is never counted as late.
-        </p>
+        <Disclosure
+          size="sm"
+          className="mt-3"
+          lead={
+            <>
+              &ldquo;Worst delay&rdquo; is the longest gap from a trade to its filing; &ldquo;Mean late
+              delay&rdquo; averages the late trades only. A trade whose dates contradict each other has no
+              delay and is never counted as late.
+            </>
+          }
+        />
       </section>
 
       <section>

@@ -8,6 +8,10 @@ import { ExportLink } from "../../feed-controls";
 import { TradeList, TradeRow } from "../../trade-row";
 import { MemberHero } from "../../politicians/member-hero";
 import { AgentAlternates } from "../../agent-alternates";
+import { assetLabel } from "@/lib/asset-label";
+import { Disclosure, RangeCaption } from "../../disclosure";
+import { PAGE_STACK, Quiet } from "../../page-header";
+import { Segmented } from "../../ui";
 
 /*
  * One member's page, `/members/<slug>`. Moved out of app/politicians/page.tsx
@@ -57,24 +61,29 @@ export async function MemberDetail({
   // rendered slice, so "showing 300 of 883" is honest.
   const matching = action === "buy" ? detail.buys : action === "sell" ? detail.sells : detail.trades;
 
+  // Paper filings print no symbol, so a member read only from scans has
+  // trades and no tickers; "0 tickers" would read as a data fault.
+  const tickersUnprinted = detail.tickers === 0 && detail.transcribed > 0;
+
   return (
-    <div className="space-y-8">
+    <div className={PAGE_STACK}>
       <AgentAlternates member={bioguideId} />
-      <div className="space-y-3">
-        <a href="/politicians" className="text-xs text-muted-foreground hover:text-primary">
-          ← all members
-        </a>
-        <MemberHero
-          detail={detail}
-          tickers={tickers}
-          scanCount={scans.length}
-          scansHref={`/scans?m=${encodeURIComponent(member)}`}
-        />
-      </div>
-
-      {committees.length ? <MemberCommittees seats={committees} /> : null}
-
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <header className="space-y-5">
+        <div className="space-y-2">
+          <a
+            href="/politicians"
+            className="inline-flex rounded-md text-xs text-muted-foreground transition-colors duration-150 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          >
+            ← all members
+          </a>
+          <MemberHero
+            detail={detail}
+            tickers={tickers}
+            scanCount={scans.length}
+            scansHref={`/scans?m=${encodeURIComponent(member)}`}
+          />
+        </div>
+      <section aria-label="Totals" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile
           label="Trades"
           value={String(detail.trades)}
@@ -82,8 +91,12 @@ export async function MemberDetail({
         />
         <StatTile
           label="Tickers"
-          value={String(detail.tickers)}
-          hint={`across ${detail.filings} filing${detail.filings === 1 ? "" : "s"}`}
+          value={tickersUnprinted ? "—" : String(detail.tickers)}
+          hint={
+            tickersUnprinted
+              ? "tickers not printed on paper filings"
+              : `across ${detail.filings} filing${detail.filings === 1 ? "" : "s"}`
+          }
         />
         <StatTile
           label="Volume (est.)"
@@ -102,6 +115,9 @@ export async function MemberDetail({
           }
         />
       </section>
+      </header>
+
+      <MemberTimeline member={member} />
 
       <section>
         <SectionTitle>Disclosed volume range</SectionTitle>
@@ -112,15 +128,11 @@ export async function MemberDetail({
             mid={detail.volume_mid}
             scaleMax={scaleMax}
           />
-          <p className="mt-3 text-[11px] text-muted-foreground">
-            The band is the full range these disclosures permit; the tick is the
-            midpoint estimate. Members report brackets, so the true figure lies
-            somewhere in the band.
-          </p>
+          <RangeCaption />
         </Card>
       </section>
 
-      <MemberTimeline member={member} />
+      {committees.length ? <MemberCommittees seats={committees} /> : null}
 
       <section className="grid gap-6 lg:grid-cols-2">
         <div>
@@ -130,7 +142,7 @@ export async function MemberDetail({
               data={tickers.slice(0, 12).map((r) => ({
                 key: r.ticker,
                 label: r.ticker,
-                sublabel: r.asset_name?.slice(0, 28) ?? undefined,
+                sublabel: assetLabel(r.asset_name, { ticker: r.ticker }).slice(0, 28) || undefined,
                 title: r.asset_name ?? undefined,
                 value: r.volume_mid,
                 valueLabel: usd(r.volume_mid),
@@ -139,7 +151,7 @@ export async function MemberDetail({
               }))}
               note={VOLUME_NOTE}
             />
-            <p className="mt-3 text-[11px] text-muted-foreground">
+            <p className="mt-3 text-xs text-muted-foreground">
               Estimated from disclosure brackets. Assets without a ticker — Treasuries,
               funds — appear in the trade list below.
             </p>
@@ -166,21 +178,16 @@ export async function MemberDetail({
       <section>
         <SectionTitle
           right={
-            <div className="flex items-center gap-1 text-[11px]">
-              {FILTERS.map((f) => (
-                <a
-                  key={f.label}
-                  href={memberHref(member, bioguideId, f.k)}
-                  className={`rounded-full border px-2.5 py-1 transition-colors ${
-                    (action ?? undefined) === f.k
-                      ? "border-primary/40 bg-primary/10 text-foreground"
-                      : "border-border text-muted-foreground hover:bg-muted"
-                  }`}
-                >
-                  {f.label}
-                </a>
-              ))}
-              <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+            <div className="flex items-center gap-2">
+              <Segmented
+                label="Trade direction"
+                items={FILTERS.map((f) => ({
+                  key: f.label,
+                  label: f.label,
+                  href: memberHref(member, bioguideId, f.k),
+                  active: (action ?? undefined) === f.k,
+                }))}
+              />
               <ExportLink
                 filters={{ member, action: action === "buy" || action === "sell" ? action : undefined }}
               />
@@ -249,19 +256,23 @@ function MemberSectors({
             }))}
           />
         ) : (
-          <Empty>
+          <Quiet>
             No sector is known for this member&rsquo;s trades yet. The pipeline classifies
             issuers from their EDGAR SIC codes after each run.
-          </Empty>
+          </Quiet>
         )}
-        <p className="mt-3 text-[11px] text-muted-foreground">
-          Industry groups fold EDGAR&rsquo;s SIC code for each issuer into twelve sectors.
-          {unclassified
-            ? ` ${unclassified.trades} of ${trades} trades are unclassified: assets with no ticker (Treasuries, funds), ETF trusts and other issuers EDGAR lists no SIC for, or symbols the fill has not reached yet.`
-            : " Every trade here carries a sector."}{" "}
-          The range is what the brackets in that sector disclose; a group with an open-ended
-          bracket shows a floor only.
-        </p>
+        <Disclosure
+          size="sm"
+          className="mt-3"
+          lead="The range is what the brackets in that sector disclose; a group with an open-ended bracket shows a floor only."
+        >
+          <p>
+            Industry groups fold EDGAR&rsquo;s SIC code for each issuer into twelve sectors.
+            {unclassified
+              ? ` ${unclassified.trades} of ${trades} trades are unclassified: assets with no ticker (Treasuries, funds), ETF trusts and other issuers EDGAR lists no SIC for, or symbols the fill has not reached yet.`
+              : " Every trade here carries a sector."}
+          </p>
+        </Disclosure>
       </Card>
     </section>
   );
@@ -280,7 +291,7 @@ export function SeatTag({
   return (
     <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground">
       {seat.title ? (
-        <span className="rounded bg-muted px-1.5 py-px text-[10px] font-medium text-foreground/80">
+        <span className="rounded bg-muted px-1.5 py-px text-[10px] font-medium text-ink-2">
           {seat.title}
         </span>
       ) : null}
@@ -324,7 +335,7 @@ function MemberCommittees({ seats }: { seats: CommitteeSeatRow[] }) {
       >
         Committees
       </SectionTitle>
-      <Card className="p-0">
+      <Card className="p-0 sm:p-0">
         <ul className="divide-y divide-border/50">
           {[...groups.values()].map((g) => (
             <li key={g.id} className="px-4 py-2.5">
