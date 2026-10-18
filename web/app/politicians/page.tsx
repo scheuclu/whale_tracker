@@ -32,7 +32,7 @@ import {
   VolumeRange,
 } from "../charts";
 import { ExportLink } from "../feed-controls";
-import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, ResponsiveTable, ScanTag, TickerChip } from "../ui";
+import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, ResponsiveTable, ScanTag, Segmented, TickerChip } from "../ui";
 import { AssetName, TradeList, TradeRow } from "../trade-row";
 import { MemberAvatar } from "../avatar";
 import { Disclosure, RangeCaption } from "../disclosure";
@@ -396,7 +396,7 @@ async function MemberDetail({ member, action }: { member: string; action?: strin
               }))}
               note={VOLUME_NOTE}
             />
-            <p className="mt-3 text-[11px] text-muted-foreground">
+            <p className="mt-3 text-xs text-muted-foreground">
               Estimated from disclosure brackets. Assets without a ticker — Treasuries,
               funds — appear in the trade list below.
             </p>
@@ -423,21 +423,16 @@ async function MemberDetail({ member, action }: { member: string; action?: strin
       <section>
         <SectionTitle
           right={
-            <div className="flex items-center gap-1 text-[11px]">
-              {FILTERS.map((f) => (
-                <a
-                  key={f.label}
-                  href={memberHref(member, f.k)}
-                  className={`rounded-full border px-2.5 py-1 transition-colors ${
-                    (action ?? undefined) === f.k
-                      ? "border-primary/40 bg-primary/10 text-foreground"
-                      : "border-border text-muted-foreground hover:bg-muted"
-                  }`}
-                >
-                  {f.label}
-                </a>
-              ))}
-              <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+            <div className="flex items-center gap-2">
+              <Segmented
+                label="Trade direction"
+                items={FILTERS.map((f) => ({
+                  key: f.label,
+                  label: f.label,
+                  href: memberHref(member, f.k),
+                  active: (action ?? undefined) === f.k,
+                }))}
+              />
               <ExportLink
                 filters={{ member, action: action === "buy" || action === "sell" ? action : undefined }}
               />

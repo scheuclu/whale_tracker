@@ -1,3 +1,4 @@
+import { MoneyText } from "../money";
 import { getSectorLeaderboard, getTickerMembers, getTickers, getTransactions, type SectorRow } from "@/lib/queries";
 import {
   getInsiderIssuer,
@@ -155,7 +156,7 @@ export default async function TickersPage({
               }))}
               note={VOLUME_NOTE}
             />
-            <p className="mt-3 text-[11px] text-muted-foreground">
+            <p className="mt-3 text-xs text-muted-foreground">
               Estimated from disclosure brackets — see each ticker for the disclosed range.
             </p>
           </Card>
@@ -221,7 +222,7 @@ export default async function TickersPage({
                     {usd(r.volume_mid)}
                   </BarCell>
                   <td className="tabular px-3 py-2 text-right text-muted-foreground">
-                    {r.volume_max == null ? `≥${usd(r.volume_min)}` : `${usd(r.volume_min)}–${usd(r.volume_max)}`}
+                    <MoneyText value={r.volume_max == null ? `≥${usd(r.volume_min)}` : `${usd(r.volume_min)}–${usd(r.volume_max)}`} />
                   </td>
                 </tr>
               ))}
@@ -295,7 +296,7 @@ function SectorLeaderboard({ sectors }: { sectors: SectorRow[] }) {
               }))}
               note={VOLUME_NOTE}
             />
-            <p className="mt-3 text-[11px] text-muted-foreground">
+            <p className="mt-3 text-xs text-muted-foreground">
               Bracket midpoints; the disclosed range is under each bar.
             </p>
           </Card>

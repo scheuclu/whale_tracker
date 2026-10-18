@@ -1,3 +1,4 @@
+import { MoneyText } from "../money";
 import { assetLabel } from "@/lib/asset-label";
 import {
   getInsiderClusters,
@@ -690,7 +691,7 @@ async function MembersInTicker({ ticker }: { ticker: string }) {
                 .join(", ")}
               <span className="text-muted-foreground">
                 {" "}
-                · disclosed range {range(stat.volume_min, stat.volume_max)} · last trade{" "}
+                · disclosed range <MoneyText value={range(stat.volume_min, stat.volume_max)} /> · last trade{" "}
                 {shortDate(stat.last_tx_date)}
                 {stat.transcribed ? ` · ${stat.transcribed} transcribed from scans, not in the range` : ""}
               </span>
@@ -710,7 +711,7 @@ async function MembersInTicker({ ticker }: { ticker: string }) {
                   <span className="tabular text-xs text-muted-foreground">
                     {m.buys} buy / {m.sells} sell
                   </span>
-                  <span className="tabular w-28 text-right text-xs">{range(m.volume_min, m.volume_max)}</span>
+                  <span className="tabular w-28 text-right text-xs"><MoneyText value={range(m.volume_min, m.volume_max)} /></span>
                   <span className="tabular w-16 text-right text-xs text-muted-foreground">
                     {shortDate(m.last_tx_date)}
                   </span>

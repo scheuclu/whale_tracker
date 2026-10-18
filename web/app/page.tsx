@@ -149,10 +149,7 @@ export default async function FeedPage({
           toolbar={
             <>
               <DirectionFilter current={filters.action} hrefFor={(k) => feedHref({ ...filters, action: k })} />
-              <ExportLink
-                filters={filters}
-                className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              />
+              <ExportLink filters={filters} />
             </>
           }
           summary={<ShownLine offset={offset} shown={rows.length} totals={totals} />}

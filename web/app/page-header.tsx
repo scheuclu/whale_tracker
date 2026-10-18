@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { Segmented } from "./ui";
 
 /**
  * Page composition shared by every route: one hero, then sections at one
@@ -128,25 +129,17 @@ export function PillLinks({
   note?: React.ReactNode;
   className?: string;
 }) {
+  // The control itself is the shared `Segmented` (app/ui.tsx); this only
+  // adds the note and lets a long group scroll rather than overflow a phone.
   return (
-    <nav aria-label={label} className={cn("flex flex-wrap items-center gap-x-1 gap-y-2 text-[12px]", className)}>
-      {items.map((it, i) => (
-        <a
-          key={i}
-          href={it.href}
-          aria-current={it.active ? "page" : undefined}
-          className={cn(
-            "tabular rounded-full border px-2.5 py-1 transition-colors duration-150 ease-out",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-            it.active
-              ? "border-primary/40 bg-primary/10 text-foreground"
-              : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-          )}
-        >
-          {it.label}
-        </a>
-      ))}
-      {note ? <span className="ml-2 text-muted-foreground">{note}</span> : null}
-    </nav>
+    <div className={cn("flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 text-xs", className)}>
+      <div className="scrollbar-none -m-1 max-w-[calc(100%+0.5rem)] overflow-x-auto p-1">
+        <Segmented
+          label={label}
+          items={items.map((it, i) => ({ key: String(i), label: it.label, href: it.href, active: it.active }))}
+        />
+      </div>
+      {note ? <span className="text-muted-foreground">{note}</span> : null}
+    </div>
   );
 }

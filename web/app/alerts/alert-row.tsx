@@ -1,3 +1,4 @@
+import { MoneyText } from "../money";
 import Link from "next/link";
 import {
   type AlertKind,
@@ -8,7 +9,7 @@ import {
 } from "@/lib/alert-queries";
 import { memberHref, range, relativeTime, telegramPlainText, usd } from "@/lib/format";
 import { Card } from "../charts";
-import { ActionBadge, PartyBadge, TickerChip } from "../ui";
+import { ActionBadge, PartyBadge, Tag, TickerChip } from "../ui";
 
 /**
  * One alert, as sent. Exported so later pages — post-alert price outcomes
@@ -80,9 +81,9 @@ export function AlertRowCard({ alert: a, extra }: { alert: AlertRow; extra?: Rea
 
 export function KindBadge({ kind }: { kind: string }) {
   return (
-    <span className="inline-flex items-center whitespace-nowrap rounded-full border border-border bg-muted px-2.5 py-0.5 text-[11px] font-medium">
+    <Tag variant="outline" className="font-medium text-ink-2">
       {KIND_LABEL[kind as AlertKind] ?? kind}
-    </span>
+    </Tag>
   );
 }
 
@@ -124,8 +125,8 @@ function Volume({ a }: { a: AlertRow }) {
         className="tabular text-[13px]"
         title={insider ? "shares × reported price" : "the disclosed bracket range; the midpoint is an estimate"}
       >
-        {range(a.volume_min_cents, a.volume_max_cents)}
-        {!insider ? <span className="text-muted-foreground"> · est. {usd(a.volume_mid_cents)}</span> : null}
+        <MoneyText value={range(a.volume_min_cents, a.volume_max_cents)} />
+        {!insider ? <span className="text-muted-foreground"> · est. <MoneyText value={usd(a.volume_mid_cents)} /></span> : null}
       </span>
     );
   }
