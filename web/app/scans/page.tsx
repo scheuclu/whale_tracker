@@ -2,7 +2,7 @@ import { getScanFilings, getScanTotals } from "@/lib/scan-queries";
 import { memberHref, shortDate } from "@/lib/format";
 import { Empty, SectionTitle, StatTile } from "../charts";
 import { Disclosure } from "../disclosure";
-import { PAGE_STACK, PageHeader, Quiet } from "../page-header";
+import { DataError, PAGE_STACK, PageHeader, Quiet } from "../page-header";
 import { PartyBadge, StatusBadge, ResponsiveTable } from "../ui";
 import { pageMetadata } from "@/lib/seo";
 
@@ -34,7 +34,7 @@ export default async function ScansPage({
   try {
     [filings, totals] = await Promise.all([getScanFilings({ member: params.m }), getScanTotals()]);
   } catch (err) {
-    return <Empty>{(err as Error).message}</Empty>;
+    return <DataError error={err} />;
   }
 
   return (

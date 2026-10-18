@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { MoneyText } from "../money";
 import { assetLabel } from "@/lib/asset-label";
 import {
@@ -17,7 +18,7 @@ import { Card, DivergingSplit, Empty, MagnitudeBars, SectionTitle, StatTile } fr
 import { ActionBadge, Amount, InsiderDelayTag, PartyBadge, PlanTag, ResponsiveTable, RoleTag, SectorTag, TickerChip } from "../ui";
 import { MemberAvatar } from "../avatar";
 import { Disclosure } from "../disclosure";
-import { PAGE_STACK, PageHeader, PillLinks, Quiet } from "../page-header";
+import { DataError, PAGE_STACK, PageHeader, PillLinks, Quiet } from "../page-header";
 import {
   ISSUER_SORT,
   ROW_LIMITS,
@@ -141,7 +142,15 @@ export default async function InsidersPage({
   searchParams: Promise<{ t?: string; w?: string; action?: string; cik?: string; sort?: string; dir?: string; n?: string }>;
 }) {
   const params = await searchParams;
-  if (params.t) return <IssuerDetail ticker={params.t.toUpperCase()} />;
+  // Keyed so list -> detail remounts rather than morphing the list DOM.
+  if (params.t) {
+    const t = params.t.toUpperCase();
+    return (
+      <Fragment key={`t:${t}`}>
+        <IssuerDetail ticker={t} />
+      </Fragment>
+    );
+  }
 
   const windowKey = params.w ?? "30";
   const days = windowKey === "all" ? undefined : Number(windowKey) || 30;
@@ -175,7 +184,7 @@ export default async function InsidersPage({
       !n && isDefaultSort(ISSUER_SORT, sort) ? null : getInsiderIssuers(days, limit, sort),
     ]);
   } catch (err) {
-    return <Empty>{(err as Error).message}</Empty>;
+    return <DataError error={err} />;
   }
   table ??= issuers;
   const issuerTotal = table[0]?.total_rows ?? table.length;
@@ -605,7 +614,7 @@ async function IssuerDetail({ ticker }: { ticker: string }) {
       getInsiderTrades({ ticker, limit: 200 }),
     ]);
   } catch (err) {
-    return <Empty>{(err as Error).message}</Empty>;
+    return <DataError error={err} />;
   }
   if (!issuer) return <Empty>No stored insider trades for {ticker}.</Empty>;
 
@@ -704,7 +713,7 @@ async function MembersInTicker({ ticker }: { ticker: string }) {
     return (
       <section>
         <SectionTitle>Members of Congress in this ticker</SectionTitle>
-        <Empty>Congressional data unavailable: {(err as Error).message}</Empty>
+        <DataError error={err} context="Congressional data unavailable" />
       </section>
     );
   }

@@ -11,7 +11,7 @@ import { relativeTime } from "@/lib/format";
 import { getAlertOutcomes, getOutcomeSummary } from "@/lib/outcome-queries";
 import { Empty, SectionTitle, StatTile } from "../charts";
 import { Disclosure } from "../disclosure";
-import { PAGE_STACK, PageHeader, PillLinks, Quiet } from "../page-header";
+import { DataError, PAGE_STACK, PageHeader, PillLinks, Quiet } from "../page-header";
 import { AlertLog, AlertRowCard } from "./alert-row";
 import { OutcomeLine, OutcomeSummarySection } from "./outcomes";
 import { pageMetadata } from "@/lib/seo";
@@ -68,7 +68,7 @@ export default async function AlertsPage({
       getOutcomeSummary(),
     ]);
   } catch (err) {
-    return <Empty>{(err as Error).message}</Empty>;
+    return <DataError error={err} />;
   }
 
   const byKind = new Map(totals.byKind.map((k) => [k.kind, k]));

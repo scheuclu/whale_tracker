@@ -31,7 +31,7 @@ import { ExportLink } from "../feed-controls";
 import { getTimelineTrades, type TimelineTrade } from "@/lib/timeline-queries";
 import { TradeTimeline } from "../timeline";
 import { Disclosure, RangeCaption } from "../disclosure";
-import { PAGE_STACK, PageHeader, PillLinks, Quiet } from "../page-header";
+import { DataError, PAGE_STACK, PageHeader, PillLinks, Quiet } from "../page-header";
 import { TradeList, TradeRow } from "../trade-row";
 import { assetLabel } from "@/lib/asset-label";
 import {
@@ -114,7 +114,7 @@ export default async function TickersPage({
       isDefaultTable ? null : getTickers(days, limit, sort),
     ]);
   } catch (err) {
-    return <Empty>{(err as Error).message}</Empty>;
+    return <DataError error={err} />;
   }
   if (!rows.length) return <Empty>No transactions in this window.</Empty>;
   table ??= rows;

@@ -3,7 +3,7 @@ import { memberHref, shortDate, tickerHref } from "@/lib/format";
 import { searchInsiderIssuers } from "@/lib/insider-queries";
 import { searchMembers, searchRoster, searchTickers } from "@/lib/queries";
 import { Card, Empty, SectionTitle } from "../charts";
-import { PAGE_STACK, PageHeader, Quiet } from "../page-header";
+import { DataError, PAGE_STACK, PageHeader, Quiet } from "../page-header";
 import { BUTTON_PRIMARY, FIELD, PartyBadge } from "../ui";
 import { cn } from "@/lib/utils";
 import { MemberAvatar } from "../avatar";
@@ -84,7 +84,7 @@ async function Results({ q }: { q: string }) {
       searchInsiderIssuers(q, LIMIT),
     ]);
   } catch (err) {
-    return <Empty>{(err as Error).message}</Empty>;
+    return <DataError error={err} />;
   }
 
   const none = !members.length && !roster.length && !tickers.length && !issuers.length;

@@ -4,7 +4,7 @@ import { ACTION_LABEL, OWNER_LABEL, isBuy, isSell, memberHref, memberLabel, rang
 import { cn } from "@/lib/utils";
 import { Card, Empty, SectionTitle, StatTile } from "../../charts";
 import { Disclosure } from "../../disclosure";
-import { PAGE_STACK, PageHeader, Quiet } from "../../page-header";
+import { DataError, PAGE_STACK, PageHeader, Quiet } from "../../page-header";
 import { PartyBadge, StatusBadge, ResponsiveTable } from "../../ui";
 import type { Metadata } from "next";
 import { pageMetadata } from "@/lib/seo";
@@ -84,7 +84,7 @@ export default async function ScanDetailPage({
   try {
     data = await getScanFiling(decodeURIComponent(docId), pageNo);
   } catch (err) {
-    return <Empty>{(err as Error).message}</Empty>;
+    return <DataError error={err} />;
   }
   if (!data) {
     return (

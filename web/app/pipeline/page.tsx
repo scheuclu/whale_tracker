@@ -4,7 +4,7 @@ import { getAlertTotals, KIND_LABEL, type AlertKind } from "@/lib/alert-queries"
 import { duration, relativeTime } from "@/lib/format";
 import { Card, Empty, SectionTitle, StatTile } from "../charts";
 import { Disclosure } from "../disclosure";
-import { HealthPill, PAGE_STACK, PageHeader, Quiet, type Health } from "../page-header";
+import { HealthPill, DataError, PAGE_STACK, PageHeader, Quiet, type Health } from "../page-header";
 import { ResponsiveTable, StatusBadge } from "../ui";
 import { pageMetadata } from "@/lib/seo";
 
@@ -24,7 +24,7 @@ export default async function PipelinePage() {
   try {
     [p, ins, alerts] = await Promise.all([getPipeline(), getInsiderPipeline(), getAlertTotals()]);
   } catch (err) {
-    return <Empty>{(err as Error).message}</Empty>;
+    return <DataError error={err} />;
   }
 
   const senate = senateHealth(p.senateStatus);

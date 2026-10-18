@@ -10,7 +10,7 @@ import { MemberHero } from "../../politicians/member-hero";
 import { AgentAlternates } from "../../agent-alternates";
 import { assetLabel } from "@/lib/asset-label";
 import { Disclosure, RangeCaption } from "../../disclosure";
-import { PAGE_STACK, Quiet } from "../../page-header";
+import { DataError, PAGE_STACK, Quiet } from "../../page-header";
 import { Segmented } from "../../ui";
 
 /*
@@ -52,7 +52,7 @@ export async function MemberDetail({
       getPoliticianCommittees(member),
     ]);
   } catch (err) {
-    return <Empty>{(err as Error).message}</Empty>;
+    return <DataError error={err} />;
   }
 
   const byTrades = [...tickers].sort((a, b) => b.trades - a.trades || b.volume_mid - a.volume_mid);

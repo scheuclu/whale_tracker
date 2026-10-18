@@ -12,7 +12,7 @@ import { TickerMembers } from "../ticker-members";
 import { AgentAlternates } from "../../agent-alternates";
 import { assetLabel } from "@/lib/asset-label";
 import { Disclosure, RangeCaption } from "../../disclosure";
-import { PAGE_STACK, PageHeader, Quiet } from "../../page-header";
+import { DataError, PAGE_STACK, PageHeader, Quiet } from "../../page-header";
 
 /*
  * One ticker's page, `/tickers/<SYMBOL>`. Moved out of app/tickers/page.tsx
@@ -23,12 +23,19 @@ import { PAGE_STACK, PageHeader, Quiet } from "../../page-header";
  *  404 need the same row. */
 export async function TickerDetail({ stat }: { stat: TickerRow }) {
   const ticker = stat.ticker;
-  const [trades, optionTrades, timeline, members] = await Promise.all([
-    getTransactions({ ticker, limit: 200 }),
-    getTransactions({ ticker, options: true, limit: 500 }),
-    getTimelineTrades({ ticker }),
-    getTickerMembers(ticker, undefined, 1000),
-  ]);
+  // Caught like every other detail page: uncaught, a failed fetch threw out
+  // of the server component instead of rendering the data-error state.
+  let trades, optionTrades, timeline, members;
+  try {
+    [trades, optionTrades, timeline, members] = await Promise.all([
+      getTransactions({ ticker, limit: 200 }),
+      getTransactions({ ticker, options: true, limit: 500 }),
+      getTimelineTrades({ ticker }),
+      getTickerMembers(ticker, undefined, 1000),
+    ]);
+  } catch (err) {
+    return <DataError error={err} />;
+  }
 
   const scaleMax = stat.volume_max ?? stat.volume_min * 2;
   const calls = optionTrades.filter((r) => r.option_kind === "call").length;
@@ -300,7 +307,7 @@ async function InsidersInIssuer({ ticker }: { ticker: string }) {
     return (
       <section>
         <SectionTitle>Insiders in this issuer</SectionTitle>
-        <Empty>Insider data unavailable: {(err as Error).message}</Empty>
+        <DataError error={err} context="Insider data unavailable" />
       </section>
     );
   }

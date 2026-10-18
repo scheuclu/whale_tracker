@@ -19,7 +19,7 @@ import {
 import { DataTable } from "../data-table";
 import { pageMetadata } from "@/lib/seo";
 import { Disclosure } from "../disclosure";
-import { PAGE_STACK, PageHeader, PillLinks, Quiet } from "../page-header";
+import { DataError, PAGE_STACK, PageHeader, PillLinks, Quiet } from "../page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -98,7 +98,7 @@ export default async function TrendsPage({
       getMonthlyScans(months),
     ]);
   } catch (err) {
-    return <Empty>{(err as Error).message}</Empty>;
+    return <DataError error={err} />;
   }
 
   const labels = keys.map((k, i) => axisLabel(k, i === 0));

@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { assetLabel } from "@/lib/asset-label";
 import {
   STOCK_ACT_DEADLINE_DAYS,
@@ -41,7 +42,7 @@ import { AssetName, TradeList, TradeRow } from "../trade-row";
 import { ExportLink } from "../feed-controls";
 import { MemberAvatar } from "../avatar";
 import { Disclosure, RangeCaption } from "../disclosure";
-import { PAGE_STACK, PageHeader, Quiet } from "../page-header";
+import { DataError, PAGE_STACK, PageHeader, Quiet } from "../page-header";
 import { MemberBars } from "./member-bars";
 import { CHAMBER_LABEL, SeatTag } from "../members/[slug]/member-detail";
 import { POLITICIAN_SORT, isDefaultSort, parseSort, type PoliticianSortKey } from "@/lib/table-sort";
@@ -134,8 +135,20 @@ export default async function PoliticiansPage({
   const params = await searchParams;
   // `?m=<name>` is answered with a 308 to /members/<slug> before it gets
   // here (next.config.ts → app/api/legacy-redirect).
-  if (params.view === "late") return <LateView />;
-  if (params.committee) return <CommitteeView id={params.committee} />;
+  // Keyed so a switch between list and sub-view (a search-param change)
+  // remounts instead of morphing the list DOM.
+  if (params.view === "late")
+    return (
+      <Fragment key="late">
+        <LateView />
+      </Fragment>
+    );
+  if (params.committee)
+    return (
+      <Fragment key={`c:${params.committee}`}>
+        <CommitteeView id={params.committee} />
+      </Fragment>
+    );
 
   const sort = parseSort(POLITICIAN_SORT, params);
   const standing = isDefaultSort(POLITICIAN_SORT, sort);
@@ -149,7 +162,7 @@ export default async function PoliticiansPage({
       standing ? null : getPoliticians(undefined, MEMBER_LIMIT, sort),
     ]);
   } catch (err) {
-    return <Empty>{(err as Error).message}</Empty>;
+    return <DataError error={err} />;
   }
   if (!rows.length) return <Empty>No transactions yet.</Empty>;
   table ??= rows;
@@ -342,7 +355,7 @@ async function CommitteeView({ id }: { id: string }) {
       getSubcommittees(id),
     ]);
   } catch (err) {
-    return <Empty>{(err as Error).message}</Empty>;
+    return <DataError error={err} />;
   }
   if (!committee) {
     return (
@@ -597,7 +610,7 @@ async function LateView() {
       getLateFilings(LATE_FILING_PAGE),
     ]);
   } catch (err) {
-    return <Empty>{(err as Error).message}</Empty>;
+    return <DataError error={err} />;
   }
   if (!members.length) {
     return (
