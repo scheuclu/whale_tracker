@@ -37,12 +37,25 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--dry-run", action="store_true",
                        help="print Telegram messages instead of sending them")
 
+    p_digest = sub.add_parser(
+        "digest", help="the week in one Telegram message (the poll run sends it on Mondays "
+                       "when telegram.digest is on)")
+    p_digest.add_argument("--dry-run", action="store_true",
+                          help="print the digest instead of sending it; records nothing")
+    p_digest.add_argument("--days", type=int, default=7,
+                          help="window on filing date, in days (default 7)")
+
     p_backfill = sub.add_parser(
         "backfill", help="parse already-seen filings into the DB without notifying")
     p_backfill.add_argument("--year", type=int, help="limit to one filing year")
     p_backfill.add_argument("--limit", type=int, help="max filings to parse")
     p_backfill.add_argument("--chamber", choices=("house", "senate", "all"), default="all",
                             help="which chamber's indexed filings to parse (default: all)")
+
+    sub.add_parser(
+        "backfill-options",
+        help="re-derive each stored row's option contract (kind, strike, expiry) "
+             "from its asset name and description")
 
     p_capture = sub.add_parser(
         "capture-scans",
@@ -85,6 +98,13 @@ def main(argv: list[str] | None = None) -> int:
     p_bfi.add_argument("--recompute-implausible", action="store_true",
                        help="only re-judge the derived implausible-value flag, then exit")
 
+    p_classify = sub.add_parser(
+        "classify-issuers",
+        help="fetch EDGAR SIC codes for every traded ticker and Form 4 issuer, "
+             "and fold them into industry groups (resumable; needs EDGAR_USER_AGENT)")
+    p_classify.add_argument("--budget-seconds", type=float, default=600,
+                            help="stop after this long; the next run continues (default 600)")
+
     p_ins = sub.add_parser("insiders", help="issuer leaderboard for insider trades")
     p_ins.add_argument("--since", type=_parse_since, default=None, metavar="30d")
     p_ins.add_argument("--by", choices=("value", "insiders"), default="value")
@@ -104,6 +124,14 @@ def main(argv: list[str] | None = None) -> int:
     p_ialerts.add_argument("--limit", type=int, default=20)
     p_ialerts.add_argument("--show-message", action="store_true",
                            help="print the Telegram message each match would send")
+
+    p_prices = sub.add_parser(
+        "fetch-prices",
+        help="refresh daily closes for every alerted ticker and the benchmark, rebuild "
+             "the post-alert outcomes, and print the per-kind summary")
+    p_prices.add_argument("--budget-seconds", type=float, default=None,
+                          help="stop after this long; the next run continues "
+                               "(default: prices.budget_seconds)")
 
     args = parser.parse_args(argv)
     config = load_config()
@@ -144,11 +172,40 @@ def main(argv: list[str] | None = None) -> int:
         pipeline.run(config, dry_run=args.dry_run)
         return 0
 
+    if args.command == "digest":
+        from . import digest
+
+        if args.days < 1:
+            parser.error("--days must be at least 1")
+        if not (args.dry_run or config.telegram_configured):
+            parser.error("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are not set; "
+                         "use --dry-run to preview the digest")
+        conn = db.connect(config.db_path)
+        try:
+            digest.send(conn, config, days=args.days, dry_run=args.dry_run)
+        finally:
+            conn.close()
+        if not args.dry_run:
+            print("weekly digest sent")
+        return 0
+
     if args.command == "backfill":
         from . import pipeline
 
         count = pipeline.backfill(config, args.year, args.limit, args.chamber)
         print(f"parsed {count} filing(s) into the knowledge base (no notifications sent)")
+        return 0
+
+    if args.command == "backfill-options":
+        from . import options
+
+        conn = db.connect(config.db_path)
+        try:
+            seen, structured = options.backfill(conn)
+            conn.commit()
+        finally:
+            conn.close()
+        print(f"options: {structured} of {seen} row(s) carry a parsed contract")
         return 0
 
     if args.command == "capture-scans":
@@ -198,7 +255,30 @@ def main(argv: list[str] | None = None) -> int:
         print(f"insiders backfill: {result.summary()}")
         return 0
 
+    if args.command == "classify-issuers":
+        from . import issuers
+
+        conn = db.connect(config.db_path)
+        try:
+            result = issuers.classify(conn, config, budget_seconds=args.budget_seconds)
+        finally:
+            conn.close()
+        print(f"issuers: {result.summary()}")
+        return 0
+
     from . import query
+
+    if args.command == "fetch-prices":
+        from . import prices
+
+        conn = db.connect(config.db_path)
+        try:
+            result = prices.sync(conn, config, budget_seconds=args.budget_seconds)
+            print(f"prices: {result.summary()}")
+            query.print_outcome_summary(conn)
+        finally:
+            conn.close()
+        return 0
 
     if args.command == "tickers":
         query.top_tickers(config, args.since, args.by, args.limit)

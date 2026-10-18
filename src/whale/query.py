@@ -158,6 +158,45 @@ def pipeline_status(config: Config) -> None:
         conn.close()
 
 
+# --- alert outcomes -----------------------------------------------------------
+
+
+def print_outcome_summary(conn: sqlite3.Connection) -> None:
+    """Price coverage and the per-kind outcome table, as the dashboard shows it.
+
+    Every figure is the alerted ticker's own move after the alert, close to
+    close, minus the benchmark over the same sessions — read the way the
+    alert pointed, so a sell alert's hit is a fall. Not a trade's return:
+    congressional amounts are brackets and none enters this.
+    """
+    total = conn.execute("SELECT COUNT(*) FROM alerts").fetchone()[0]
+    listed = sum(1 for r in conn.execute("SELECT ticker FROM alerts")
+                 if stats.is_listed_ticker(r["ticker"]))
+    priced = conn.execute("SELECT COUNT(*) FROM alert_outcomes").fetchone()[0]
+    newest = conn.execute("SELECT MAX(date) FROM prices WHERE ticker = ?",
+                          (stats.BENCHMARK_TICKER,)).fetchone()[0]
+    print(f"\nPrice coverage: {priced} of {total} alert(s) have a close at t0 "
+          f"({listed} name a listed ticker); {stats.BENCHMARK_TICKER} closes through "
+          f"{newest or 'none'}.")
+    rows = stats.outcome_summary(conn)
+    if not rows:
+        print("No alert outcome yet.")
+        return
+    print(f"\nMove after the alert vs {stats.BENCHMARK_TICKER}, read the way the alert "
+          "pointed (median excess · hit rate · n):\n")
+    print(f"  {'kind':<16}" + "".join(f"{f'+{h}d':>28}" for h in stats.OUTCOME_HORIZONS))
+    for kind in dict.fromkeys(r.kind for r in rows):
+        cells = []
+        for r in (r for r in rows if r.kind == kind):
+            if not r.sufficient:
+                cells.append(f"insufficient data (n={r.n})")
+            else:
+                cells.append(f"{r.median_excess:+.1%} · {r.hit_rate:.0%} hit · n={r.n}")
+        print(f"  {kind:<16}" + "".join(f"{c:>28}" for c in cells))
+    print(f"\n  n < {stats.MIN_OUTCOME_SAMPLE} is reported as insufficient data; alerts with "
+          "no one direction are excluded.")
+
+
 # --- insiders (SEC Form 4) ---------------------------------------------------
 
 _VALUE_NOTE = ("Values are shares × the price as filed. A filing may report a weighted-average\n"

@@ -117,6 +117,21 @@ parser stays faithful to the PDF and the UI flags the row rather than
   the commit step is last, so an uncapped backlog is killed and commits
   nothing: the first run with vision on did exactly that with 53 scans
   (2026-10-17), and every scheduled run after it would have repeated it.
+- The hybrid join (`vision.join`) is **per page** (#51): the model gives
+  every row a page number, the grid knows its rows per page, and a page whose
+  counts disagree is refused alone — its grid rows stored `page_refused`, its
+  transcription dropped — while the rest of the filing is parsed, with a
+  "partially read" note in `last_error` and the page's reason in
+  `scan_pages.error`. A page the grid cannot decompose yields nothing the same
+  way. A row whose model type contradicts the grid keeps the grid's type and is
+  stored `type_disputed`; a page or filing is refused for disputes only past
+  `MAX_DISPUTED_SHARE` with `MIN_DISPUTED_ROWS` (a quarter, and three: the
+  model misreads a quarter of boxes, so fewer is noise — the three filings
+  refused on day one had 2 of 6, 2 of 3 and 3 of 98, all the grid's call right
+  by eye). `transactions` are linked to `scan_rows` by `row_index`, not by
+  count. Refused scans (`vision_failed`) are re-queued **once per
+  `vision.JOIN_VERSION`** (stamped in `sync_state`), so bump it when the join
+  learns something and never retry them every run.
 - Scanned paper filings are **captured for inspection** in the same database
   (`scan_pages`: one 1-bit PNG per page at 110 dpi, oriented the way
   `paper_form.py` turned it; `scan_rows`: every row the grid reader found,
@@ -135,6 +150,25 @@ parser stays faithful to the PDF and the UI flags the row rather than
   deliberately no shape check on `insider_filings.ticker`: it comes from an XML
   element rather than a column split, and real values include exchange-prefixed
   foreign symbols like `ASX:LNW`.
+- A ticker read from the asset name — `(BHP)` on a row whose ticker column
+  is empty (#50) — is marked by appending `ptr.TICKER_FROM_NAME_NOTE` to
+  `description`; that is the only provenance (no schema column) and
+  `audit.check_tickers_from_asset_names` counts on it. On a House row only
+  the form's own `(SYM) [XX]` slot counts, wherever it sits in the cell —
+  `(THE)` and `(AMI) Labs` are not tickers; the Senate name column has no
+  slot, so any single parenthesised symbol counts. Two different symbols
+  mean no ticker. `pipeline._derive_tickers_from_names` re-derives stored
+  rows on every sync and backfill, idempotently.
+- Committee seats (`committees`, `committee_members`) come from the same
+  congress-legislators dataset as the roster and are refreshed inside
+  `roster.sync`. They are a snapshot of the *current* Congress with no
+  history, so a refresh replaces both tables wholesale in one transaction
+  that rolls back on a bad fetch, keeping the previous snapshot; a seat whose
+  bioguide id is not in `politicians` is dropped and counted, never invented.
+  Subcommittees are `committees` rows with `parent_id`, keyed
+  `<parent><two-digit code>` (`HSIF16`) the way the membership file keys
+  them. The web queries guard on the tables existing: the committed database
+  gains a new schema version only on the pipeline's next run after a merge.
 - Tests: `.venv/bin/python -m pytest -q` (run before every PR).
 
 ## Watchlist (per-member alerting)
@@ -194,7 +228,73 @@ parser stays faithful to the PDF and the UI flags the row rather than
   deadline, so there is no reporting lag to absorb.
 - `4/A`, Forms 3/5 and the derivative table are not ingested yet (counted in
   `sync_state.edgar_skipped`).
-- `insiders.sync` runs **last** in `pipeline.run` and must never raise into it.
+- `insiders.sync` runs after every congressional step in `pipeline.run` and
+  must never raise into it; only the price step (`prices.sync`, #53) and the
+  issuer classification (#55) run after it, under the same rule.
+
+## Issuer classification (SIC sectors)
+
+- `src/whale/issuers.py` (#55) resolves every ticker in `transactions` and
+  every issuer CIK in `insider_filings` to an EDGAR SIC code, through
+  `edgar.EdgarClient` only, and folds it into one of twelve groups. The
+  SIC → group table is the module docstring; `_SIC_RANGES` is its code, and
+  the two must stay in step.
+- Two tables, schema 9: `issuers` is one row per CIK, `issuer_tickers` is
+  symbol → CIK **including symbols EDGAR does not list** (cik NULL), so an
+  unknown ticker is recorded as unknown and not looked up again before the
+  weekly refresh. Both dashboard joins are one-to-one; a CIK with several
+  symbols (BRK.A, BRK.B) is one issuer with two ticker rows.
+- **Unknown stays unknown.** No SIC (ETF trusts, funds) → NULL group, never
+  guessed from the name; an SIC outside every range → `Other`. Sector views
+  show the unclassified remainder as a row of its own so groups never sum
+  to more than they describe. A sector is a label on a row, never a figure:
+  it must not enter any volume arithmetic.
+- The fill runs **last** in `pipeline.run`, after the insider alerts, under
+  `issuers.budget_seconds`, never-fetched issuers first, committed per
+  issuer, and never raises; `whale classify-issuers --budget-seconds N` is
+  the manual form. A failed refresh keeps the earlier classification.
+- The dashboard reads whatever database the pipeline last committed, which
+  may predate the migration, so every sector query goes through
+  `hasIssuerTables` and reports nothing rather than "no such table".
+
+## Alert outcomes (`prices`, `alert_outcomes`, the /alerts summary)
+
+- `prices` holds daily closes for the tickers alerts have named plus SPY,
+  from an **unofficial external series** (`prices.source`: `yahoo` default,
+  `stooq` per issue #53 — walled by a browser check on 2026-10-18, reported
+  as `blocked`, never solved). It exists for one descriptive measurement and
+  is **never shown as advice**. Coverage is what the source carries: no
+  series for CIK-keyed insider alerts, exchange-prefixed foreign symbols or
+  anything the source does not know; those alerts read "no prices yet" or
+  "no price series", not 0.
+- An outcome is the **ticker's move, not a trade's return**: close(t0+h) /
+  close(t0) − 1 at h = 5/20/60 trading days, minus SPY over the same
+  sessions. No bracket, midpoint or position enters it. t0 is the first
+  session on or after the alert's **US-Eastern** date (an 02:00Z alert went
+  out the previous evening), so an alert sent after the close measures from
+  that close and includes the next open's reaction. The calendar is SPY's
+  own series, so holidays fall out without a calendar of their own.
+- **Derived once in Python** (`stats.alert_outcomes`), stored by
+  `prices.sync` after every refresh, and only **read** by SQL and
+  `web/lib/outcome-queries.ts`. The aggregate (median signed excess, hit
+  rate, n per kind and horizon) is computed twice — `stats.outcome_summary`
+  and `summarize` in the web query — on the same stored rows; both are
+  tested against the same hand-made fixture. A sell alert's hit is a fall
+  (`signed_excess`); an alert with no one direction is excluded. Under
+  `MIN_OUTCOME_SAMPLE` (5, mirrored as `MIN_SAMPLE`) a figure is
+  "insufficient data", never a number.
+- A horizon the series does not reach yet is NULL and reads "pending", not
+  0; a session's close is stored only after 16:05 ET. Each ticker is
+  refreshed once per UTC day under `prices.budget_seconds`, benchmark first
+  then longest-unseen, so a throttle rotates through the list. The web
+  queries tolerate a database without the tables (the committed file
+  migrates only when the pipeline next runs).
+- Audit: `check_price_coverage` (INFO, right after `check_alert_recording`)
+  reports alerts with a t0 close over all alerts and the source status;
+  `prices_stale` WARNs only when a ticker has had no newer close for more
+  than 5 trading days **and** the step has not successfully asked for it
+  since — a series the source answered for with nothing newer (a buyout)
+  is evidence, not a weekly warning.
 
 ## Insider alerts
 
@@ -246,6 +346,37 @@ parser stays faithful to the PDF and the UI flags the row rather than
   failed send is judged afresh next run. The congressional watchlist is a
   different mechanism and stays exempt from this and any other suppression.
 
+## Alert log (`/alerts`)
+
+- `alerts` is **one row per message sent**, of every kind (`stats.ALERT_KINDS`:
+  `cluster`, `insider_cluster`, `filing`, `watchlist`, `insider_filing`,
+  `options`), and still the dedupe store for the two cluster kinds. The
+  `late_filing` row (#57) is **not** a message kind: it is a marker recorded
+  beside the filing's own `filing` row, and `web/lib/alert-queries.ts` leaves
+  it out so the page never lists one message twice. A new delivery path must
+  log its messages or `audit.check_alert_recording` will name the filing. `db.last_alert` **must**
+  keep being called with a kind. `politician_count` holds whatever the kind
+  counts; a watched filing logs one row per transaction because each is its
+  own message.
+- Log **only on delivery, never on `--dry-run`**, in the same commit as
+  `mark_notified`. A failed send leaves no row; a replayed watchlist filing
+  logs its repeats, because the log describes what was sent, not what was
+  meant.
+- `ticker`/`direction` are NULL when the alert is not about one ticker in one
+  direction (a filing spanning several, a Treasury roll with none). Volume is
+  the disclosed range plus the midpoint estimate; insider values `min = max`;
+  all NULL when nothing was priced or read. `message` is the Telegram text
+  **as sent** — the dashboard strips its HTML and never re-renders one.
+- Schema 13 rebuilt the table (SQLite cannot relax NOT NULL in place); rows
+  before it carry only the dedupe fields and the page says so. The web
+  queries in `web/lib/alert-queries.ts` **tolerate the pre-13 shape**: the
+  dashboard reads the committed database, which migrates only when the
+  pipeline next runs, so a query assuming the new columns would take the page
+  down in between. `sync_state.alerts_recorded_since` marks the switch.
+- Audit `check_alert_recording` keys on `status = 'notified'`, not
+  `notified_at` — backfills set `notified_at` silently to mean "never
+  announce".
+
 ## Data-viz
 
 Charts are pure CSS/SVG in `web/app/charts.tsx`; no chart library. Colour roles
@@ -266,3 +397,27 @@ skill before changing any palette value.
 - Summary stat tiles must aggregate over the whole dataset, not the rendered
   page slice (see `getPoliticianTotals`) — summing a truncated list understates
   the total it claims to report.
+
+## Late-filing compliance
+
+- A filing is "late" for the prefix and the `late_filing` alert only when
+  **every** trade is past `alerts.late_filing_days` (`stats.filing_late_by_days`).
+  N is the longest delay minus the deadline — the report was due that many days
+  after its earliest trade. A row with an unknown delay (contradictory dates)
+  disqualifies the filing rather than being skipped; 0 turns both off.
+- The prefix is the first line of the existing filing message, never a second
+  message, and survives every degradation step of `format_filing` and
+  `format_filing_summary`. Watched filings are split per transaction and do not
+  carry it.
+- A `late_filing` row is keyed the way `filings` is unique: `ticker` =
+  document id, `direction` = chamber, `window_days` = the deadline used,
+  `politician_count` = late trades (the keying predates schema 13's
+  `filing_id` and the dedupe still reads it). It is recorded only after
+  delivery, once per filing (`stats.is_new_late_filing`, kind-scoped), never
+  on a dry run, and is a marker rather than a message — see *Alert log*.
+- The dashboard's `?view=late` queries (`LATE` in `web/lib/queries.ts`) must
+  reconcile with `getPoliticianTotals` — `web/lib/late.test.ts` asserts it on
+  the committed DB. The monthly series is by month of *filing*: by trade month
+  the recent months always look cleaner than they are.
+- `audit.check_late_filings` (INFO) lists the week's filings with late trades;
+  it reuses `stats.disclosure_delay_days` so it cannot drift from the prefix.

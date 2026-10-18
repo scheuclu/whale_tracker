@@ -150,6 +150,9 @@
   --border: rgba(12, 12, 17, 0.09);
   --input: rgba(12, 12, 17, 0.11);
   --ring: #8b8bec;
+  /* --card flattened onto --background: for the few places a translucent
+     surface cannot be painted (a sticky table column, a scroll-edge fade). */
+  --card-solid: #fefeff;
 }
 
 .dark {
@@ -171,6 +174,7 @@
   --border: rgba(255, 255, 255, 0.08);
   --input: rgba(255, 255, 255, 0.1);
   --ring: #7c7cf0;
+  --card-solid: #101014;
 }
 
 /* Ambient gradient canvas — fixed so it never scrolls away. */
@@ -239,6 +243,75 @@ body::before {
   .rule-fade {
     height: 1px;
     background: linear-gradient(90deg, transparent, var(--border) 12%, var(--border) 88%, transparent);
+  }
+
+  /* Scrollbar hidden but the box still scrolls (the nav strip; its fade is the affordance). */
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* ------------------------------------------------------------------
+     Horizontal scroll container (app/scroll-area.tsx).
+
+     The wrapper carries data-overflow / data-at-start / data-at-end, set
+     from the live scroll position; an edge fade shows on whichever side
+     still has content. With data-sticky-col the first cell of each table
+     row is pinned so the row's identity stays readable while the numbers
+     scroll, and the fade on that side becomes a shadow off the pinned
+     column instead.
+     ------------------------------------------------------------------ */
+  .scroll-x {
+    position: relative;
+    overflow: hidden;
+    border-radius: inherit;
+  }
+  .scroll-x-viewport {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+  }
+  .scroll-x::before,
+  .scroll-x::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2.5rem;
+    z-index: 2;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 150ms ease;
+  }
+  .scroll-x::before {
+    left: 0;
+    background: linear-gradient(to right, var(--card-solid), transparent);
+  }
+  .scroll-x::after {
+    right: 0;
+    background: linear-gradient(to left, var(--card-solid), transparent);
+  }
+  .scroll-x[data-overflow="true"][data-at-start="false"]::before,
+  .scroll-x[data-overflow="true"][data-at-end="false"]::after {
+    opacity: 1;
+  }
+
+  .scroll-x[data-sticky-col]::before {
+    display: none;
+  }
+  .scroll-x[data-sticky-col] :is(th, td):first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--card-solid);
+  }
+  .scroll-x[data-sticky-col] tr:hover > :is(th, td):first-child {
+    background: color-mix(in srgb, var(--card-solid) 97%, var(--foreground));
+  }
+  .scroll-x[data-sticky-col][data-overflow="true"][data-at-start="false"] :is(th, td):first-child {
+    box-shadow: 8px 0 12px -8px rgba(0, 0, 0, 0.28);
   }
 }
 
