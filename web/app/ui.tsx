@@ -6,6 +6,7 @@ import {
   OWNER_LABEL,
   isBuy,
   isSell,
+  optionLabel,
   range,
 } from "@/lib/format";
 
@@ -213,6 +214,32 @@ export function SectorTag({
       title={detail ? `${detail} — industry group from the issuer's EDGAR SIC code` : "Industry group from the issuer's EDGAR SIC code"}
     >
       {group}
+    </span>
+  );
+}
+
+/**
+ * The option contract a row's own text named: kind, strike, expiry. Neutral
+ * on purpose — the action badge already carries the buy/sell colour, and a
+ * sold call coloured "buy" would contradict it. The words carry the meaning.
+ */
+export function OptionBadge({
+  kind,
+  strikeCents,
+  expiry,
+}: {
+  kind: string | null | undefined;
+  strikeCents: number | null | undefined;
+  expiry: string | null | undefined;
+}) {
+  const label = optionLabel(kind ?? null, strikeCents ?? null, expiry ?? null);
+  if (!label) return null;
+  return (
+    <span
+      className="whitespace-nowrap rounded border border-border bg-muted px-1.5 py-px font-mono text-[10px] font-medium tracking-tight"
+      title="Option contract as the filing's own text describes it: kind, strike and expiry are shown only when printed"
+    >
+      {label}
     </span>
   );
 }

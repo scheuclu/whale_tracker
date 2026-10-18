@@ -398,7 +398,8 @@ def test_pipeline_runs_the_step_last(monkeypatch, tmp_path):
     order = []
     for name in ("sync", "retry_scanned", "parse_pending", "notify_pending",
                  "notify_clusters", "_sync_insiders", "notify_insiders", "_classify_issuers"):
-        monkeypatch.setattr(pipeline, name, lambda *a, _n=name, **k: order.append(_n))
+        # The real steps return a count for the run log (#63); the stubs must too.
+        monkeypatch.setattr(pipeline, name, lambda *a, _n=name, **k: order.append(_n) or 0)
     pipeline.run(Config(db_path=tmp_path / "t.sqlite3"))
     assert order[-2:] == ["notify_insiders", "_classify_issuers"]
 
