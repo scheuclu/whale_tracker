@@ -44,6 +44,11 @@ def main(argv: list[str] | None = None) -> int:
     p_backfill.add_argument("--chamber", choices=("house", "senate", "all"), default="all",
                             help="which chamber's indexed filings to parse (default: all)")
 
+    sub.add_parser(
+        "backfill-options",
+        help="re-derive each stored row's option contract (kind, strike, expiry) "
+             "from its asset name and description")
+
     p_capture = sub.add_parser(
         "capture-scans",
         help="store every scanned filing's pages and the grid reader's rows for the "
@@ -149,6 +154,18 @@ def main(argv: list[str] | None = None) -> int:
 
         count = pipeline.backfill(config, args.year, args.limit, args.chamber)
         print(f"parsed {count} filing(s) into the knowledge base (no notifications sent)")
+        return 0
+
+    if args.command == "backfill-options":
+        from . import options
+
+        conn = db.connect(config.db_path)
+        try:
+            seen, structured = options.backfill(conn)
+            conn.commit()
+        finally:
+            conn.close()
+        print(f"options: {structured} of {seen} row(s) carry a parsed contract")
         return 0
 
     if args.command == "capture-scans":

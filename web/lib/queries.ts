@@ -1,3 +1,4 @@
+import type Database from "better-sqlite3";
 import { getDb } from "./db";
 
 /**
@@ -58,7 +59,38 @@ export type TransactionRow = {
   transcribed: number;
   /** The Clerk's document id — the key of the /scans inspection page. */
   doc_id: string;
+  /** The option contract as the filing's own text named it (src/whale/options.py):
+   *  'call' | 'put', the strike, an ISO expiry. All NULL when the text does
+   *  not say — a strike is never guessed from a premium. */
+  option_kind: string | null;
+  strike_cents: number | null;
+  expiry: string | null;
 };
+
+/**
+ * The option-contract columns arrived with schema 11. The committed database
+ * can predate them — the pipeline migrates it on its next run, not this code —
+ * and a query naming a column the file lacks renders as an error page. So
+ * they are selected only when the file has them and read as NULL otherwise;
+ * the badges simply stay off until the next pipeline commit.
+ */
+const optionColumnsKnown = new WeakMap<Database.Database, boolean>();
+
+function hasOptionColumns(db: Database.Database): boolean {
+  let has = optionColumnsKnown.get(db);
+  if (has === undefined) {
+    const cols = db.prepare("PRAGMA table_info(transactions)").all() as { name: string }[];
+    has = cols.some((c) => c.name === "option_kind");
+    optionColumnsKnown.set(db, has);
+  }
+  return has;
+}
+
+function optionColumns(db: Database.Database): string {
+  return hasOptionColumns(db)
+    ? "t.option_kind, t.strike_cents, t.expiry"
+    : "NULL AS option_kind, NULL AS strike_cents, NULL AS expiry";
+}
 
 export type PoliticianRow = {
   member_name: string;
@@ -204,6 +236,8 @@ export async function getTransactions(opts: {
   ticker?: string;
   member?: string;
   action?: string;
+  /** Only rows whose text named an option contract (the ticker page's Options section). */
+  options?: boolean;
   limit?: number;
 } = {}): Promise<TransactionRow[]> {
   const db = await getDb();
@@ -219,6 +253,11 @@ export async function getTransactions(opts: {
   }
   if (opts.action === "buy") where.push("t.action = 'purchase'");
   if (opts.action === "sell") where.push("t.action IN ('sale','sale_partial')");
+  if (opts.options) {
+    // Before the migration no row can qualify, and the column cannot be named.
+    if (!hasOptionColumns(db)) return [];
+    where.push("t.option_kind IS NOT NULL");
+  }
   params.push(opts.limit ?? 100);
 
   return db
@@ -234,7 +273,8 @@ export async function getTransactions(opts: {
               CASE WHEN julianday(t.notification_date) < julianday(t.tx_date)
                    THEN 1 ELSE 0 END AS dates_inconsistent,
               ${TRANSCRIBED} AS transcribed,
-              f.doc_id
+              f.doc_id,
+              ${optionColumns(db)}
        FROM transactions t
        JOIN filings f ON f.id = t.filing_id
        LEFT JOIN politicians p ON p.id = t.politician_id
@@ -408,7 +448,77 @@ export type Pipeline = {
   /** Filings and rows read by transcribing a scan: counted as trades, in no
    *  total. Zero of each while `vision.enabled` is off. */
   transcribed: { filings: number; rows: number };
+  /** The last pipeline runs, newest first — at most RUNS_SHOWN of the
+   *  twenty `pipeline.record_run` keeps in `sync_state.recent_runs`. */
+  runs: PipelineRun[];
 };
+
+/** One entry of the run log `pipeline.run` writes; mirrors `RunTally.entry`. */
+export type PipelineRun = {
+  started: string;
+  finished: string | null;
+  duration_s: number | null;
+  filings_parsed: number;
+  alerts_sent: number;
+  scans_transcribed: number;
+  insiders_stored: number;
+  outcome: "ok" | "failed";
+  error: string | null;
+};
+
+export const RUNS_SHOWN = 10;
+
+/**
+ * The run log, newest first. A value that is not a JSON list, or an entry
+ * without a start time, is dropped rather than rendered: the page must not
+ * fail on a log a newer pipeline wrote in a shape this build does not know.
+ */
+export function parseRecentRuns(raw: string | null): PipelineRun[] {
+  if (!raw) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  const runs: PipelineRun[] = [];
+  for (const r of parsed) {
+    if (!r || typeof r !== "object" || typeof (r as { started?: unknown }).started !== "string") continue;
+    const e = r as Record<string, unknown>;
+    runs.push({
+      started: e.started as string,
+      finished: typeof e.finished === "string" ? e.finished : null,
+      duration_s: typeof e.duration_s === "number" ? e.duration_s : null,
+      filings_parsed: count(e.filings_parsed),
+      alerts_sent: count(e.alerts_sent),
+      scans_transcribed: count(e.scans_transcribed),
+      insiders_stored: count(e.insiders_stored),
+      outcome: e.outcome === "ok" ? "ok" : "failed",
+      error: typeof e.error === "string" ? e.error : null,
+    });
+  }
+  return runs;
+}
+
+function count(v: unknown): number {
+  return typeof v === "number" && Number.isFinite(v) ? v : 0;
+}
+
+/**
+ * Median hours between consecutive logged runs, or null with fewer than two.
+ * The cron asks for a run every 90 minutes; this is what GitHub delivered.
+ */
+export function medianGapHours(runs: PipelineRun[]): number | null {
+  const times = runs
+    .map((r) => Date.parse(r.started))
+    .filter((t) => !Number.isNaN(t))
+    .sort((a, b) => a - b);
+  if (times.length < 2) return null;
+  const gaps = times.slice(1).map((t, i) => (t - times[i]) / 3_600_000).sort((a, b) => a - b);
+  const mid = Math.floor(gaps.length / 2);
+  return gaps.length % 2 ? gaps[mid] : (gaps[mid - 1] + gaps[mid]) / 2;
+}
 
 export async function getPipeline(): Promise<Pipeline> {
   const db = await getDb();
@@ -449,6 +559,9 @@ export async function getPipeline(): Promise<Pipeline> {
        WHERE f.status IN ${COUNTED} AND ${TRANSCRIBED}`
     )
     .get() as Pipeline["transcribed"];
+  const runLog = db.prepare("SELECT value FROM sync_state WHERE key = 'recent_runs'").get() as
+    | { value: string | null }
+    | undefined;
 
   return {
     byStatus,
@@ -459,6 +572,7 @@ export async function getPipeline(): Promise<Pipeline> {
     failures,
     coverage,
     transcribed,
+    runs: parseRecentRuns(runLog?.value ?? null).slice(0, RUNS_SHOWN),
   };
 }
 
