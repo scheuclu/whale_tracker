@@ -1,4 +1,4 @@
-import { getSectorLeaderboard, getTickers, getTransactions, type SectorRow } from "@/lib/queries";
+import { getSectorLeaderboard, getTickerMembers, getTickers, getTransactions, type SectorRow } from "@/lib/queries";
 import {
   getInsiderIssuer,
   getIssuerInsiders,
@@ -21,6 +21,8 @@ import { ActionBadge, Amount, DelayTag, OptionBadge, OwnerTag, PartyBadge, Respo
 import { ASSET_TYPE_LABEL } from "@/lib/format";
 import { getTimelineTrades, type TimelineTrade } from "@/lib/timeline-queries";
 import { TradeTimeline } from "../timeline";
+import { MemberAvatar } from "../avatar";
+import { TickerMembers } from "./ticker-members";
 import {
   ROW_LIMITS,
   TICKER_SORT,
@@ -316,11 +318,12 @@ function SectorLeaderboard({ sectors }: { sectors: SectorRow[] }) {
 }
 
 async function TickerDetail({ ticker }: { ticker: string }) {
-  const [all, trades, optionTrades, timeline] = await Promise.all([
+  const [all, trades, optionTrades, timeline, members] = await Promise.all([
     getTickers(undefined, 5000),
     getTransactions({ ticker, limit: 200 }),
     getTransactions({ ticker, options: true, limit: 500 }),
     getTimelineTrades({ ticker }),
+    getTickerMembers(ticker, undefined, 1000),
   ]);
   const stat = all.find((r) => r.ticker === ticker);
   if (!stat) return <Empty>No disclosed trades for {ticker}.</Empty>;
@@ -408,6 +411,8 @@ async function TickerDetail({ ticker }: { ticker: string }) {
         </Card>
       </section>
 
+      <TickerMembers ticker={stat.ticker} members={members} />
+
       <section>
         <SectionTitle right={<ExportLink filters={{ ticker }} />}>Every disclosed trade</SectionTitle>
         <div className="space-y-1.5">
@@ -418,10 +423,14 @@ async function TickerDetail({ ticker }: { ticker: string }) {
                 <OptionBadge kind={r.option_kind} strikeCents={r.strike_cents} expiry={r.expiry} />
                 <Amount min={r.amount_min_cents} max={r.amount_max_cents} exact={r.amount_exact_cents} />
                 <SectorTag group={r.industry_group} sic={r.sic} description={r.sic_description} />
-                <PartyBadge party={r.party} />
-                <a href={memberHref(r.member_name)} className="text-[13px] font-medium hover:text-primary">
+                <a
+                  href={memberHref(r.member_name)}
+                  className="inline-flex items-center gap-2 text-[13px] font-medium hover:text-primary"
+                >
+                  <MemberAvatar name={r.member_name} bioguideId={r.bioguide_id} size="sm" />
                   {memberLabel(r.member_name, null, r.state, r.district, r.chamber)}
                 </a>
+                <PartyBadge party={r.party} />
                 <OwnerTag owner={r.owner} />
                 <ScanTag transcribed={r.transcribed} docId={r.doc_id} />
                 <div className="flex-1" />

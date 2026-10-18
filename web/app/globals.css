@@ -781,6 +781,33 @@ body::before {
 }
 
 /* ------------------------------------------------------------------
+   Member portraits (app/avatar.tsx).
+
+   The monogram surface is a neutral grey-violet, never a party colour:
+   blue <-> red is the buy/sell encoding above. The hairline ring is an
+   overlay (::after) so it stays crisp on top of the photo too.
+   ------------------------------------------------------------------ */
+.member-avatar {
+  background: linear-gradient(150deg, #f1f1f5, #e2e2ea);
+  color: #5a5a6e;
+}
+.dark .member-avatar {
+  background: linear-gradient(150deg, #23232d, #18181f);
+  color: #a9a9bb;
+}
+.member-avatar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px rgba(12, 12, 17, 0.08);
+  pointer-events: none;
+}
+.dark .member-avatar::after {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+/* ------------------------------------------------------------------
    Trade timeline (app/timeline.tsx). Axis text wears text tokens, never
    the series colour; a mark's 2px surface ring turns into the focus
    outline, so keyboard focus is visible without a box around the SVG.

@@ -13,6 +13,7 @@ import { getTickerDetail, getTickerMembers, type TickerMemberRow, type TickerRow
 import { memberHref, memberLabel, price, range, shares, shortDate, usd } from "@/lib/format";
 import { Card, DivergingSplit, Empty, MagnitudeBars, SectionTitle, StatTile } from "../charts";
 import { ActionBadge, Amount, InsiderDelayTag, PartyBadge, PlanTag, ResponsiveTable, RoleTag, SectorTag, TickerChip } from "../ui";
+import { MemberAvatar } from "../avatar";
 import {
   ISSUER_SORT,
   ROW_LIMITS,
@@ -677,10 +678,14 @@ async function MembersInTicker({ ticker }: { ticker: string }) {
             <div className="mt-3 space-y-2">
               {members.map((m) => (
                 <div key={m.member_name} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
-                  <PartyBadge party={m.party} />
-                  <a href={memberHref(m.member_name)} className="font-medium hover:text-primary">
+                  <a
+                    href={memberHref(m.member_name)}
+                    className="inline-flex items-center gap-2 font-medium hover:text-primary"
+                  >
+                    <MemberAvatar name={m.member_name} bioguideId={m.bioguide_id} size="sm" />
                     {memberLabel(m.member_name, null, m.state, m.district, m.chamber)}
                   </a>
+                  <PartyBadge party={m.party} />
                   <div className="flex-1" />
                   <span className="tabular text-xs text-muted-foreground">
                     {m.buys} buy / {m.sells} sell
