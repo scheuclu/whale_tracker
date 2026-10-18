@@ -50,34 +50,72 @@ export function StatTile({
   trendLabels?: string[];
   delta?: StatDelta;
 }) {
+  const zero = isZeroFigure(value);
   return (
-    <div className="viz-rise glass flex h-full flex-col rounded-2xl border border-border bg-card px-4 py-3.5">
+    <div
+      className={cn(
+        "viz-rise flex h-full flex-col rounded-xl border border-border p-4 sm:px-5",
+        // A zero tile drops its surface: same outline, no fill, so the tiles that report something lead.
+        zero ? "bg-transparent" : "glass bg-card"
+      )}
+    >
       <div className="flex items-baseline justify-between gap-2">
-        <div className="text-[11px] font-medium uppercase tracking-[0.07em] text-muted-foreground">
-          {label}
-        </div>
+        <div className="truncate text-[13px] font-medium leading-5 text-muted-foreground">{label}</div>
         {trend?.length && trendCaption ? (
-          <div className="truncate text-[10px] text-muted-foreground/80">{trendCaption}</div>
+          <div className="shrink-0 truncate text-xs leading-5 text-muted-foreground">{trendCaption}</div>
         ) : null}
       </div>
-      <div className="mt-1.5 flex items-end justify-between gap-3">
-        <div className="text-[1.375rem] font-semibold leading-none tracking-tight sm:text-[1.625rem]">
-          {value}
+      <div className={cn("mt-2 flex items-end justify-between gap-3", zero && "[&>svg]:opacity-60")}>
+        <div
+          className={cn(
+            "tabular text-2xl font-semibold leading-none tracking-[-0.025em] sm:text-[28px]",
+            zero ? "font-medium text-muted-foreground" : "text-foreground"
+          )}
+        >
+          <Figure value={value} />
         </div>
         {trend?.length ? (
           <Sparkbars values={trend} label={trendLabel ?? label} names={trendLabels} />
         ) : null}
       </div>
-      {hint ? <div className="mt-2 text-xs leading-snug text-muted-foreground">{hint}</div> : null}
+      {hint ? <div className="mt-2.5 text-xs leading-snug text-muted-foreground">{hint}</div> : null}
       {delta ? (
-        <div className="mt-1 text-xs text-foreground/75" title={delta.title}>
-          <span aria-hidden className="mr-1 text-[10px]">
+        <div className="tabular mt-1 text-xs leading-snug text-ink-2" title={delta.title}>
+          <span aria-hidden className="mr-1 text-[9px] text-muted-foreground">
             {delta.direction === "up" ? "▲" : delta.direction === "down" ? "▼" : "■"}
           </span>
           {delta.text}
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** "0", "$0", "0%", "—": a tile reporting nothing is drawn quieter. */
+function isZeroFigure(value: string): boolean {
+  return /^(?:\$?0(?:\.0+)?[kMB%]?|[—–-])$/.test(value.trim());
+}
+
+/**
+ * A formatted figure with its unit suffixes (k, M, B, %, d) in muted ink and
+ * a step smaller, so the digits carry the weight. Only a suffix directly
+ * after a digit is split off; everything else renders as given.
+ */
+function Figure({ value }: { value: string }) {
+  const parts = value.split(/(?<=\d)([kKMBT%]|d(?![a-z]))/);
+  if (parts.length === 1) return <>{value}</>;
+  return (
+    <>
+      {parts.map((p, i) =>
+        i % 2 ? (
+          <span key={i} className="ml-[0.04em] text-[0.72em] font-medium tracking-normal text-muted-foreground">
+            {p}
+          </span>
+        ) : (
+          p
+        )
+      )}
+    </>
   );
 }
 
@@ -595,11 +633,11 @@ export function Legend({
   note?: string;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs leading-4 text-muted-foreground">
       {items.map((i) => (
-        <span key={i.label} className="inline-flex items-center gap-1.5">
+        <span key={i.label} className="inline-flex items-center gap-1.5 text-ink-2">
           {/* The key mirrors the mark: a short bar, not a dot. */}
-          <span className="h-2 w-3 rounded-[2px]" style={{ background: i.color }} />
+          <span aria-hidden className="h-2 w-3 shrink-0 rounded-[2px]" style={{ background: i.color }} />
           {i.label}
         </span>
       ))}
@@ -608,14 +646,16 @@ export function Legend({
   );
 }
 
+/** A quiet one-line state: muted text on a hairline, no box. */
 export function Empty({ children }: { children?: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+    <div className="max-w-[68ch] border-l-2 border-border py-1 pl-3 text-[13px] leading-relaxed text-muted-foreground">
       {children ?? "No data yet."}
     </div>
   );
 }
 
+/** Sentence-case section heading; `right` is muted 12px meta (or a control). */
 export function SectionTitle({
   children,
   right,
@@ -624,21 +664,19 @@ export function SectionTitle({
   right?: React.ReactNode;
 }) {
   return (
-    <div className="mb-3 flex min-h-7 flex-wrap items-center gap-x-3 gap-y-1.5">
-      <h2 className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground/70">
-        {children}
-      </h2>
-      <div className="rule-fade min-w-6 flex-1" />
+    <div className="mb-3 flex min-h-7 flex-wrap items-center justify-between gap-x-4 gap-y-1">
+      <h2 className="text-sm font-semibold leading-5 tracking-[-0.006em] text-foreground">{children}</h2>
       {right ? (
-        <div className="flex shrink-0 items-center text-[11px] text-muted-foreground">{right}</div>
+        <div className="flex min-w-0 items-center text-xs text-muted-foreground [&>span]:text-xs">{right}</div>
       ) : null}
     </div>
   );
 }
 
+/** The one card surface: hairline edge, faint shadow, 12px radius, 16/20px inset. */
 export function Card({ className, children }: { className?: string; children: React.ReactNode }) {
   return (
-    <div className={cn("glass rounded-2xl border border-border bg-card p-4 sm:p-5", className)}>
+    <div className={cn("glass rounded-xl border border-border bg-card p-4 sm:p-5", className)}>
       {children}
     </div>
   );
