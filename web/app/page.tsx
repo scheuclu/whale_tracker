@@ -75,7 +75,7 @@ export async function generateMetadata(): Promise<Metadata> {
     /* generic copy */
   }
   return pageMetadata({
-    title: "Whale Tracker: congressional and insider stock trades",
+    title: "FatCat Watch: congressional and insider stock trades",
     absoluteTitle: true,
     description: `${lead}, newest first, plus SEC Form 4 insider trades. Amounts are shown as the ranges filed, never as invented exact figures.`,
     path: "/",

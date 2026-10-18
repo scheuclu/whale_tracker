@@ -299,7 +299,7 @@ export async function buildIndex(origin: string, search: URLSearchParams): Promi
       status: 200,
       body: {
         data: {
-          name: "Whale Tracker API",
+          name: "FatCat Watch API",
           version: "v1",
           endpoints: API_ENDPOINTS.map((e) => ({
             path: e.path,

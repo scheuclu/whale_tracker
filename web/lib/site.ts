@@ -3,7 +3,7 @@
  * sitemap, robots.txt, Open Graph and JSON-LD.
  *
  * 1. `NEXT_PUBLIC_SITE_URL` — set this in production to the public domain
- *    (https://whaletracker-blue.vercel.app). Explicit beats inferred.
+ *    (https://www.fatcatwatch.com). Explicit beats inferred.
  * 2. `VERCEL_PROJECT_PRODUCTION_URL` — Vercel's production domain for the
  *    project (a bare host, no scheme). Present on every deployment, previews
  *    included, so a preview's canonicals still name production and never the
@@ -29,7 +29,7 @@ export function absoluteUrl(path: string, env?: Record<string, string | undefine
   return `${siteUrl(env)}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
-export const SITE_NAME = "Whale Tracker";
+export const SITE_NAME = "FatCat Watch";
 
 export const SITE_DESCRIPTION =
   "US congressional and corporate-insider stock trades: tickers, volume, and who is trading";

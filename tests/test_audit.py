@@ -196,7 +196,7 @@ def test_report_renders_markdown_with_a_finding_count(tmp_path):
     c.commit()
     c.close()
     text, findings = audit.report(tmp_path / "r.sqlite3", TODAY)
-    assert "# Whale Tracker — data audit" in text
+    assert "# FatCat Watch — data audit" in text
     assert "error" in text and "empty_parsed_filings" in text
     assert any(f.severity == audit.ERROR for f in findings)
 

@@ -1,5 +1,17 @@
 # Project instructions
 
+## Name: FatCat Watch, code says `whale`
+
+The product is **FatCat Watch** at https://www.fatcatwatch.com (formerly
+Whale Tracker). User-facing copy uses the new name (`SITE_NAME` in
+`web/lib/site.ts`, re-exported by `web/lib/methodology.ts`; the wordmark in
+`web/app/brand.tsx`, the mark in `web/lib/brand.ts`); code identifiers keep
+`whale` — the package, `python -m whale`, the repo, workflow and DB names,
+env vars. Do not rename those. Keep the tone playful, never accusatory: a
+disclosed trade is not evidence of wrongdoing. The apex → www and the old
+`whaletracker-blue.vercel.app` → www 308s live in Vercel → Project →
+Domains, not in code.
+
 ## Workflow: all changes via PR
 
 Never commit or push directly to `main`. For every change: create a feature

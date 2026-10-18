@@ -1,7 +1,7 @@
 import { getTickerDetail } from "@/lib/queries";
 import { BUY, CARD_SIZE, SELL, count, renderCard, renderPlainCard } from "../../share-card";
 
-export const alt = "A ticker's congressional trades on Whale Tracker: members trading and buy/sell counts";
+export const alt = "A ticker's congressional trades on FatCat Watch: members trading and buy/sell counts";
 export const size = CARD_SIZE;
 export const contentType = "image/png";
 export const revalidate = 3600;

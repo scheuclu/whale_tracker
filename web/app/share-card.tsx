@@ -68,7 +68,7 @@ export function renderCard({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={markDataUri({ size: 56 })} width={56} height={56} alt="" />
           <div style={{ display: "flex", fontSize: 32, letterSpacing: "-0.02em" }}>
-            Whale<span style={{ color: "#9d9dff", marginLeft: 10 }}>Tracker</span>
+            FatCat<span style={{ color: "#9d9dff", marginLeft: 10 }}>Watch</span>
           </div>
         </div>
 

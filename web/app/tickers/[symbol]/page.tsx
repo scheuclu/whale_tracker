@@ -68,7 +68,7 @@ export default async function TickerPage(props: Props) {
     <>
       <JsonLd
         data={breadcrumbLd([
-          { name: "Whale Tracker", path: "/" },
+          { name: "FatCat Watch", path: "/" },
           { name: "Tickers", path: "/tickers" },
           { name: stat.ticker, path: tickerHref(stat.ticker) },
         ])}

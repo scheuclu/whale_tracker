@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
-import { WhaleMark, Wordmark } from "./brand";
+import { BrandMark, Wordmark } from "./brand";
 
 const SOURCES = [
   {
@@ -32,7 +32,7 @@ export function SiteFooter() {
         <div className="grid gap-8 text-xs leading-relaxed text-muted-foreground md:grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.4fr)] md:gap-12">
           <div className="space-y-3">
             <div className="flex items-center gap-2.5">
-              <WhaleMark className="size-7" />
+              <BrandMark className="size-7" />
               <Wordmark className="text-sm text-foreground" />
             </div>
             <p className="max-w-[40ch]">

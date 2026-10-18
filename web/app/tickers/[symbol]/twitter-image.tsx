@@ -4,7 +4,7 @@ import Image from "./opengraph-image";
 // twitter-image would be inherited and every ticker would share the site
 // card on X. Config is restated rather than re-exported: Next reads these
 // exports statically.
-export const alt = "A ticker's congressional trades on Whale Tracker: members trading and buy/sell counts";
+export const alt = "A ticker's congressional trades on FatCat Watch: members trading and buy/sell counts";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 export const revalidate = 3600;
