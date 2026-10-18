@@ -2,20 +2,11 @@ import { redirect } from "next/navigation";
 import { getConsensusTickers, getPipeline, getTransactionTotals, getTransactions, getWeeklyActivity } from "@/lib/queries";
 import { getBothSides, getSharedTickers, type BothSidesRow, type SharedTickers } from "@/lib/crossover-queries";
 import { FILTER_KEYS, feedHref, parseOffset, parseTransactionFilters } from "@/lib/feed-filters";
-import { memberHref, memberLabel, shortDate, usd } from "@/lib/format";
+import { memberHref } from "@/lib/format";
 import { Card, DivergingSplit, Empty, SectionTitle, StatTile, type StatDelta } from "./charts";
 import { ExportLink, FilterBar, Pagination, ShownLine } from "./feed-controls";
-import {
-  ActionBadge,
-  Amount,
-  DelayTag,
-  OptionBadge,
-  OwnerTag,
-  PartyBadge,
-  ResponsiveTable,
-  ScanTag,
-  TickerChip,
-} from "./ui";
+import { DirectionFilter, FeedList } from "./feed-list";
+import { ActionBadge, ResponsiveTable } from "./ui";
 
 export const dynamic = "force-dynamic";
 
@@ -138,88 +129,37 @@ export default async function FeedPage({
 
       <section id="trades">
         <SectionTitle
-          right={
-            <div className="flex items-center gap-1 text-[11px]">
-              {[
-                { k: undefined, label: "All" },
-                { k: "buy" as const, label: "Buys" },
-                { k: "sell" as const, label: "Sells" },
-              ].map((f) => (
-                <a
-                  key={f.label}
-                  href={feedHref({ ...filters, action: f.k })}
-                  className={`rounded-full border px-2.5 py-1 transition-colors ${
-                    filters.action === f.k
-                      ? "border-primary/40 bg-primary/10 text-foreground"
-                      : "border-border text-muted-foreground hover:bg-muted"
-                  }`}
-                >
-                  {f.label}
-                </a>
-              ))}
-              <span className="mx-1 h-4 w-px bg-border" aria-hidden />
-              <ExportLink filters={filters} />
-            </div>
-          }
+          right={<span className="text-[11px] text-muted-foreground">by trade date, newest first</span>}
         >
           Recent trades
         </SectionTitle>
 
         <FilterBar filters={filters} ignored={ignored} />
 
-        {rows.length ? (
-          <>
-            <ShownLine offset={offset} shown={rows.length} totals={totals} />
-            <div className="space-y-1.5">
-              {rows.map((r) => (
-                <Card key={r.id} className="lift px-4 py-3">
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                    <ActionBadge action={r.action} />
-                    <TickerChip ticker={r.ticker} type={r.asset_type} />
-                    <OptionBadge kind={r.option_kind} strikeCents={r.strike_cents} expiry={r.expiry} />
-                    <Amount
-                      min={r.amount_min_cents}
-                      max={r.amount_max_cents}
-                      exact={r.amount_exact_cents}
-                    />
-                    <div className="flex-1" />
-                    <span className="tabular text-xs text-muted-foreground">
-                      {shortDate(r.tx_date)}
-                    </span>
-                    <DelayTag days={r.delay_days} inconsistent={r.dates_inconsistent} />
-                  </div>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
-                    <PartyBadge party={r.party} />
-                    <a href={memberHref(r.member_name)} className="font-medium hover:text-primary">
-                      {memberLabel(r.member_name, null, r.state, r.district, r.chamber)}
-                    </a>
-                    <OwnerTag owner={r.owner} />
-                    <ScanTag transcribed={r.transcribed} docId={r.doc_id} />
-                    <span className="truncate text-muted-foreground">· {r.asset_name}</span>
-                    <a
-                      href={r.pdf_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="ml-auto text-[11px] text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
-                    >
-                      filing
-                    </a>
-                  </div>
-                </Card>
-              ))}
-            </div>
-            <Pagination filters={filters} offset={offset} shown={rows.length} total={totals.trades} page={PAGE} />
-          </>
-        ) : offset > 0 && totals.trades ? (
-          <Empty>
-            Nothing past trade {totals.trades.toLocaleString()}.{" "}
-            <a href={feedHref(filters)} className="underline underline-offset-2 hover:text-primary">
-              Back to the newest
-            </a>
-          </Empty>
-        ) : (
-          <Empty>No trades match this filter.</Empty>
-        )}
+        <FeedList
+          rows={rows}
+          toolbar={
+            <>
+              <DirectionFilter current={filters.action} hrefFor={(k) => feedHref({ ...filters, action: k })} />
+              <ExportLink
+                filters={filters}
+                className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              />
+            </>
+          }
+          summary={<ShownLine offset={offset} shown={rows.length} totals={totals} />}
+          empty={
+            offset > 0 && totals.trades ? (
+              <>
+                Nothing past trade {totals.trades.toLocaleString()}.{" "}
+                <a href={feedHref(filters)} className="underline underline-offset-2 hover:text-primary">
+                  Back to the newest
+                </a>
+              </>
+            ) : undefined
+          }
+        />
+        <Pagination filters={filters} offset={offset} shown={rows.length} total={totals.trades} page={PAGE} />
       </section>
 
       <BothSides />

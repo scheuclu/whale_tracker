@@ -712,3 +712,70 @@ body::before {
   color: var(--foreground);
   background: color-mix(in srgb, var(--foreground) 7%, transparent);
 }
+
+/* ------------------------------------------------------------------
+   Home feed timeline (app/feed-list.tsx, app/bracket-glyph.tsx).
+
+   --viz-rung-*: the bracket ladder. Neutral ink, because blue<->red is
+   reserved for buy/sell; amber for a transcribed row, matching ScanTag.
+   below/on and scan-below/scan each validated as a two-step ordinal ramp
+   (dataviz validate_palette.js --ordinal: monotone L, dL >= 0.06, light end
+   >= 2:1 on --card-solid) in both modes; neutral vs amber separates by
+   CVD dE >= 16. --viz-rung-off is a track, not a data mark.
+   ------------------------------------------------------------------ */
+:root {
+  --viz-rung-off: #e6e6ec;
+  --viz-rung-below: #a3a3b4;
+  --viz-rung-on: #3a3a48;
+  --viz-rung-scan-below: #d4a453;
+  --viz-rung-scan: #9a6512;
+  --feed-hover: color-mix(in oklab, var(--primary) 7%, transparent);
+}
+
+.dark {
+  --viz-rung-off: #24242c;
+  --viz-rung-below: #5f5f72;
+  --viz-rung-on: #ececf2;
+  --viz-rung-scan-below: #7a5a26;
+  --viz-rung-scan: #e3a33b;
+  --feed-hover: color-mix(in oklab, var(--primary) 12%, transparent);
+}
+
+/* Day headers park under the site header (--sticky-top is measured by
+   app/sticky-offset.tsx; the fallback covers first paint). Opaque: rows
+   scrolling underneath must not read through the label. */
+.feed-day-head {
+  top: var(--sticky-top, 7rem);
+  background: var(--card-solid);
+}
+
+/* One trade: two lines on a phone, one line from 640px. On a phone the
+   amount sits in a fixed right-hand column so the ladders line up down the
+   list; the delay moves to the end of the asset line (feed-list.tsx
+   renders it there below 640px and in its own column above). */
+.feed-row {
+  display: grid;
+  align-items: center;
+  column-gap: 0.5rem;
+  row-gap: 0.125rem;
+  grid-template-columns: auto minmax(0, max-content) minmax(0, 1fr) 8.75rem;
+  grid-template-areas:
+    "act tick . amt"
+    "asset asset asset asset";
+}
+@media (min-width: 640px) {
+  .feed-row {
+    column-gap: 0.75rem;
+    grid-template-columns: 6.5rem 5.5rem 11rem minmax(0, 1fr) 5rem;
+    grid-template-areas: "act tick amt asset delay";
+  }
+}
+
+/* From 1024px the member sits in its own column and stays in view while a
+   long filing scrolls past, just under the day header (h-8 = 2rem). */
+@media (min-width: 1024px) {
+  .feed-member {
+    position: sticky;
+    top: calc(var(--sticky-top, 7rem) + 2.5rem);
+  }
+}
