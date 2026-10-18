@@ -41,6 +41,9 @@ def steps(monkeypatch):
     monkeypatch.setattr(pipeline, "notify_clusters", step("clusters", 1))
     monkeypatch.setattr(pipeline, "_sync_insiders", step("insiders", 7))
     monkeypatch.setattr(pipeline, "notify_insiders", step("notify_insiders", 2))
+    # #55's issuer classification is a step of `run` too; its own status
+    # write would otherwise reach the real `db.set_state`.
+    monkeypatch.setattr(pipeline, "_classify_issuers", step("classify_issuers", None))
     return calls
 
 

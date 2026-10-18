@@ -1,5 +1,5 @@
 import { getDb } from "./db";
-import { COUNTED, DELAY, sinceClause } from "./queries";
+import { COUNTED, DELAY, NO_SECTOR_COLS, SECTOR_COLS, hasIssuerTables, sinceClause, type SectorFields } from "./queries";
 
 /**
  * SEC Form 4 insider trades — separate tables, separate queries (see
@@ -193,7 +193,11 @@ export type InsiderTradeRow = {
   officer_title: string | null;
   owner_count: number;
   delay_days: number | null;
-};
+} & SectorFields;
+
+/** A Form 4 issuer's classification, one-to-one: the filing names the
+ *  issuer CIK, so no symbol lookup stands between the row and its group. */
+const INSIDER_SECTOR_JOIN = `LEFT JOIN issuers s ON s.cik = f.issuer_cik`;
 
 export async function getInsiderTrades(opts: {
   ticker?: string;
@@ -216,6 +220,7 @@ export async function getInsiderTrades(opts: {
   if (opts.action === "buy") where.push("t.action = 'purchase'");
   if (opts.action === "sell") where.push("t.action = 'sale'");
   params.push(opts.limit ?? 100);
+  const sectors = hasIssuerTables(db);
 
   return db
     .prepare(
@@ -228,8 +233,10 @@ export async function getInsiderTrades(opts: {
               i.name AS insider_name, o.insider_cik, o.is_director, o.is_officer,
               o.is_ten_percent_owner, o.officer_title,
               (SELECT COUNT(*) FROM insider_filing_owners x WHERE x.filing_id = f.id) AS owner_count,
-              ${DELAY} AS delay_days
+              ${DELAY} AS delay_days,
+              ${sectors ? SECTOR_COLS : NO_SECTOR_COLS}
        ${FROM}
+       ${sectors ? INSIDER_SECTOR_JOIN : ""}
        WHERE ${where.join(" AND ")} ${sinceClause(opts.days)}
        ORDER BY t.tx_date DESC, t.id DESC
        LIMIT ?`
@@ -272,6 +279,48 @@ export async function getIssuerInsiders(ticker: string): Promise<IssuerInsiderRo
        ORDER BY bought + sold DESC`
     )
     .all(ticker.toUpperCase()) as IssuerInsiderRow[];
+}
+
+/**
+ * Insider value bought and sold per industry group (#55). A NULL group is
+ * the unclassified remainder (an issuer EDGAR lists no SIC for, or one the
+ * fill has not reached), kept as its own row. Values follow the page's
+ * rule: shares × reported price, implausible rows worth nothing.
+ */
+export type InsiderSectorRow = {
+  industry_group: string | null;
+  issuers: number;
+  filings: number;
+  insiders: number;
+  trades: number;
+  buys: number;
+  sells: number;
+  buy_value: number;
+  sell_value: number;
+};
+
+/** Empty when the database predates the issuer tables. */
+export async function getInsiderSectors(days?: number): Promise<InsiderSectorRow[]> {
+  const db = await getDb();
+  if (!hasIssuerTables(db)) return [];
+  return db
+    .prepare(
+      `SELECT s.industry_group,
+              COUNT(DISTINCT f.issuer_cik) AS issuers,
+              COUNT(DISTINCT f.id) AS filings,
+              COUNT(DISTINCT o.insider_cik) AS insiders,
+              COUNT(*) AS trades,
+              SUM(t.action = 'purchase') AS buys,
+              SUM(t.action = 'sale') AS sells,
+              ${BUY_VALUE} AS buy_value,
+              ${SELL_VALUE} AS sell_value
+       ${FROM}
+       ${INSIDER_SECTOR_JOIN}
+       WHERE f.status IN ${COUNTED} ${sinceClause(days)}
+       GROUP BY s.industry_group
+       ORDER BY s.industry_group IS NULL, buy_value + sell_value DESC`
+    )
+    .all() as InsiderSectorRow[];
 }
 
 export type InsiderPipeline = {
