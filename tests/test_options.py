@@ -18,7 +18,7 @@ from datetime import date
 
 import pytest
 
-from whale import db, options, pipeline, stats, telegram
+from whale import audit, db, options, pipeline, stats, telegram
 from whale.config import (DEFAULT_CONFIG_FILE, AlertSettings, Config, ConfigError,
                           load_config)
 from whale.options import OptionContract, parse
@@ -383,6 +383,23 @@ def test_an_option_trade_is_its_own_alert_ahead_of_the_filings_digest(conn, sent
     assert "New filing" in sent[1] and "2 transactions" in sent[1]
     row = conn.execute("SELECT status, notified_at FROM filings").fetchone()
     assert row["status"] == "notified" and row["notified_at"]
+
+
+def test_each_options_alert_is_logged_as_sent(conn, sent):
+    # The /alerts page is the whole history (#52), so the per-transaction
+    # option messages log one row each, like a watched filing's rows, and
+    # the filing they consumed is covered for `check_alert_recording`.
+    pid = _member(conn)
+    fid = _filing(conn, [_tx("NVDA", "purchase", CALL_TEXT), _tx("CLF", "purchase", PUT_TEXT)],
+                  politician_id=pid)
+    assert pipeline.notify_pending(conn, _config(options_every_trade=True)) == 2
+    rows = conn.execute("SELECT * FROM alerts ORDER BY id").fetchall()
+    assert [r["kind"] for r in rows] == [stats.OPTIONS_KIND, stats.OPTIONS_KIND]
+    assert [r["ticker"] for r in rows] == ["NVDA", "CLF"]
+    assert all(r["filing_id"] == fid and r["transaction_id"] for r in rows)
+    assert [r["message"] for r in rows] == sent
+    assert all(r["participants"] == "Nancy Pelosi" and r["direction"] == "buy" for r in rows)
+    assert audit.check_alert_recording(conn) == []
 
 
 def test_off_by_default_the_digest_alone_reports_the_trade(conn, sent):

@@ -1,3 +1,6 @@
 node_modules/
 .next/
 next-env.d.ts
+
+# tsc --incremental state (web/tsconfig.json sets incremental)
+tsconfig.tsbuildinfo

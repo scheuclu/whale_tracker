@@ -1,4 +1,4 @@
-"""Pipeline orchestration: sync → parse → notify → cluster → insiders.
+"""Pipeline orchestration: sync → parse → notify → cluster → insiders → prices.
 
 Every step commits DB state before the next runs, so a crash at any point
 resumes cleanly on the next cron tick via the filing status state machine.
@@ -14,7 +14,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import date
 
-from . import (db, digest, house, insider_alerts, insiders, issuers, options, roster, senate,
+from . import (db, digest, house, insider_alerts, insiders, issuers, options, prices, roster, senate,
                senate_ptr, stats, telegram)
 from .amounts import parse_amount
 from .config import Config
@@ -37,6 +37,7 @@ def run(config: Config, dry_run: bool = False) -> None:
         tally.insiders_stored = _sync_insiders(conn, config)
         tally.alerts_sent += notify_insiders(conn, config, dry_run=dry_run)
         digest.scheduled(conn, config, dry_run=dry_run)
+        _sync_prices(conn, config, dry_run=dry_run)
         _classify_issuers(conn, config)
         tally.outcome = "ok"
     except Exception as exc:
@@ -132,6 +133,24 @@ def record_run(conn: sqlite3.Connection, tally: RunTally, dry_run: bool = False)
         conn.commit()
     except Exception:
         log.exception("could not record the run in sync_state %r", RUN_LOG_STATE)
+
+
+def _sync_prices(conn: sqlite3.Connection, config: Config, dry_run: bool = False) -> None:
+    """Best-effort, and after every alert step: an alert that fired this run
+    is priced this run, and a price source going dark must never delay or
+    fail an alert. `prices.sync` absorbs the failures it knows about; this
+    guard is for everything else. Skipped on a dry run, which previews the
+    queue and writes nothing."""
+    if dry_run:
+        return
+    try:
+        result = prices.sync(conn, config)
+    except Exception as exc:
+        log.exception("price sync failed unexpectedly")
+        db.set_state(conn, prices.STATE_STATUS, f"error: {exc}")
+        conn.commit()
+        return
+    log.info("prices: %s", result.summary())
 
 
 # --- sync -------------------------------------------------------------------
@@ -556,6 +575,16 @@ def notify_insiders(conn: sqlite3.Connection, config: Config, dry_run: bool = Fa
                 db.mark_insider_notified(conn, filing["id"])
                 if key:
                     db.save_insider_cooldown(conn, decision.state)
+                # The value is shares × the price as filed — exact, so the
+                # range collapses to it; all NULL when no row was priced.
+                value = match.value_cents
+                volume = (None if value is None else
+                          stats.Volume(min_cents=value, max_cents=value, mid_cents=value))
+                db.record_alert(conn, stats.INSIDER_FILING_KIND, filing["ticker"],
+                                _CLUSTER_DIRECTION[match.direction], 0, 1,
+                                participants=", ".join(o["name"] for o in match.owners),
+                                rule_name=match.rule.name, insider_filing_id=filing["id"],
+                                message=text, **_volume_fields(volume))
                 sent += 1
                 log.info("insider alert %r for %s", match.rule.name, filing["accession"])
         conn.commit()
@@ -594,7 +623,10 @@ def _notify_insider_clusters(conn: sqlite3.Connection, config: Config, dry_run: 
             if not dry_run:
                 db.record_alert(conn, stats.INSIDER_CLUSTER_KIND,
                                 cluster.ticker or cluster.issuer_cik, cluster.direction,
-                                window, cluster.insider_count, cluster.volume.mid_cents)
+                                window, cluster.insider_count,
+                                participants=", ".join(cluster.insiders),
+                                rule_name=rule.name, message=text,
+                                **_volume_fields(cluster.volume))
                 sent += 1
                 log.info("insider cluster alert %r for %s", rule.name,
                          cluster.ticker or cluster.issuer_cik)
@@ -1015,6 +1047,10 @@ def notify_pending(conn: sqlite3.Connection, config: Config, dry_run: bool = Fal
         if _deliver(config, text, dry_run) and not dry_run:
             db.set_status(conn, filing["id"], "notified", None)
             db.mark_notified(conn, filing["id"])
+            db.record_alert(conn, stats.FILING_KIND, _alert_ticker(rows),
+                            _alert_direction(r["action"] for r in rows), 0, 1,
+                            participants=name, filing_id=filing["id"], message=text,
+                            **_volume_fields(_alert_volume(rows)))
             if late_by is not None and stats.is_new_late_filing(
                     conn, filing["chamber"], filing["doc_id"]):
                 db.record_alert(conn, stats.LATE_FILING_KIND, filing["doc_id"],
@@ -1041,6 +1077,10 @@ def notify_pending(conn: sqlite3.Connection, config: Config, dry_run: bool = Fal
             # Status stays 'failed': the filing is reported but still unread,
             # so it is re-parsed if the pipeline later gains a vision key.
             db.mark_notified(conn, filing["id"])
+            # A filing alert with no ticker and no volume: nothing was read.
+            db.record_alert(conn, stats.FILING_KIND, None, None, 0, 1,
+                            participants=filing["member_name"] or filing["filer_name"],
+                            filing_id=filing["id"], message=text)
             sent += 1
         conn.commit()
     return sent
@@ -1077,6 +1117,15 @@ def _notify_watched_filing(conn: sqlite3.Connection, config: Config, filing,
         )
         if _deliver(config, text, dry_run):
             delivered += 1
+            if not dry_run:
+                # Logged per message, as sent. A partial failure replays the
+                # whole filing, and the repeat is then a repeat on the page
+                # too — the log describes what was sent, not what was meant.
+                db.record_alert(conn, stats.WATCHLIST_KIND, row.get("ticker"),
+                                _alert_direction([row["action"]]), 0, 1,
+                                participants=filing["member_name"] or filing["filer_name"],
+                                filing_id=filing["id"], transaction_id=row["id"],
+                                message=text, **_volume_fields(_alert_volume([row])))
 
     if dry_run:
         return 0
@@ -1123,6 +1172,15 @@ def _notify_option_trades(conn: sqlite3.Connection, config: Config, filing,
         )
         if _deliver(config, text, dry_run):
             delivered += 1
+            if not dry_run:
+                # Logged per message, as sent, like a watched filing's rows:
+                # the /alerts page is the whole history and the audit's
+                # `check_alert_recording` holds every notified filing to it.
+                db.record_alert(conn, stats.OPTIONS_KIND, row.get("ticker"),
+                                _alert_direction([row["action"]]), 0, 1,
+                                participants=filing["member_name"] or filing["filer_name"],
+                                filing_id=filing["id"], transaction_id=row["id"],
+                                message=text, **_volume_fields(_alert_volume([row])))
     if delivered and not dry_run:
         log.info("options alert for %s: %d transaction(s)",
                  filing["member_name"] or filing["filer_name"], delivered)
@@ -1141,12 +1199,61 @@ def notify_clusters(conn: sqlite3.Connection, config: Config, dry_run: bool = Fa
             continue
         text = telegram.format_cluster(cluster, config.alerts.window_days)
         if _deliver(config, text, dry_run) and not dry_run:
-            db.record_alert(conn, "cluster", cluster.ticker, cluster.direction,
+            db.record_alert(conn, stats.CLUSTER_KIND, cluster.ticker, cluster.direction,
                             config.alerts.window_days, cluster.politician_count,
-                            cluster.volume.mid_cents)
+                            participants=", ".join(cluster.members), message=text,
+                            **_volume_fields(cluster.volume))
             sent += 1
         conn.commit()
     return sent
+
+
+# --- the alert log ----------------------------------------------------------
+#
+# Every delivered message is logged in `alerts` (db.record_alert) so the
+# dashboard's /alerts page is the whole history. These helpers reduce a
+# filing's rows to the one-ticker, one-direction, one-range shape the row
+# holds — or to NULL when the filing has no such shape.
+
+# A transaction row carries the filing's purchase/sale vocabulary; the alert
+# log, like config.yaml and the cluster finder, speaks buy/sell. An exchange
+# has no side.
+_ALERT_DIRECTION = {"purchase": "buy", "sale": "sell", "sale_partial": "sell"}
+
+
+def _alert_direction(actions) -> str | None:
+    """'buy' or 'sell' when every row moved the same way; None when they did not."""
+    sides = {_ALERT_DIRECTION.get(a) for a in actions} - {None}
+    return sides.pop() if len(sides) == 1 else None
+
+
+def _alert_ticker(rows: list[dict]) -> str | None:
+    """The one ticker these rows share, or None: a filing spanning several is
+    not about any one of them, and a Treasury roll has none."""
+    tickers = {r.get("ticker") for r in rows if r.get("ticker")}
+    return tickers.pop() if len(tickers) == 1 else None
+
+
+def _alert_volume(rows: list[dict]) -> stats.Volume | None:
+    """The disclosed range across these rows, or None when none may enter a
+    total — a transcribed row is a checkbox read off a scan, not a bracket."""
+    volume = stats.Volume()
+    counted = 0
+    for r in rows:
+        if r.get("transcribed"):
+            continue
+        volume.add(r.get("amount_min_cents"), r.get("amount_max_cents"),
+                   r.get("amount_exact_cents"))
+        counted += 1
+    return volume if counted else None
+
+
+def _volume_fields(volume: stats.Volume | None) -> dict:
+    """`record_alert` keyword arguments for a volume; all NULL for an unknown one."""
+    if volume is None:
+        return dict(volume_min_cents=None, volume_max_cents=None, volume_mid_cents=None)
+    return dict(volume_min_cents=volume.min_cents, volume_max_cents=volume.max_cents,
+                volume_mid_cents=volume.mid_cents)
 
 
 def _deliver(config: Config, text: str, dry_run: bool) -> bool:
