@@ -9,6 +9,7 @@ import {
   StatTile,
   VolumeRange,
 } from "../charts";
+import { ExportLink } from "../feed-controls";
 import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, ScanTag } from "../ui";
 
 export const dynamic = "force-dynamic";
@@ -194,7 +195,7 @@ async function TickerDetail({ ticker }: { ticker: string }) {
       </section>
 
       <section>
-        <SectionTitle>Every disclosed trade</SectionTitle>
+        <SectionTitle right={<ExportLink filters={{ ticker }} />}>Every disclosed trade</SectionTitle>
         <div className="space-y-1.5">
           {trades.map((r) => (
             <Card key={r.id} className="px-4 py-3">

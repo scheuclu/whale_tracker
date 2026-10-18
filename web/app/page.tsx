@@ -1,41 +1,45 @@
 import { redirect } from "next/navigation";
-import { getConsensusTickers, getPipeline, getTransactions } from "@/lib/queries";
-import { memberHref, memberLabel, shortDate, usd } from "@/lib/format";
+import { getConsensusTickers, getPipeline, getTransactionTotals, getTransactions } from "@/lib/queries";
+import { FILTER_KEYS, feedHref, parseOffset, parseTransactionFilters } from "@/lib/feed-filters";
+import { memberHref, memberLabel, shortDate } from "@/lib/format";
 import { Card, DivergingSplit, Empty, SectionTitle, StatTile } from "./charts";
+import { ExportLink, FilterBar, Pagination, ShownLine } from "./feed-controls";
 import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, ScanTag, TickerChip } from "./ui";
 
 export const dynamic = "force-dynamic";
 
+/** Trades per page; `?offset=` pages through the rest, newest first. */
+const PAGE = 120;
+
 export default async function FeedPage({
   searchParams,
 }: {
-  searchParams: Promise<{ action?: string; member?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
+  const memberParam = Array.isArray(params.member) ? params.member[0] : params.member;
+  const actionParam = Array.isArray(params.action) ? params.action[0] : params.action;
   // The feed used to double as the member view; the member page replaced it.
-  if (params.member) redirect(memberHref(params.member, params.action));
+  if (memberParam) redirect(memberHref(memberParam, actionParam));
 
-  let rows, consensus, pipeline;
+  const { filters, ignored } = parseTransactionFilters(params);
+  const offset = parseOffset(params.offset);
+  // The filter form submits every field, blank ones included; send the
+  // reader to the canonical URL so a copied link carries only the filters.
+  // Not when something was ignored: the notice about it must still render.
+  if (!ignored.length && FILTER_KEYS.some((k) => params[k] === "")) redirect(feedHref(filters, offset));
+
+  let rows, totals, consensus, pipeline;
   try {
-    [rows, consensus, pipeline] = await Promise.all([
-      getTransactions({ action: params.action, limit: 120 }),
+    [rows, totals, consensus, pipeline] = await Promise.all([
+      getTransactions({ ...filters, limit: PAGE, offset }),
+      getTransactionTotals(filters),
       getConsensusTickers(90, 6),
       getPipeline(),
     ]);
   } catch (err) {
     return <Empty>{(err as Error).message}</Empty>;
   }
-
-  // Transcribed rows are listed but never summed: the amount is a box read
-  // off a scan. Mirrors `MID` in lib/queries.ts.
-  const totalMid = rows.reduce(
-    (a, r) =>
-      r.transcribed
-        ? a
-        : a + (r.amount_exact_cents ?? ((r.amount_min_cents ?? 0) + (r.amount_max_cents ?? r.amount_min_cents ?? 0)) / 2),
-    0
-  );
-  const transcribedShown = rows.filter((r) => r.transcribed).length;
 
   return (
     <div className="space-y-8">
@@ -67,20 +71,20 @@ export default async function FeedPage({
         </section>
       ) : null}
 
-      <section>
+      <section id="trades">
         <SectionTitle
           right={
-            <div className="flex gap-1 text-[11px]">
+            <div className="flex items-center gap-1 text-[11px]">
               {[
                 { k: undefined, label: "All" },
-                { k: "buy", label: "Buys" },
-                { k: "sell", label: "Sells" },
+                { k: "buy" as const, label: "Buys" },
+                { k: "sell" as const, label: "Sells" },
               ].map((f) => (
                 <a
                   key={f.label}
-                  href={f.k ? `/?action=${f.k}` : "/"}
+                  href={feedHref({ ...filters, action: f.k })}
                   className={`rounded-full border px-2.5 py-1 transition-colors ${
-                    (params.action ?? undefined) === f.k
+                    filters.action === f.k
                       ? "border-primary/40 bg-primary/10 text-foreground"
                       : "border-border text-muted-foreground hover:bg-muted"
                   }`}
@@ -88,20 +92,19 @@ export default async function FeedPage({
                   {f.label}
                 </a>
               ))}
+              <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+              <ExportLink filters={filters} />
             </div>
           }
         >
           Recent trades
         </SectionTitle>
 
+        <FilterBar filters={filters} ignored={ignored} />
+
         {rows.length ? (
           <>
-            <p className="mb-3 text-xs text-muted-foreground">
-              {rows.length} trades shown · {usd(totalMid)} estimated total (bracket midpoints)
-              {transcribedShown
-                ? ` · ${transcribedShown} transcribed from scans, not in the total`
-                : ""}
-            </p>
+            <ShownLine offset={offset} shown={rows.length} totals={totals} />
             <div className="space-y-1.5">
               {rows.map((r) => (
                 <Card key={r.id} className="lift px-4 py-3">
@@ -139,7 +142,15 @@ export default async function FeedPage({
                 </Card>
               ))}
             </div>
+            <Pagination filters={filters} offset={offset} shown={rows.length} total={totals.trades} page={PAGE} />
           </>
+        ) : offset > 0 && totals.trades ? (
+          <Empty>
+            Nothing past trade {totals.trades.toLocaleString()}.{" "}
+            <a href={feedHref(filters)} className="underline underline-offset-2 hover:text-primary">
+              Back to the newest
+            </a>
+          </Empty>
         ) : (
           <Empty>No trades match this filter.</Empty>
         )}

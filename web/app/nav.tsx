@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
-import { Activity, Briefcase, Landmark, LineChart, Moon, Receipt, ScanLine, Sun } from "lucide-react";
+import { Activity, Briefcase, Landmark, LineChart, Moon, Receipt, ScanLine, Search, Sun } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const TABS = [
@@ -57,5 +57,30 @@ export function ThemeToggle() {
     >
       {mounted && resolvedTheme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
     </button>
+  );
+}
+
+/**
+ * Global search: members, tickers and insider issuers. A plain GET form to
+ * /search, so it works before hydration and the result is a URL.
+ */
+export function SearchForm({ className }: { className?: string }) {
+  return (
+    <form
+      method="get"
+      action="/search"
+      role="search"
+      className={cn("glass relative flex items-center rounded-full border border-border bg-card", className)}
+    >
+      <Search className="pointer-events-none absolute left-3 size-3.5 text-muted-foreground" aria-hidden />
+      <input
+        type="search"
+        name="q"
+        maxLength={80}
+        placeholder="Search member, ticker, issuer"
+        aria-label="Search members, tickers and insider issuers"
+        className="h-8 w-44 rounded-full bg-transparent pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:w-64 focus:outline-none sm:w-56"
+      />
+    </form>
   );
 }
