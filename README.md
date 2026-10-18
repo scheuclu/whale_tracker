@@ -472,6 +472,30 @@ bot's commits without redeploying.
 Locally, no configuration is needed — it reads `../data/trades.sqlite3`
 directly.
 
+### Public URL, search engines and link previews
+
+Canonical URLs, `sitemap.xml`, `robots.txt`, Open Graph cards and JSON-LD are
+all absolute, built on one origin (`web/lib/site.ts`):
+
+| Env var | Value |
+|---|---|
+| `NEXT_PUBLIC_SITE_URL` | `https://whaletracker-blue.vercel.app` (the public domain) |
+
+Set it for **Production and Preview**. Without it the app falls back to
+Vercel's `VERCEL_PROJECT_PRODUCTION_URL`, then to `http://localhost:3000`.
+It must name the public domain, never a deployment URL
+(`whaletracker-<team>.vercel.app`, `-git-main-`, PR previews): those sit
+behind Vercel SSO and answer crawlers with a redirect and `noindex`, so a
+canonical or sitemap entry pointing at one is unreachable. `robots.txt` is
+rendered at build time, so a change needs a redeploy.
+
+Entity pages have path URLs — `/members/<name>-<bioguide id>` (e.g.
+`/members/nancy-pelosi-p000197`; a filer the roster could not match has the
+name alone) and `/tickers/<SYMBOL>` (`/tickers/BRK.B`). The old
+`/politicians?m=<name>`, `/?member=<name>` and `/tickers?t=<symbol>` links —
+including those in Telegram alerts already sent — answer with a permanent
+(308) redirect.
+
 ## Weekly self-review
 
 A second workflow (`.github/workflows/weekly-review.yml`) runs Mondays. It

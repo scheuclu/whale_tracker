@@ -1,12 +1,23 @@
 import { Search } from "lucide-react";
-import { memberHref, shortDate } from "@/lib/format";
+import { memberHref, shortDate, tickerHref } from "@/lib/format";
 import { searchInsiderIssuers } from "@/lib/insider-queries";
 import { searchMembers, searchRoster, searchTickers } from "@/lib/queries";
 import { Card, Empty, SectionTitle } from "../charts";
 import { PartyBadge } from "../ui";
 import { MemberAvatar } from "../avatar";
+import { pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
+
+// Result pages are `noindex, follow`: an endless space of near-duplicate
+// URLs that only point at the member and ticker pages, which the sitemap
+// lists directly. The links are still followed.
+export const metadata = pageMetadata({
+  title: "Search members, tickers and insider issuers",
+  description: "Find a member of Congress, a ticker or a corporate insider issuer.",
+  path: "/search",
+  noindex: true,
+});
 
 /** Hits per list; the lists say when there may be more. */
 const LIMIT = 20;
@@ -102,7 +113,7 @@ async function Results({ q }: { q: string }) {
             {members.map((m) => (
               <a
                 key={m.member_name}
-                href={memberHref(m.member_name)}
+                href={memberHref(m.member_name, m.bioguide_id)}
                 className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-[13px] hover:bg-muted/50"
               >
                 <MemberAvatar name={m.member_name} bioguideId={m.bioguide_id} size="md" />
@@ -140,7 +151,7 @@ async function Results({ q }: { q: string }) {
             {tickers.map((t) => (
               <a
                 key={t.ticker}
-                href={`/tickers?t=${encodeURIComponent(t.ticker)}`}
+                href={tickerHref(t.ticker)}
                 className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-[13px] hover:bg-muted/50"
               >
                 <span className="font-mono font-semibold">{t.ticker}</span>

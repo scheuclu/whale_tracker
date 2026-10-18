@@ -1,8 +1,14 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { getFilingSpan } from "@/lib/entities";
+import { getInsiderTotals } from "@/lib/insider-queries";
+import { pageMetadata } from "@/lib/seo";
+import { datasetLd, organizationLd, websiteLd } from "@/lib/structured-data";
+import { JsonLd } from "./json-ld";
 import { getConsensusTickers, getPipeline, getTransactionTotals, getTransactions, getWeeklyActivity } from "@/lib/queries";
 import { getBothSides, getSharedTickers, type BothSidesRow, type SharedTickers } from "@/lib/crossover-queries";
 import { FILTER_KEYS, feedHref, parseOffset, parseTransactionFilters } from "@/lib/feed-filters";
-import { memberHref } from "@/lib/format";
+import { tickerHref } from "@/lib/format";
 import { Card, DivergingSplit, Empty, SectionTitle, StatTile, type StatDelta } from "./charts";
 import { ExportLink, FilterBar, Pagination, ShownLine } from "./feed-controls";
 import { DirectionFilter, FeedList } from "./feed-list";
@@ -39,16 +45,59 @@ function tradesDelta(current: number, prior: number | null): StatDelta | undefin
   };
 }
 
+/**
+ * The feed's filters and pages are views of this one page, so every variant
+ * canonicalises to `/`: the newest-first list changes with each pipeline run,
+ * and a filtered or offset copy of it has nothing a search result should
+ * point at instead.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  let lead = "Every stock trade members of Congress disclose under the STOCK Act";
+  try {
+    const p = await getPipeline();
+    lead = `${p.totals.transactions.toLocaleString("en-US")} stock trades disclosed by ${p.totals.members.toLocaleString("en-US")} members of Congress under the STOCK Act`;
+  } catch {
+    /* generic copy */
+  }
+  return pageMetadata({
+    title: "Whale Tracker: congressional and insider stock trades",
+    absoluteTitle: true,
+    description: `${lead}, newest first, plus SEC Form 4 insider trades. Amounts are shown as the ranges filed, never as invented exact figures.`,
+    path: "/",
+  });
+}
+
+/** Organization, WebSite (with the search action) and the Dataset node. */
+async function SiteStructuredData() {
+  let dataset = null;
+  try {
+    const [p, span, insider] = await Promise.all([
+      getPipeline(),
+      getFilingSpan(),
+      getInsiderTotals().catch(() => ({ trades: 0 })),
+    ]);
+    dataset = datasetLd({
+      firstFilingDate: span.first,
+      lastFilingDate: span.last,
+      transactions: p.totals.transactions,
+      members: p.totals.members,
+      insiderTrades: insider.trades,
+    });
+  } catch {
+    /* no database: the site nodes still stand on their own */
+  }
+  return <JsonLd data={dataset ? [organizationLd(), websiteLd(), dataset] : [organizationLd(), websiteLd()]} />;
+}
+
 export default async function FeedPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
-  const memberParam = Array.isArray(params.member) ? params.member[0] : params.member;
-  const actionParam = Array.isArray(params.action) ? params.action[0] : params.action;
-  // The feed used to double as the member view; the member page replaced it.
-  if (memberParam) redirect(memberHref(memberParam, actionParam));
+  // The feed used to double as the member view (`?member=<name>`); that URL
+  // is answered with a 308 to /members/<slug> before it gets here
+  // (next.config.ts → app/api/legacy-redirect).
 
   const { filters, ignored } = parseTransactionFilters(params);
   const offset = parseOffset(params.offset);
@@ -74,6 +123,10 @@ export default async function FeedPage({
 
   return (
     <div className="space-y-8">
+      <SiteStructuredData />
+      {/* The wordmark and active tab name this page visually; the heading is
+          for screen readers and crawlers and changes nothing on screen. */}
+      <h1 className="sr-only">Stock trades by members of Congress and corporate insiders</h1>
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile
           label="Trades"
@@ -120,7 +173,7 @@ export default async function FeedPage({
                 sublabel: c.asset_name ?? undefined,
                 buy: c.buy_politicians,
                 sell: c.sell_politicians,
-                href: `/tickers?t=${encodeURIComponent(c.ticker)}`,
+                href: tickerHref(c.ticker),
               }))}
             />
           </Card>
@@ -222,7 +275,7 @@ async function BothSides() {
               <tr key={`${r.ticker}-${r.direction}`} className="border-b border-border/50 last:border-0 hover:bg-muted/50">
                 <td className="px-4 py-2">
                   <a
-                    href={`/tickers?t=${encodeURIComponent(r.ticker)}`}
+                    href={tickerHref(r.ticker)}
                     className="font-mono font-semibold hover:text-primary"
                   >
                     {r.ticker}
@@ -232,7 +285,7 @@ async function BothSides() {
                   <ActionBadge action={r.direction === "buy" ? "purchase" : "sale"} />
                 </td>
                 <td className="tabular px-4 py-2 text-right">
-                  <a href={`/tickers?t=${encodeURIComponent(r.ticker)}`} className="font-medium hover:text-primary">
+                  <a href={tickerHref(r.ticker)} className="font-medium hover:text-primary">
                     {plural(r.members, "member")}
                   </a>
                   <span className="text-muted-foreground"> · {plural(r.member_trades, "trade")}</span>

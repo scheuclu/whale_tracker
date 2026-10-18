@@ -1,7 +1,7 @@
 import { getInsiderMonthly } from "@/lib/insider-queries";
 import { getMonthlyDelay, getMonthlyScans, getMonthlyTrades, getRisingTickers } from "@/lib/trend-queries";
 import { MONTH_KEY, axisLabel, monthKeys, monthLabel, previousMonth } from "@/lib/months";
-import { usd } from "@/lib/format";
+import { tickerHref, usd } from "@/lib/format";
 import {
   Card,
   ChartLegend,
@@ -16,8 +16,17 @@ import {
   type Texture,
 } from "../charts";
 import { DataTable } from "../data-table";
+import { pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
+
+/** Window and ticker parameters are views of `/trends`. */
+export const metadata = pageMetadata({
+  title: "Congressional trading trends by month",
+  description:
+    "Monthly trades disclosed by members of Congress, disclosure delay against the 45-day STOCK Act deadline, rising tickers and scanned paper filings, beside SEC Form 4 insider activity.",
+  path: "/trends",
+});
 
 /**
  * Change over time. Every other page ranks a snapshot; this one buckets by
@@ -170,6 +179,8 @@ export default async function TrendsPage({
 
   return (
     <div className="space-y-8">
+      {/* Named by the active tab visually; the heading is for screen readers and crawlers. */}
+      <h1 className="sr-only">Congressional trading trends by month</h1>
       <div className="flex flex-wrap items-center gap-1 text-[11px]">
         {WINDOWS.map((w) => (
           <a key={w.months} href={query({ w: w.months })} className={pill(months === w.months)}>
@@ -338,7 +349,7 @@ export default async function TrendsPage({
                   sublabel: `${r.buy_members} bought, ${r.sell_members} sold`,
                   value: r.gain,
                   valueLabel: `+${r.gain} (${r.prev_members}→${r.members})`,
-                  href: `/tickers?t=${encodeURIComponent(r.ticker)}`,
+                  href: tickerHref(r.ticker),
                 }))}
               />
             ) : (

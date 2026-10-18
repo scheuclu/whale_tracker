@@ -135,7 +135,7 @@ function Participants({ a }: { a: AlertRow }) {
     if (!name) return <span className="text-muted-foreground">unknown member</span>;
     return (
       <>
-        <Link href={memberHref(name)} className="font-medium hover:text-primary">
+        <Link href={memberHref(name, a.bioguide_id)} className="font-medium hover:text-primary">
           {name}
         </Link>
         <PartyBadge party={a.party} />

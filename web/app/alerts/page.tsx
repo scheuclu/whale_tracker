@@ -12,8 +12,17 @@ import { getAlertOutcomes, getOutcomeSummary } from "@/lib/outcome-queries";
 import { Empty, SectionTitle, StatTile } from "../charts";
 import { AlertRowCard } from "./alert-row";
 import { OutcomeLine, OutcomeSummarySection } from "./outcomes";
+import { pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
+
+/** Kind filters and row counts are views of `/alerts`. */
+export const metadata = pageMetadata({
+  title: "Alert log: clusters, late filings and large trades",
+  description:
+    "Every alert the tracker sent, newest first, with the message as it went out: congressional clusters, late STOCK Act filings, watched members and insider Form 4 rules, and what each ticker did afterwards.",
+  path: "/alerts",
+});
 
 /**
  * Every alert the bot sent, newest first, with what the message said. This
@@ -68,6 +77,8 @@ export default async function AlertsPage({
 
   return (
     <div className="space-y-8">
+      {/* Named by the active tab visually; the heading is for screen readers and crawlers. */}
+      <h1 className="sr-only">Alert log</h1>
       <p className="max-w-3xl text-sm text-muted-foreground">
         Every alert sent to Telegram, newest first, with the message as it went out. Congressional
         amounts are disclosed brackets, so a range is shown and any midpoint is an estimate; insider

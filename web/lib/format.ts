@@ -140,10 +140,61 @@ export function memberLabel(
   return where ? `${title} ${name} (${where})` : `${title} ${name}`;
 }
 
-/** The member's page. Keyed on the display name: that is how the leaderboard
- *  groups, and an unmatched filing has only the name printed on the PDF. */
-export function memberHref(name: string, action?: string): string {
-  return `/politicians?m=${encodeURIComponent(name)}${action ? `&action=${action}` : ""}`;
+/**
+ * The slug of a name: accents folded, lower case, every run of anything that
+ * is not a letter or digit collapsed to one hyphen. "Gilbert Ray Cisneros,
+ * Jr." → "gilbert-ray-cisneros-jr". Mirrored by `_slugify` in
+ * src/whale/telegram.py; keep the two in agreement.
+ */
+export function slugify(text: string): string {
+  return text
+    .normalize("NFKD")
+    .replace(/\p{M}+/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+const BIOGUIDE_ID = /^[A-Z]\d{6}$/;
+const SLUG_BIOGUIDE = /-([a-z]\d{6})$/;
+
+/**
+ * A member's URL slug. Roster-matched members are keyed on the bioguide id,
+ * with the name in front for the reader: `nancy-pelosi-p000197`. The id is
+ * what makes the URL stable — names collide, and the roster's spelling of
+ * one changes — so the name part is cosmetic: a stale one redirects to the
+ * current spelling. A filer the roster could not match has only the name
+ * printed on the PDF, so the slug is that name alone.
+ */
+export function memberSlug(name: string, bioguideId?: string | null): string {
+  const base = slugify(name) || "member";
+  return bioguideId && BIOGUIDE_ID.test(bioguideId) ? `${base}-${bioguideId.toLowerCase()}` : base;
+}
+
+/** The bioguide id a slug ends in (upper-cased), or null for a name-only slug. */
+export function slugBioguide(slug: string): string | null {
+  const m = SLUG_BIOGUIDE.exec(slug.toLowerCase());
+  return m ? m[1].toUpperCase() : null;
+}
+
+/**
+ * The member's page, `/members/<slug>`. Pass the bioguide id whenever the
+ * row has one: without it the link is the name-only slug, which still
+ * resolves but costs the reader a redirect to the canonical URL. A filter
+ * (`action=buy|sell`) stays a query parameter on the same page.
+ */
+export function memberHref(name: string, bioguideId?: string | null, action?: string): string {
+  const path = `/members/${memberSlug(name, bioguideId)}`;
+  return action ? `${path}?action=${encodeURIComponent(action)}` : path;
+}
+
+/**
+ * A ticker's page, `/tickers/<SYMBOL>`. Symbols are stored upper case and
+ * may carry a class suffix (`BRK.B`, `MOG.A`); the segment is encoded so
+ * anything else a filing printed still round-trips.
+ */
+export function tickerHref(symbol: string): string {
+  return `/tickers/${encodeURIComponent(symbol.toUpperCase())}`;
 }
 
 /** One committee's roster with each seat holder's trading totals, keyed on

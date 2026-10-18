@@ -62,7 +62,7 @@ def test_summary_carries_member_date_count_links_and_fits():
     assert "New filing — Rep. Kevin Hern (R-OK1)" in msg
     assert "Filed 2026-09-25 · 45 transactions" in msg
     assert "43 buys · 2 sells" in msg
-    assert "https://whale.example/politicians?m=Kevin%20Hern" in msg
+    assert "https://whale.example/members/kevin-hern" in msg
     assert msg.rstrip().endswith("https://disclosures-clerk.house.gov/x/20035491.pdf")
 
 
@@ -120,7 +120,7 @@ def test_pathological_filing_still_fits_and_keeps_both_links():
     msg = _summary(rows)
     assert len(msg) <= TELEGRAM_LIMIT
     assert "400 transactions" in msg
-    assert "https://whale.example/politicians?m=Kevin%20Hern" in msg
+    assert "https://whale.example/members/kevin-hern" in msg
     assert msg.rstrip().endswith("20035491.pdf")
 
 
@@ -136,11 +136,18 @@ def test_html_in_names_is_escaped():
 
 
 def test_member_page_url_matches_the_dashboards_memberhref():
-    # web/lib/format.ts: `/politicians?m=${encodeURIComponent(name)}`.
-    assert member_page_url("Gilbert Ray Cisneros, Jr.") == \
-        "/politicians?m=Gilbert%20Ray%20Cisneros%2C%20Jr."
-    assert member_page_url("Kevin Hern", "https://whale.example/") == \
-        "https://whale.example/politicians?m=Kevin%20Hern"
+    # web/lib/format.ts `memberHref`; the same cases are pinned in
+    # web/lib/format.test.ts, so the two slug functions cannot drift apart.
+    assert member_page_url("Gilbert Ray Cisneros, Jr.", None, "C001123") == \
+        "/members/gilbert-ray-cisneros-jr-c001123"
+    assert member_page_url("Kevin Hern", "https://whale.example/", "H001082") == \
+        "https://whale.example/members/kevin-hern-h001082"
+    # An unmatched filer has only the printed name; accents fold.
+    assert member_page_url("Nydia M. Velázquez") == "/members/nydia-m-velazquez"
+    assert member_page_url("O'Halleran, Tom") == "/members/o-halleran-tom"
+    # A malformed id is not put in a URL.
+    assert member_page_url("Kevin Hern", None, "h1082") == "/members/kevin-hern"
+    assert member_page_url("") == "/members/member"
 
 
 def test_dashboard_url_is_read_from_config_and_absent_means_relative(tmp_path):
@@ -200,7 +207,7 @@ def test_a_routine_filing_past_the_budget_is_summarised_and_consumed(conn, sent)
     assert pipeline.notify_pending(conn, _config("https://whale.example")) == 1
     [msg] = sent
     assert "45 transactions — too many to list, so a summary" in msg
-    assert "Full table: https://whale.example/politicians?m=Kevin%20Hern" in msg
+    assert "Full table: https://whale.example/members/kevin-hern-h001082" in msg
     assert "Largest 8 by bracket floor" in msg
     row = conn.execute("SELECT status, notified_at FROM filings").fetchone()
     assert row["status"] == "notified" and row["notified_at"]
@@ -218,7 +225,7 @@ def test_a_filing_at_the_budget_still_gets_the_full_list(conn, sent):
 def test_without_a_dashboard_url_the_link_is_the_relative_path(conn, sent):
     _filing(conn, FILING_ROW_BUDGET + 1)
     pipeline.notify_pending(conn, _config())
-    assert "Full table: /politicians?m=Kevin%20Hern" in sent[0]
+    assert "Full table: /members/kevin-hern-h001082" in sent[0]
 
 
 def test_a_watched_members_large_filing_is_still_split_per_transaction(conn, sent):

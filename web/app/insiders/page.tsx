@@ -10,7 +10,7 @@ import {
   type InsiderTradeRow,
 } from "@/lib/insider-queries";
 import { getTickerDetail, getTickerMembers, type TickerMemberRow, type TickerRow } from "@/lib/queries";
-import { memberHref, memberLabel, price, range, shares, shortDate, usd } from "@/lib/format";
+import { memberHref, memberLabel, price, range, shares, shortDate, tickerHref, usd } from "@/lib/format";
 import { Card, DivergingSplit, Empty, MagnitudeBars, SectionTitle, StatTile } from "../charts";
 import { ActionBadge, Amount, InsiderDelayTag, PartyBadge, PlanTag, ResponsiveTable, RoleTag, SectorTag, TickerChip } from "../ui";
 import { MemberAvatar } from "../avatar";
@@ -35,8 +35,53 @@ import {
   sortHref,
 } from "../sortable-table";
 import { RowLinkBody, StickyThead } from "../table-client";
+import type { Metadata } from "next";
+import { clip, pageMetadata } from "@/lib/seo";
+import { plural } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * An issuer (`?t=<SYMBOL>`) is its own page and canonicalises to itself;
+ * every window, direction, insider filter, sort and row count of the list is
+ * a view of `/insiders`.
+ */
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<{ t?: string }>;
+}): Promise<Metadata> {
+  const { t } = await searchParams;
+  if (t) {
+    const ticker = t.toUpperCase();
+    const path = `/insiders?t=${encodeURIComponent(ticker)}`;
+    let issuer = null;
+    try {
+      issuer = await getInsiderIssuer(ticker);
+    } catch {
+      /* fall through to the not-found copy */
+    }
+    if (!issuer) {
+      return pageMetadata({ title: `${ticker} insider trades`, description: `No stored insider trades for ${ticker}.`, path, noindex: true });
+    }
+    const name = issuer.issuer_name ? ` (${issuer.issuer_name})` : "";
+    return pageMetadata({
+      title: `${issuer.ticker ?? ticker}${name} insider trades: SEC Form 4`,
+      description: clip(
+        `${plural(issuer.insiders, "corporate insider")} filed ${plural(issuer.trades, "open-market trade")} in ${issuer.ticker ?? ticker}${name} on SEC Form 4: ` +
+          `${issuer.buys} buys and ${issuer.sells} sells${issuer.last_tx_date ? `, last on ${issuer.last_tx_date}` : ""}. Values are shares × reported price.`,
+        200
+      ),
+      path,
+    });
+  }
+  return pageMetadata({
+    title: "Corporate insider trades: SEC Form 4 purchases and sales",
+    description:
+      "Open-market purchases and sales by corporate officers, directors and 10% owners from SEC Form 4 filings, by issuer, with clusters of insiders trading together. Values are shares × reported price.",
+    path: "/insiders",
+  });
+}
 
 const ISSUER_ORDER_NAMES: Record<IssuerSortKey, string> = {
   value: "value bought + sold",
@@ -164,6 +209,8 @@ export default async function InsidersPage({
 
   return (
     <div className="space-y-8">
+      {/* Named by the active tab visually; the heading is for screen readers and crawlers. */}
+      <h1 className="sr-only">Corporate insider trades from SEC Form 4</h1>
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <StatTile label="Filings kept" value={totals.filings.toLocaleString()} hint="open-market ≥ $50k" />
         <StatTile
@@ -642,7 +689,7 @@ async function MembersInTicker({ ticker }: { ticker: string }) {
       </section>
     );
   }
-  const href = `/tickers?t=${encodeURIComponent(ticker)}`;
+  const href = tickerHref(ticker);
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
   return (
@@ -679,7 +726,7 @@ async function MembersInTicker({ ticker }: { ticker: string }) {
               {members.map((m) => (
                 <div key={m.member_name} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
                   <a
-                    href={memberHref(m.member_name)}
+                    href={memberHref(m.member_name, m.bioguide_id)}
                     className="inline-flex items-center gap-2 font-medium hover:text-primary"
                   >
                     <MemberAvatar name={m.member_name} bioguideId={m.bioguide_id} size="sm" />

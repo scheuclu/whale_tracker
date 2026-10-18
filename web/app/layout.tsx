@@ -10,21 +10,24 @@ import { SiteFooter } from "./site-footer";
 import { getPipeline } from "@/lib/queries";
 import { getInsiderTotals } from "@/lib/insider-queries";
 import { relativeTime } from "@/lib/format";
+import { SITE_DESCRIPTION, SITE_NAME, siteUrl } from "@/lib/site";
 import { SearchForm, Tabs, ThemeToggle } from "./nav";
 import "./globals.css";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
-const DESCRIPTION =
-  "US congressional and corporate-insider stock trades: tickers, volume, and who is trading";
-
+// Defaults only. Every page sets its own title, description and canonical
+// through `pageMetadata` (lib/seo.ts); no canonical is set here, because a
+// layout-level one would be inherited by any page that forgot its own and
+// point it at the home page.
 export const metadata: Metadata = {
-  title: { default: "Whale Tracker", template: "%s · Whale Tracker" },
-  description: DESCRIPTION,
-  applicationName: "Whale Tracker",
-  openGraph: { type: "website", siteName: "Whale Tracker", title: "Whale Tracker", description: DESCRIPTION },
-  twitter: { card: "summary_large_image", title: "Whale Tracker", description: DESCRIPTION },
+  metadataBase: new URL(siteUrl()),
+  title: { default: SITE_NAME, template: `%s · ${SITE_NAME}` },
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  openGraph: { type: "website", siteName: SITE_NAME, locale: "en_US", title: SITE_NAME, description: SITE_DESCRIPTION },
+  twitter: { card: "summary_large_image", title: SITE_NAME, description: SITE_DESCRIPTION },
 };
 
 // Browser chrome follows the page surface (--background) in each scheme.

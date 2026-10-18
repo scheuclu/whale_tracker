@@ -8,8 +8,9 @@ message across sends).
 from __future__ import annotations
 
 import logging
+import re
 import time
-from urllib.parse import quote
+import unicodedata
 
 import httpx
 
@@ -160,15 +161,34 @@ FILING_ROW_BUDGET = 40
 SUMMARY_TOP_TRADES = 8
 
 
-def member_page_url(name: str, base_url: str | None = None) -> str:
-    """The member's dashboard page.
+_BIOGUIDE = re.compile(r"[A-Z]\d{6}")
 
-    Mirrors `memberHref` in web/lib/format.ts: keyed on the display name,
-    because that is how the leaderboard groups and an unmatched filing has
-    only the name printed on the PDF. Relative when `dashboard.url` is not
+
+def _slugify(text: str) -> str:
+    """Mirrors `slugify` in web/lib/format.ts: accents folded, lower case,
+    every run of anything but a-z/0-9 collapsed to one hyphen."""
+    folded = "".join(c for c in unicodedata.normalize("NFKD", text)
+                     if not unicodedata.category(c).startswith("M"))
+    return re.sub(r"[^a-z0-9]+", "-", folded.lower()).strip("-")
+
+
+def member_page_url(name: str, base_url: str | None = None,
+                    bioguide_id: str | None = None) -> str:
+    """The member's dashboard page, `/members/<slug>`.
+
+    Mirrors `memberHref` / `memberSlug` in web/lib/format.ts: the name slug,
+    plus the bioguide id when the roster matched the filing
+    (`nancy-pelosi-p000197`) — the id is what keeps the link working if the
+    roster respells the name. An unmatched filing has only the name printed
+    on the PDF, so its slug is the name alone. The dashboard still answers
+    the old `/politicians?m=<name>` form with a permanent redirect, so links
+    in alerts already sent keep working. Relative when `dashboard.url` is not
     configured — Telegram will not make it clickable, but it is the path.
     """
-    path = f"/politicians?m={quote(name, safe='')}"
+    slug = _slugify(name) or "member"
+    if bioguide_id and _BIOGUIDE.fullmatch(bioguide_id):
+        slug = f"{slug}-{bioguide_id.lower()}"
+    path = f"/members/{slug}"
     return f"{base_url.rstrip('/')}{path}" if base_url else path
 
 

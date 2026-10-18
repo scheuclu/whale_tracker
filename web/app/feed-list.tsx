@@ -170,7 +170,7 @@ function FilingBlockView({ block, today }: { block: FilingBlock<TransactionRow>;
               <PartyBadge party={r0.party} />
             </span>
             <a
-              href={memberHref(r0.member_name)}
+              href={memberHref(r0.member_name, r0.bioguide_id)}
               className="min-w-0 truncate text-[13px] font-medium hover:text-primary focus-visible:text-primary lg:line-clamp-2 lg:whitespace-normal lg:leading-snug"
               title={label}
             >

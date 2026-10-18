@@ -4,8 +4,18 @@ import { getAlertTotals, KIND_LABEL, type AlertKind } from "@/lib/alert-queries"
 import { duration, relativeTime } from "@/lib/format";
 import { Card, Empty, SectionTitle, StatTile } from "../charts";
 import { ResponsiveTable, StatusBadge } from "../ui";
+import { pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
+
+// Indexed on purpose: coverage, freshness and source health are what a
+// reader (or an agent) needs to judge how far to trust the rest of the site.
+export const metadata = pageMetadata({
+  title: "Data pipeline: coverage and freshness",
+  description:
+    "How current and complete the data is: filings indexed, trades parsed, scanned filings not yet readable, recent pipeline runs, and the status of the House, Senate eFD and SEC EDGAR sources.",
+  path: "/pipeline",
+});
 
 export default async function PipelinePage() {
   let p, ins, alerts;
@@ -24,6 +34,8 @@ export default async function PipelinePage() {
 
   return (
     <div className="space-y-8">
+      {/* Reached from the header's sync pill; the heading names it for screen readers and crawlers. */}
+      <h1 className="sr-only">Data pipeline: coverage and freshness</h1>
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile label="Filings indexed" value={p.totals.filings.toLocaleString()} />
         <StatTile label="Trades parsed" value={p.totals.transactions.toLocaleString()} />

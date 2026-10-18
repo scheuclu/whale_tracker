@@ -17,6 +17,8 @@ export type ScanFilingRow = {
   id: number;
   doc_id: string;
   member_name: string;
+  /** The roster's id, for the member's URL; NULL for an unmatched filer. */
+  bioguide_id: string | null;
   party: string | null;
   state: string | null;
   district: string | null;
@@ -106,7 +108,7 @@ const IS_SCAN = `f.chamber = 'house' AND (f.parse_method IN ('scanned', 'vision'
 
 const FILINGS = `
   SELECT f.id, f.doc_id, COALESCE(p.full_name, f.filer_name) AS member_name,
-         p.party, p.state, p.district, f.filing_date, f.status, f.parse_method,
+         p.party, p.state, p.district, p.bioguide_id, f.filing_date, f.status, f.parse_method,
          f.last_error, f.pdf_url,
          (SELECT COUNT(*) FROM scan_pages s WHERE s.filing_id = f.id) AS pages,
          (SELECT COUNT(*) FROM scan_pages s WHERE s.filing_id = f.id AND s.error IS NOT NULL) AS pages_failed,

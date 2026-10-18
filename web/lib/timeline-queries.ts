@@ -22,6 +22,8 @@ export type TimelineTrade = {
   amount_max_cents: number | null;
   amount_exact_cents: number | null;
   member_name: string;
+  /** The roster's id, for the member's URL; NULL for an unmatched filer. */
+  bioguide_id: string | null;
   party: string | null;
   state: string | null;
   district: string | null;
@@ -56,7 +58,7 @@ export async function getTimelineTrades(opts: { ticker?: string; member?: string
               t.asset_type, t.owner, t.amount_min_cents, t.amount_max_cents,
               t.amount_exact_cents,
               COALESCE(p.full_name, f.filer_name) AS member_name,
-              p.party, p.state, p.district, p.chamber,
+              p.party, p.state, p.district, p.chamber, p.bioguide_id,
               f.pdf_url,
               ${DELAY} AS delay_days,
               ${TRANSCRIBED} AS transcribed,

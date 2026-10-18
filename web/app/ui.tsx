@@ -8,6 +8,7 @@ import {
   isSell,
   optionLabel,
   range,
+  tickerHref,
 } from "@/lib/format";
 import { PARTY_LABEL } from "@/lib/members";
 import { Card } from "./charts";
@@ -211,7 +212,7 @@ export function TickerChip({
   }
   return (
     <Link
-      href={href ?? `/tickers?t=${encodeURIComponent(ticker)}`}
+      href={href ?? tickerHref(ticker)}
       className="inline-flex items-center rounded-md border border-border bg-card px-2 py-0.5 font-mono text-xs font-semibold tracking-tight transition-colors hover:border-primary/40 hover:bg-accent"
     >
       {ticker}
