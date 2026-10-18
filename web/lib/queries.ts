@@ -48,6 +48,8 @@ export type TransactionRow = {
   state: string | null;
   district: string | null;
   chamber: string | null;
+  /** The roster's id, for the member's portrait; NULL for an unmatched filer. */
+  bioguide_id?: string | null;
   pdf_url: string;
   filing_date: string | null;
   delay_days: number | null;
@@ -144,6 +146,8 @@ export type PoliticianRow = {
   avg_delay: number | null;
   avg_lag: number | null;
   late_count: number;
+  /** The roster's id, for the member's portrait; NULL for an unmatched filer. */
+  bioguide_id?: string | null;
 };
 
 /**
@@ -318,6 +322,7 @@ export async function getTransactions(opts: {
               t.amount_exact_cents,
               COALESCE(p.full_name, f.filer_name) AS member_name,
               p.party, p.state, p.district, p.chamber,
+              p.bioguide_id,
               f.pdf_url, f.filing_date,
               ${DELAY} AS delay_days,
               ${LAG} AS lag_days,
@@ -344,6 +349,7 @@ export async function getPoliticians(days?: number, limit = 60): Promise<Politic
     .prepare(
       `SELECT COALESCE(p.full_name, f.filer_name) AS member_name,
               p.party, p.state, p.district, p.chamber,
+              MAX(p.bioguide_id) AS bioguide_id,
               COUNT(*) AS trades,
               COUNT(DISTINCT t.ticker) AS tickers,
               SUM(t.action='purchase') AS buys,
@@ -488,6 +494,55 @@ export async function getPoliticianTickers(member: string, limit = 40): Promise<
 export async function getTickerDetail(ticker: string) {
   const rows = await getTickers(undefined, 5000);
   return rows.find((r) => r.ticker === ticker.toUpperCase()) ?? null;
+}
+
+export type TickerMemberRow = {
+  member_name: string;
+  bioguide_id: string | null;
+  party: string | null;
+  state: string | null;
+  district: string | null;
+  chamber: string | null;
+  trades: number;
+  buys: number;
+  sells: number;
+  volume_min: number;
+  /** NULL when any of the member's trades here is open-ended. */
+  volume_max: number | null;
+  /** Rows transcribed from scans: in `trades`, not in either bound. */
+  transcribed: number;
+  last_tx_date: string | null;
+};
+
+/**
+ * Everyone who disclosed a trade in one ticker, over every counted trade, so
+ * the trade counts sum to `getTickerDetail`'s. Grouped on the display name
+ * like `getPoliticians`: a filer the roster did not match is listed under
+ * the printed name (the "Members" tile counts roster matches only).
+ * Ordered by trade count, then the disclosed floor.
+ */
+export async function getTickerMembers(ticker: string): Promise<TickerMemberRow[]> {
+  const db = await getDb();
+  return db
+    .prepare(
+      `SELECT COALESCE(p.full_name, f.filer_name) AS member_name,
+              MAX(p.bioguide_id) AS bioguide_id,
+              p.party, p.state, p.district, p.chamber,
+              COUNT(*) AS trades,
+              SUM(t.action='purchase') AS buys,
+              SUM(t.action IN ('sale','sale_partial')) AS sells,
+              SUM(COALESCE(${VOL_MIN},0)) AS volume_min,
+              ${VOLUME_MAX} AS volume_max,
+              SUM(${TRANSCRIBED}) AS transcribed,
+              MAX(t.tx_date) AS last_tx_date
+       FROM transactions t
+       JOIN filings f ON f.id = t.filing_id
+       LEFT JOIN politicians p ON p.id = t.politician_id
+       WHERE f.status IN ${COUNTED} AND t.ticker = ?
+       GROUP BY member_name
+       ORDER BY trades DESC, volume_min DESC, member_name`
+    )
+    .all(ticker.toUpperCase()) as TickerMemberRow[];
 }
 
 /**
@@ -722,6 +777,8 @@ export type LateMemberRow = {
   /** Mean delay of the late trades only. */
   avg_late_delay: number;
   last_late_filing: string | null;
+  /** The roster's id, for the member's portrait; NULL for an unmatched filer. */
+  bioguide_id?: string | null;
 };
 
 /**
@@ -736,6 +793,7 @@ export async function getLateMembers(limit = 60): Promise<LateMemberRow[]> {
     .prepare(
       `SELECT COALESCE(p.full_name, f.filer_name) AS member_name,
               p.party, p.state, p.district, p.chamber,
+              MAX(p.bioguide_id) AS bioguide_id,
               COUNT(*) AS trades,
               SUM(CASE WHEN ${LATE} THEN 1 ELSE 0 END) AS late_count,
               COUNT(DISTINCT CASE WHEN ${LATE} THEN f.id END) AS late_filings,

@@ -1,4 +1,4 @@
-import { getSectorLeaderboard, getTickers, getTransactions, type SectorRow } from "@/lib/queries";
+import { getSectorLeaderboard, getTickerMembers, getTickers, getTransactions, type SectorRow } from "@/lib/queries";
 import { memberHref, memberLabel, range, shortDate, usd } from "@/lib/format";
 import {
   Card,
@@ -10,6 +10,8 @@ import {
   VolumeRange,
 } from "../charts";
 import { ActionBadge, Amount, DelayTag, OptionBadge, OwnerTag, PartyBadge, ResponsiveTable, ScanTag, SectorTag } from "../ui";
+import { MemberAvatar } from "../avatar";
+import { TickerMembers } from "./ticker-members";
 
 export const dynamic = "force-dynamic";
 
@@ -225,10 +227,11 @@ function SectorLeaderboard({ sectors }: { sectors: SectorRow[] }) {
 }
 
 async function TickerDetail({ ticker }: { ticker: string }) {
-  const [all, trades, optionTrades] = await Promise.all([
+  const [all, trades, optionTrades, members] = await Promise.all([
     getTickers(undefined, 5000),
     getTransactions({ ticker, limit: 200 }),
     getTransactions({ ticker, options: true, limit: 500 }),
+    getTickerMembers(ticker),
   ]);
   const stat = all.find((r) => r.ticker === ticker);
   if (!stat) return <Empty>No disclosed trades for {ticker}.</Empty>;
@@ -278,6 +281,8 @@ async function TickerDetail({ ticker }: { ticker: string }) {
         </Card>
       </section>
 
+      <TickerMembers ticker={stat.ticker} members={members} />
+
       <section>
         <SectionTitle>Every disclosed trade</SectionTitle>
         <div className="space-y-1.5">
@@ -288,10 +293,14 @@ async function TickerDetail({ ticker }: { ticker: string }) {
                 <OptionBadge kind={r.option_kind} strikeCents={r.strike_cents} expiry={r.expiry} />
                 <Amount min={r.amount_min_cents} max={r.amount_max_cents} exact={r.amount_exact_cents} />
                 <SectorTag group={r.industry_group} sic={r.sic} description={r.sic_description} />
-                <PartyBadge party={r.party} />
-                <a href={memberHref(r.member_name)} className="text-[13px] font-medium hover:text-primary">
+                <a
+                  href={memberHref(r.member_name)}
+                  className="inline-flex items-center gap-2 text-[13px] font-medium hover:text-primary"
+                >
+                  <MemberAvatar name={r.member_name} bioguideId={r.bioguide_id} size="sm" />
                   {memberLabel(r.member_name, null, r.state, r.district, r.chamber)}
                 </a>
+                <PartyBadge party={r.party} />
                 <OwnerTag owner={r.owner} />
                 <ScanTag transcribed={r.transcribed} docId={r.doc_id} />
                 <div className="flex-1" />
