@@ -266,3 +266,26 @@ skill before changing any palette value.
 - Summary stat tiles must aggregate over the whole dataset, not the rendered
   page slice (see `getPoliticianTotals`) — summing a truncated list understates
   the total it claims to report.
+
+## Late-filing compliance
+
+- A filing is "late" for the prefix and the `late_filing` alert only when
+  **every** trade is past `alerts.late_filing_days` (`stats.filing_late_by_days`).
+  N is the longest delay minus the deadline — the report was due that many days
+  after its earliest trade. A row with an unknown delay (contradictory dates)
+  disqualifies the filing rather than being skipped; 0 turns both off.
+- The prefix is the first line of the existing filing message, never a second
+  message, and survives every degradation step of `format_filing` and
+  `format_filing_summary`. Watched filings are split per transaction and do not
+  carry it.
+- The `alerts` table has no filing column, so a `late_filing` row is keyed the
+  way `filings` is unique: `ticker` = document id, `direction` = chamber,
+  `window_days` = the deadline used, `politician_count` = late trades. It is
+  recorded only after delivery, once per filing (`stats.is_new_late_filing`,
+  kind-scoped), and never on a dry run.
+- The dashboard's `?view=late` queries (`LATE` in `web/lib/queries.ts`) must
+  reconcile with `getPoliticianTotals` — `web/lib/late.test.ts` asserts it on
+  the committed DB. The monthly series is by month of *filing*: by trade month
+  the recent months always look cleaner than they are.
+- `audit.check_late_filings` (INFO) lists the week's filings with late trades;
+  it reuses `stats.disclosure_delay_days` so it cannot drift from the prefix.

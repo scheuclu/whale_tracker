@@ -102,6 +102,20 @@ export function sinceClause(days?: number): string {
 export const DELAY = `CASE WHEN julianday(f.filing_date) >= julianday(t.tx_date)
      THEN CAST(julianday(f.filing_date) - julianday(t.tx_date) AS INTEGER) END`;
 
+/**
+ * The STOCK Act's deadline, in days from the trade: a trade disclosed more
+ * than this many days after it was made is late. Mirrors
+ * `STOCK_ACT_DEADLINE_DAYS` in src/whale/stats.py.
+ */
+export const STOCK_ACT_DEADLINE_DAYS = 45;
+
+/**
+ * A row disclosed past the deadline. A NULL delay — contradictory dates —
+ * compares as NULL, so it is never late; the same rows the politicians
+ * tiles count with their inline `> 45`.
+ */
+export const LATE = `(${DELAY}) > ${STOCK_ACT_DEADLINE_DAYS}`;
+
 /** Days until the member learned of the trade. Not a compliance measure. */
 const LAG = `CASE WHEN julianday(t.notification_date) >= julianday(t.tx_date)
      THEN CAST(julianday(t.notification_date) - julianday(t.tx_date) AS INTEGER) END`;
@@ -460,4 +474,223 @@ export async function getPipeline(): Promise<Pipeline> {
     coverage,
     transcribed,
   };
+}
+
+/* --------------------------------------------------------- late disclosures */
+//
+// `/politicians?view=late`. Everything here is a re-cut of the measure the
+// politicians tiles already report — trade date → filing date, more than 45
+// days — so each query must reconcile with `getPoliticianTotals` (see
+// late.test.ts). The report's "Notification Date" column is never used: it
+// reads 0 for a member trading their own account.
+
+export type LateMemberRow = {
+  member_name: string;
+  party: string | null;
+  state: string | null;
+  district: string | null;
+  chamber: string | null;
+  /** Every counted trade by the member, late or not. */
+  trades: number;
+  late_count: number;
+  /** Distinct filings that carried at least one late trade. */
+  late_filings: number;
+  /** Longest trade → filing delay among the late trades, in days. */
+  worst_delay: number;
+  /** Mean delay of the late trades only. */
+  avg_late_delay: number;
+  last_late_filing: string | null;
+};
+
+/**
+ * Members ranked by trades disclosed past the deadline, worst delay as the
+ * tie-break. Grouped on the display name like `getPoliticians`, so the sum
+ * of `late_count` over every row is exactly the tiles' `late_trades` and the
+ * row count their `members_late`: the ranking and the tiles are one measure.
+ */
+export async function getLateMembers(limit = 60): Promise<LateMemberRow[]> {
+  const db = await getDb();
+  return db
+    .prepare(
+      `SELECT COALESCE(p.full_name, f.filer_name) AS member_name,
+              p.party, p.state, p.district, p.chamber,
+              COUNT(*) AS trades,
+              SUM(CASE WHEN ${LATE} THEN 1 ELSE 0 END) AS late_count,
+              COUNT(DISTINCT CASE WHEN ${LATE} THEN f.id END) AS late_filings,
+              MAX(CASE WHEN ${LATE} THEN ${DELAY} END) AS worst_delay,
+              AVG(CASE WHEN ${LATE} THEN ${DELAY} END) AS avg_late_delay,
+              MAX(CASE WHEN ${LATE} THEN f.filing_date END) AS last_late_filing
+       FROM transactions t
+       JOIN filings f ON f.id = t.filing_id
+       LEFT JOIN politicians p ON p.id = t.politician_id
+       WHERE f.status IN ${COUNTED}
+       GROUP BY member_name
+       HAVING late_count > 0
+       ORDER BY late_count DESC, worst_delay DESC, member_name
+       LIMIT ?`
+    )
+    .all(limit) as LateMemberRow[];
+}
+
+export type LateMonthRow = {
+  /** YYYY-MM of the filing date. */
+  month: string;
+  filings: number;
+  trades: number;
+  late_trades: number;
+  late_filings: number;
+  members_late: number;
+};
+
+/**
+ * Late share by month of *filing*, not of trade. A trade made last month
+ * cannot be late yet, and the ones that will be are not in the database
+ * until they are filed, so a series on trade month would always show the
+ * recent months as cleaner than they are. A month's filings are complete
+ * once the month is over. Sums to the same `late_trades` as the tiles.
+ */
+export async function getLateMonthly(): Promise<LateMonthRow[]> {
+  const db = await getDb();
+  return db
+    .prepare(
+      `SELECT substr(f.filing_date, 1, 7) AS month,
+              COUNT(DISTINCT f.id) AS filings,
+              COUNT(*) AS trades,
+              SUM(CASE WHEN ${LATE} THEN 1 ELSE 0 END) AS late_trades,
+              COUNT(DISTINCT CASE WHEN ${LATE} THEN f.id END) AS late_filings,
+              COUNT(DISTINCT CASE WHEN ${LATE} THEN COALESCE(p.full_name, f.filer_name) END)
+                AS members_late
+       FROM transactions t
+       JOIN filings f ON f.id = t.filing_id
+       LEFT JOIN politicians p ON p.id = t.politician_id
+       WHERE f.status IN ${COUNTED} AND f.filing_date IS NOT NULL
+       GROUP BY month
+       ORDER BY month`
+    )
+    .all() as LateMonthRow[];
+}
+
+export type LateTotals = {
+  trades: number;
+  filings: number;
+  late_trades: number;
+  /** Filings with at least one late trade. */
+  late_filings: number;
+  /** Filings whose every trade was late — the ones the Telegram message
+   *  leads with "late by N days" for. */
+  all_late_filings: number;
+  worst_delay: number | null;
+};
+
+/** Headline figures for the late view, over the whole dataset. */
+export async function getLateTotals(): Promise<LateTotals> {
+  const db = await getDb();
+  return db
+    .prepare(
+      `WITH per_filing AS (
+         SELECT f.id,
+                COUNT(*) AS trades,
+                SUM(CASE WHEN ${LATE} THEN 1 ELSE 0 END) AS late,
+                MAX(${DELAY}) AS worst
+         FROM transactions t
+         JOIN filings f ON f.id = t.filing_id
+         WHERE f.status IN ${COUNTED}
+         GROUP BY f.id
+       )
+       SELECT COALESCE(SUM(trades), 0) AS trades,
+              COUNT(*) AS filings,
+              COALESCE(SUM(late), 0) AS late_trades,
+              COALESCE(SUM(late > 0), 0) AS late_filings,
+              COALESCE(SUM(late = trades), 0) AS all_late_filings,
+              MAX(worst) AS worst_delay
+       FROM per_filing`
+    )
+    .get() as LateTotals;
+}
+
+export type LateTradeRow = TransactionRow & {
+  filing_id: number;
+  /** Never NULL here: a row is only selected when its delay is past the deadline. */
+  delay_days: number;
+};
+
+export type LateFiling = {
+  filing_id: number;
+  doc_id: string;
+  chamber: string | null;
+  member_name: string;
+  party: string | null;
+  state: string | null;
+  district: string | null;
+  filing_date: string | null;
+  pdf_url: string;
+  /** Every row in the filing, late or not. */
+  trades: number;
+  /** The rows past the deadline, longest delay first. */
+  late: LateTradeRow[];
+};
+
+/**
+ * The newest filings that disclose a trade past the deadline, each with its
+ * late rows and each row's own delay — the evidence behind the counts.
+ * `limit` counts filings, not rows: a filing's late rows are never cut.
+ */
+export async function getLateFilings(limit = 25): Promise<LateFiling[]> {
+  const db = await getDb();
+  const rows = db
+    .prepare(
+      `WITH late_filings AS (
+         SELECT f.id
+         FROM transactions t
+         JOIN filings f ON f.id = t.filing_id
+         WHERE f.status IN ${COUNTED} AND ${LATE}
+         GROUP BY f.id
+         ORDER BY f.filing_date DESC, f.id DESC
+         LIMIT ?
+       )
+       SELECT t.id, t.tx_date, t.notification_date, t.action, t.ticker, t.asset_name,
+              t.asset_type, t.owner, t.amount_min_cents, t.amount_max_cents,
+              t.amount_exact_cents,
+              COALESCE(p.full_name, f.filer_name) AS member_name,
+              p.party, p.state, p.district,
+              COALESCE(p.chamber, f.chamber) AS chamber,
+              f.pdf_url, f.filing_date,
+              ${DELAY} AS delay_days,
+              ${LAG} AS lag_days,
+              CASE WHEN julianday(t.notification_date) < julianday(t.tx_date)
+                   THEN 1 ELSE 0 END AS dates_inconsistent,
+              ${TRANSCRIBED} AS transcribed,
+              f.doc_id,
+              f.id AS filing_id,
+              (SELECT COUNT(*) FROM transactions x WHERE x.filing_id = f.id) AS filing_trades
+       FROM transactions t
+       JOIN filings f ON f.id = t.filing_id
+       LEFT JOIN politicians p ON p.id = t.politician_id
+       WHERE f.id IN (SELECT id FROM late_filings) AND ${LATE}
+       ORDER BY f.filing_date DESC, f.id DESC, delay_days DESC, t.id`
+    )
+    .all(limit) as (LateTradeRow & { filing_trades: number })[];
+
+  const out: LateFiling[] = [];
+  for (const r of rows) {
+    const last = out[out.length - 1];
+    if (last && last.filing_id === r.filing_id) {
+      last.late.push(r);
+      continue;
+    }
+    out.push({
+      filing_id: r.filing_id,
+      doc_id: r.doc_id,
+      chamber: r.chamber,
+      member_name: r.member_name,
+      party: r.party,
+      state: r.state,
+      district: r.district,
+      filing_date: r.filing_date,
+      pdf_url: r.pdf_url,
+      trades: r.filing_trades,
+      late: [r],
+    });
+  }
+  return out;
 }

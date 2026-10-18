@@ -133,6 +133,29 @@ here is the case it is not protecting against. An unknown key or a malformed
 `bioguide_id` is an error at startup, not an entry that silently watches
 nobody. An empty (or absent) `watchlist` turns the feature off.
 
+**Late filing** — a filing whose every trade was disclosed more than
+`alerts.late_filing_days` (default 45, the STOCK Act's deadline; 0 = off) after
+it was made leads its own message with how late it was. No extra message: the
+filing is reported once, as itself.
+
+```
+⚠️ late by 66 days
+🏛 New filing — Rep. Kevin Hern (R-OK1)
+Filed 2026-06-20 · 2 transactions
+🟢 BUY  TK0  $1,001–$15k
+     traded 03/01 (111d delay)
+```
+
+The figure is the filing's: it was due 45 days after its earliest trade, and
+that is how far past the due date it arrived. Each row still shows its own
+delay. The filing is recorded once as a `late_filing` row in `alerts`, keyed on
+the filing (document id and chamber), and the weekly audit lists the week's
+filings with late trades. A filing with one timely trade among late ones gets
+no prefix — the per-row delays say which were late. The delay is always trade
+date → filing date, never the report's "Notification Date" column (see
+[Coverage and its limits](#coverage-and-its-limits)). The dashboard ranks
+members by late trades and worst delay at `/politicians?view=late`.
+
 **Insider alerts** — Form 4 filings are far too numerous to announce wholesale,
 so they alert only against rules you write. Each new filing is tested in order
 and the **first match names the alert**:

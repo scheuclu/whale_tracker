@@ -38,6 +38,11 @@ class AlertSettings:
     cluster_asset_types: list[str] = field(
         default_factory=lambda: list(DEFAULT_CLUSTER_ASSET_TYPES)
     )
+    # A filing whose EVERY trade was disclosed more than this many days after
+    # it was made leads its Telegram message with "⚠️ late by N days" and is
+    # recorded once as a `late_filing` alert. 45 is the STOCK Act's deadline
+    # (`stats.STOCK_ACT_DEADLINE_DAYS`); 0 turns both off.
+    late_filing_days: int = 45
 
     @property
     def min_volume_cents(self) -> int:
@@ -190,6 +195,23 @@ def _member_floor(raw) -> int:
     if value < 0:
         raise ConfigError(
             f"alerts.min_member_floor_usd is {value}; it must be 0 (off) or more")
+    return value
+
+
+def _late_filing_days(raw) -> int:
+    """`alerts.late_filing_days`: whole days past the trade, 0 for off.
+
+    A negative value would call every filing late, or none, depending on how
+    it was read — while sitting in config.yaml looking tuned. It raises.
+    """
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        raise ConfigError(
+            f"alerts.late_filing_days must be a whole number of days, not {raw!r}") from None
+    if value < 0:
+        raise ConfigError(
+            f"alerts.late_filing_days is {value}; it must be 0 (off) or more")
     return value
 
 
@@ -427,6 +449,7 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
             str(t).upper()
             for t in (a.get("cluster_asset_types") or DEFAULT_CLUSTER_ASSET_TYPES)
         ],
+        late_filing_days=_late_filing_days(a.get("late_filing_days", 45)),
     )
 
     i = raw.get("ingest") or {}

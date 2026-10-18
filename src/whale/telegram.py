@@ -83,21 +83,34 @@ def _tx_line(tx: dict) -> str:
 TRANSCRIBED_LABEL = "transcribed from scan"
 
 
+def late_prefix(late_by_days: int) -> str:
+    """The first line of a filing message whose every trade was disclosed
+    past the deadline — the filing is reported once, as itself, and leads
+    with how late it was. `late_by_days` comes from
+    `stats.filing_late_by_days`: the report's own lateness, measured from the
+    due date its earliest trade set."""
+    return f"⚠️ late by {late_by_days} day" + ("" if late_by_days == 1 else "s")
+
+
 def format_filing(member: str, party: str | None, state: str | None,
                   district: str | None, chamber: str | None, filing_date: str | None,
                   pdf_url: str, transactions: list[dict],
-                  contexts: dict[str, TickerStat] | None = None) -> str:
+                  contexts: dict[str, TickerStat] | None = None,
+                  late_by_days: int | None = None) -> str:
     """One message per new disclosure filing.
 
     Degradation order, so a 94-transaction filing still fits in one message:
     drop the aggregate context lines → drop asset detail → cap the transaction
-    list. Never splits into multiple messages.
+    list. Never splits into multiple messages. `late_by_days`, when given,
+    prefixes the message and survives every degradation step: it is one
+    short line, and the reason the filing deserves a second look.
     """
     contexts = contexts or {}
 
     def build(include_context: bool, include_detail: bool, max_tx: int) -> str:
         header = member_label(member, party, state, district, chamber)
-        parts = [
+        parts = [late_prefix(late_by_days)] if late_by_days is not None else []
+        parts += [
             f"🏛 <b>New filing — {esc(header)}</b>",
             f"Filed {esc(filing_date or 'unknown')} · {len(transactions)} transaction"
             + ("s" if len(transactions) != 1 else ""),
@@ -157,7 +170,8 @@ def format_filing_summary(member: str, party: str | None, state: str | None,
                           district: str | None, chamber: str | None,
                           filing_date: str | None, pdf_url: str, transactions: list[dict],
                           member_url: str,
-                          contexts: dict[str, TickerStat] | None = None) -> str:
+                          contexts: dict[str, TickerStat] | None = None,
+                          late_by_days: int | None = None) -> str:
     """One message for a filing with more rows than fit with their detail.
 
     `format_filing` degrades a long filing by dropping context, then every
@@ -193,7 +207,8 @@ def format_filing_summary(member: str, party: str | None, state: str | None,
     ranked = sorted(transactions, key=_floor_key)
 
     def build(top: int, include_context: bool) -> str:
-        parts = [
+        parts = [late_prefix(late_by_days)] if late_by_days is not None else []
+        parts += [
             f"🏛 <b>New filing — {esc(header)}</b>",
             f"Filed {esc(filing_date or 'unknown')} · {n} transactions — too many to list, "
             "so a summary",

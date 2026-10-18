@@ -747,6 +747,11 @@ def notify_pending(conn: sqlite3.Connection, config: Config, dry_run: bool = Fal
         rows = [dict(r) for r in db.transactions_for_filing(conn, filing["id"])]
         for r in rows:
             r["delay_days"] = stats.disclosure_delay_days(r["tx_date"], filing["filing_date"])
+        # None unless every trade is past `alerts.late_filing_days`. Then the
+        # message leads with how late the filing was — no extra message — and
+        # the filing is recorded once as a late_filing alert after delivery.
+        late_by = stats.filing_late_by_days((r["delay_days"] for r in rows),
+                                            config.alerts.late_filing_days)
 
         contexts = {}
         for ticker in {r["ticker"] for r in rows if r["ticker"]}:
@@ -765,6 +770,7 @@ def notify_pending(conn: sqlite3.Connection, config: Config, dry_run: bool = Fal
             pdf_url=filing["pdf_url"],
             transactions=rows,
             contexts=contexts,
+            late_by_days=late_by,
         )
         if len(rows) > telegram.FILING_ROW_BUDGET:
             # Past the budget every row would lose its asset name and trade
@@ -779,6 +785,13 @@ def notify_pending(conn: sqlite3.Connection, config: Config, dry_run: bool = Fal
         if _deliver(config, text, dry_run) and not dry_run:
             db.set_status(conn, filing["id"], "notified", None)
             db.mark_notified(conn, filing["id"])
+            if late_by is not None and stats.is_new_late_filing(
+                    conn, filing["chamber"], filing["doc_id"]):
+                db.record_alert(conn, stats.LATE_FILING_KIND, filing["doc_id"],
+                                filing["chamber"], config.alerts.late_filing_days,
+                                len(rows), None)
+                log.info("late filing %s/%s: %d day(s) past the deadline",
+                         filing["chamber"], filing["doc_id"], late_by)
             sent += 1
         conn.commit()
 
