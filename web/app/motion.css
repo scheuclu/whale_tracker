@@ -1,0 +1,259 @@
+/* ==================================================================
+   Motion, loading states and the accessibility finish.
+
+   Imported once from app/layout.tsx, after globals.css, so a rule here
+   wins a tie with the shell's. Everything that moves is opt-in under
+   `prefers-reduced-motion: no-preference`, and the reduce block at the
+   bottom stops anything that slipped through.
+
+   Budget: a page settles in under 250ms. Content never waits on motion —
+   nothing here delays a value from being readable for longer than that,
+   and nothing animates layout (only opacity and transform), so motion
+   cannot cause a layout shift.
+   ================================================================== */
+
+:root {
+  --motion-fast: 120ms;
+  --motion-base: 160ms;
+  --motion-ease: cubic-bezier(0.22, 1, 0.36, 1); /* ease-out, no overshoot */
+  --motion-stagger: 30ms;
+  /* Indigo primary: 4.9:1 on the light page, 5.7:1 on the dark one — the
+     shell's --ring (#8b8bec) is ~3:1, too faint to be the only cue. */
+  --focus-ring: var(--primary);
+}
+
+/* ------------------------------------------------------------------
+   Page enter.
+
+   A new page's sections fade in and rise 4px, one after another, 30ms
+   apart; the fourth and later share the last slot, so the whole page has
+   settled by 90ms + 160ms = 250ms. The page root itself does not move (it
+   replaces the shell's single 260ms `page-in`), so nothing is ever
+   translated twice.
+
+   `:where()` keeps this at zero specificity: a section that brings its own
+   animation (`.viz-rise` tiles, the status-screen mark) keeps it.
+   `backwards` fill, so no transform is left on the page once it has
+   played — a transformed ancestor would re-anchor fixed popovers.
+   ------------------------------------------------------------------ */
+@keyframes motion-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+@keyframes motion-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .site-header + main > * {
+    animation: none;
+  }
+  :where(.site-header + main > :not([aria-busy]) > *) {
+    animation: motion-enter var(--motion-base) var(--motion-ease) backwards;
+  }
+  :where(.site-header + main > :not([aria-busy]) > :nth-child(2)) {
+    animation-delay: calc(var(--motion-stagger) * 1);
+  }
+  :where(.site-header + main > :not([aria-busy]) > :nth-child(3)) {
+    animation-delay: calc(var(--motion-stagger) * 2);
+  }
+  :where(.site-header + main > :not([aria-busy]) > :nth-child(n + 4)) {
+    animation-delay: calc(var(--motion-stagger) * 3);
+  }
+
+  /* A skeleton waits 120ms before it shows, so a navigation that resolves
+     quickly goes straight from the old page to the new one with no grey
+     flash in between; a slow one fades the placeholder in. */
+  .site-header + main > [aria-busy="true"] {
+    animation: motion-fade 200ms ease-out 120ms backwards;
+  }
+}
+
+/* ------------------------------------------------------------------
+   Loading skeletons (app/skeletons.tsx).
+
+   The shell paints the bones and one viewport-wide sheen. Here the sheen
+   is quieter and slower — a skeleton should read as "waiting", not as a
+   control asking for attention.
+   ------------------------------------------------------------------ */
+:root {
+  --skeleton: rgba(12, 12, 17, 0.07);
+  --skeleton-sheen: rgba(255, 255, 255, 0.55);
+}
+.dark {
+  --skeleton: rgba(255, 255, 255, 0.065);
+  --skeleton-sheen: rgba(255, 255, 255, 0.045);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton {
+    animation-duration: 2.2s;
+  }
+}
+
+/* ------------------------------------------------------------------
+   Theme switch (app/a11y.tsx, ThemeTransition).
+
+   The toggle runs inside a View Transition, so the browser cross-fades
+   the old frame into the new one: no element eases at its own speed, and
+   there is never a frame of half-applied theme.
+   ------------------------------------------------------------------ */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 220ms;
+  animation-timing-function: ease-out;
+}
+
+/* ------------------------------------------------------------------
+   Focus.
+
+   One ring everywhere: 2px indigo, offset 2px, on keyboard focus only.
+
+   The default lives in the base layer, so a component that draws its own
+   indicator (`focus-visible:outline-none` plus a ring, or the timeline's
+   mark outline) still overrides it. Form fields are the exception: they
+   carry `outline-none` with nothing but a faint border tint in its place,
+   so their ring is set unlayered and wins.
+   ------------------------------------------------------------------ */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+}
+:is(select, textarea, input:not([type="checkbox"], [type="radio"])):not(.site-header form[role="search"] *):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+/* The header search box: the pill is the form, so the form wears the ring. */
+.site-header form[role="search"]:has(input:focus-visible) {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+/* A programmatic focus target (the skip link's destination) is not a control. */
+main[tabindex="-1"]:focus {
+  outline: none;
+}
+
+/* Skip to content: off-screen until it has keyboard focus. */
+.skip-link {
+  position: fixed;
+  left: 0.75rem;
+  top: 0.75rem;
+  z-index: 100;
+  padding: 0.5rem 0.875rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  font-size: 0.875rem;
+  font-weight: 500;
+  box-shadow: 0 8px 24px -12px rgba(12, 12, 17, 0.35);
+  transform: translateY(calc(-100% - 1rem));
+}
+.skip-link:focus-visible,
+.skip-link:focus {
+  transform: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .skip-link {
+    transition: transform var(--motion-fast) var(--motion-ease);
+  }
+}
+
+/* ------------------------------------------------------------------
+   prefers-contrast: more.
+
+   Hairlines become lines, muted ink moves toward the foreground, frosted
+   surfaces turn opaque (a blur behind text costs contrast), and the focus
+   ring thickens. Buy/sell keep their validated colours: the pair is
+   already tested for separation, and direction is spelled out in text.
+   ------------------------------------------------------------------ */
+@media (prefers-contrast: more) {
+  :root {
+    --border: rgba(12, 12, 17, 0.3);
+    --input: rgba(12, 12, 17, 0.4);
+    --muted-foreground: #45455a;
+    --card: #ffffff;
+    --skeleton: rgba(12, 12, 17, 0.14);
+    --focus-ring: #3b3bb0;
+  }
+  .dark {
+    --border: rgba(255, 255, 255, 0.32);
+    --input: rgba(255, 255, 255, 0.4);
+    --muted-foreground: #c6c6d6;
+    --card: #111117;
+    --skeleton: rgba(255, 255, 255, 0.16);
+    --focus-ring: #a8a8ff;
+  }
+  .glass {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  :focus-visible,
+  .site-header form[role="search"]:has(input:focus-visible) {
+    outline-width: 3px;
+  }
+}
+
+/* ------------------------------------------------------------------
+   Forced colours (Windows High Contrast).
+
+   The system palette replaces every authored colour, which would paint
+   each bar the page colour and erase it. Data marks opt out and keep the
+   buy/sell pair; the words "Bought" / "Sold" / "Purchase" / "Sale" beside
+   them carry the meaning either way. Skeleton bones become GrayText so a
+   loading page still shows its shape.
+   ------------------------------------------------------------------ */
+@media (forced-colors: active) {
+  .viz-bar,
+  .viz-grow-x,
+  .viz-grow-x-end,
+  .viz-grow-y,
+  .tl-dot,
+  .tl-hollow,
+  [class*="--viz-buy"],
+  [class*="--viz-sell"],
+  [class*="--viz-seq"] {
+    forced-color-adjust: none;
+  }
+  .skeleton {
+    forced-color-adjust: none;
+    background: GrayText;
+    background-image: none;
+    opacity: 0.4;
+  }
+  .skip-link {
+    border-color: CanvasText;
+  }
+  :focus-visible,
+  .site-header form[role="search"]:has(input:focus-visible) {
+    outline-color: Highlight;
+  }
+}
+
+/* ------------------------------------------------------------------
+   Reduced motion: a backstop. Every animation above is already opt-in;
+   this catches the ones that are not (Tailwind's `animate-pulse` on a
+   status dot, a hover transition) so the page is still.
+   ------------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
