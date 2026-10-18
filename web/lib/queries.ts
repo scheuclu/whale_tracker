@@ -1,3 +1,4 @@
+import type Database from "better-sqlite3";
 import { getDb } from "./db";
 
 /**
@@ -58,7 +59,38 @@ export type TransactionRow = {
   transcribed: number;
   /** The Clerk's document id — the key of the /scans inspection page. */
   doc_id: string;
+  /** The option contract as the filing's own text named it (src/whale/options.py):
+   *  'call' | 'put', the strike, an ISO expiry. All NULL when the text does
+   *  not say — a strike is never guessed from a premium. */
+  option_kind: string | null;
+  strike_cents: number | null;
+  expiry: string | null;
 };
+
+/**
+ * The option-contract columns arrived with schema 11. The committed database
+ * can predate them — the pipeline migrates it on its next run, not this code —
+ * and a query naming a column the file lacks renders as an error page. So
+ * they are selected only when the file has them and read as NULL otherwise;
+ * the badges simply stay off until the next pipeline commit.
+ */
+const optionColumnsKnown = new WeakMap<Database.Database, boolean>();
+
+function hasOptionColumns(db: Database.Database): boolean {
+  let has = optionColumnsKnown.get(db);
+  if (has === undefined) {
+    const cols = db.prepare("PRAGMA table_info(transactions)").all() as { name: string }[];
+    has = cols.some((c) => c.name === "option_kind");
+    optionColumnsKnown.set(db, has);
+  }
+  return has;
+}
+
+function optionColumns(db: Database.Database): string {
+  return hasOptionColumns(db)
+    ? "t.option_kind, t.strike_cents, t.expiry"
+    : "NULL AS option_kind, NULL AS strike_cents, NULL AS expiry";
+}
 
 export type PoliticianRow = {
   member_name: string;
@@ -204,6 +236,8 @@ export async function getTransactions(opts: {
   ticker?: string;
   member?: string;
   action?: string;
+  /** Only rows whose text named an option contract (the ticker page's Options section). */
+  options?: boolean;
   limit?: number;
 } = {}): Promise<TransactionRow[]> {
   const db = await getDb();
@@ -219,6 +253,11 @@ export async function getTransactions(opts: {
   }
   if (opts.action === "buy") where.push("t.action = 'purchase'");
   if (opts.action === "sell") where.push("t.action IN ('sale','sale_partial')");
+  if (opts.options) {
+    // Before the migration no row can qualify, and the column cannot be named.
+    if (!hasOptionColumns(db)) return [];
+    where.push("t.option_kind IS NOT NULL");
+  }
   params.push(opts.limit ?? 100);
 
   return db
@@ -234,7 +273,8 @@ export async function getTransactions(opts: {
               CASE WHEN julianday(t.notification_date) < julianday(t.tx_date)
                    THEN 1 ELSE 0 END AS dates_inconsistent,
               ${TRANSCRIBED} AS transcribed,
-              f.doc_id
+              f.doc_id,
+              ${optionColumns(db)}
        FROM transactions t
        JOIN filings f ON f.id = t.filing_id
        LEFT JOIN politicians p ON p.id = t.politician_id

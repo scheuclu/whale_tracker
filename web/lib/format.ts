@@ -45,6 +45,33 @@ export function isSell(action: string): boolean {
   return action === "sale" || action === "sale_partial";
 }
 
+/** A strike as printed on a contract: $120, or $11.80 when it is not whole. */
+export function strikeUsd(cents: number): string {
+  const whole = cents % 100 === 0;
+  return `$${(cents / 100).toLocaleString(undefined, {
+    minimumFractionDigits: whole ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+/**
+ * The parsed option contract — "CALL · $120 · exp 01/16/27". Only what the
+ * filing printed: a kind alone is still a fact, and a missing strike is left
+ * out rather than shown as a placeholder. Mirrors `describe` in
+ * src/whale/options.py.
+ */
+export function optionLabel(
+  kind: string | null,
+  strikeCents: number | null,
+  expiry: string | null
+): string | null {
+  if (!kind) return null;
+  const parts = [kind.toUpperCase()];
+  if (strikeCents != null) parts.push(strikeUsd(strikeCents));
+  if (expiry) parts.push(`exp ${shortDate(expiry)}`);
+  return parts.join(" · ");
+}
+
 export const OWNER_LABEL: Record<string, string> = {
   SP: "spouse",
   DC: "dependent child",

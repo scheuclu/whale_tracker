@@ -13,8 +13,8 @@ import sqlite3
 import time
 from datetime import date
 
-from . import (db, house, insider_alerts, insiders, roster, senate, senate_ptr, stats,
-               telegram)
+from . import (db, house, insider_alerts, insiders, options, roster, senate, senate_ptr,
+               stats, telegram)
 from .amounts import parse_amount
 from .config import Config
 from .ptr import ParsedFiling, ScannedFilingError, parse_pdf
@@ -710,6 +710,10 @@ def _transaction_row(tx) -> dict:
         ),
         "description": tx.description,
         "raw_text": tx.raw_text,
+        # The option contract, if the row's own text names one (#58). Here
+        # rather than in either parser: both chambers and the vision path
+        # build their rows through this one function.
+        **options.columns(tx.asset_name, tx.description, tx.asset_type),
     }
 
 
@@ -741,8 +745,35 @@ def notify_pending(conn: sqlite3.Connection, config: Config, dry_run: bool = Fal
     for filing, member, rows in watched:
         sent += _notify_watched_filing(conn, config, filing, member, rows, dry_run)
 
+    # Option trades next, when `alerts.options_every_trade` asks for them:
+    # each is its own alert ahead of the routine digests, like a watched
+    # member's. A filing whose option alerts did not all go out is held back
+    # from its digest so the whole filing replays next run; one whose every
+    # row went out this way is consumed, as a watched filing is.
+    held: set[int] = set()
+    consumed: set[int] = set()
+    if config.alerts.options_every_trade:
+        for filing in pending:
+            if filing["id"] in watched_ids:
+                continue
+            rows = [dict(r) for r in db.transactions_for_filing(conn, filing["id"])]
+            wanted = sum(1 for r in rows if r.get("option_kind"))
+            if not wanted:
+                continue
+            delivered = _notify_option_trades(conn, config, filing, rows, dry_run)
+            if delivered < wanted:
+                held.add(filing["id"])
+            elif wanted == len(rows):
+                consumed.add(filing["id"])
+                if not dry_run:
+                    db.set_status(conn, filing["id"], "notified", None)
+                    db.mark_notified(conn, filing["id"])
+            if not dry_run:
+                sent += delivered
+            conn.commit()
+
     for filing in pending:
-        if filing["id"] in watched_ids:
+        if filing["id"] in watched_ids or filing["id"] in held or filing["id"] in consumed:
             continue
         rows = [dict(r) for r in db.transactions_for_filing(conn, filing["id"])]
         for r in rows:
@@ -844,6 +875,46 @@ def _notify_watched_filing(conn: sqlite3.Connection, config: Config, filing,
                  member.name, total)
     conn.commit()
     return delivered if delivered == total else 0
+
+
+def _notify_option_trades(conn: sqlite3.Connection, config: Config, filing,
+                          rows: list[dict], dry_run: bool) -> int:
+    """One alert per option trade in a routine filing (`alerts.options_every_trade`).
+
+    Never through the filing's digest: that message degrades to fit Telegram's
+    limit — context first, then each row's asset detail, then rows — and the
+    contract is exactly the detail that would go. The digest still follows
+    with every row when the filing holds other trades too, so the filing stays
+    reported as one event and the alert is its highlight, not a replacement.
+    `index`/`total` are the row's place in the whole filing for the same reason.
+
+    Returns how many option alerts were delivered. Short of all of them the
+    caller leaves the filing pending, so the whole filing replays next run: a
+    duplicate options alert is a smaller harm than a missing one. Watched
+    members never reach here — their filings are already split per trade.
+    """
+    total = len(rows)
+    delivered = 0
+    for index, row in enumerate(rows, start=1):
+        if not row.get("option_kind"):
+            continue
+        row["delay_days"] = stats.disclosure_delay_days(row["tx_date"], filing["filing_date"])
+        context = (stats.ticker_context(conn, row["ticker"], config.alerts.window_days)
+                   if row["ticker"] else None)
+        text = telegram.format_options_transaction(
+            member=filing["member_name"] or filing["filer_name"],
+            party=filing["party"], state=_state_of(filing),
+            district=_district_of(filing),
+            chamber=filing["member_chamber"] or filing["chamber"],
+            filing_date=filing["filing_date"], pdf_url=filing["pdf_url"],
+            tx=row, index=index, total=total, context=context,
+        )
+        if _deliver(config, text, dry_run):
+            delivered += 1
+    if delivered and not dry_run:
+        log.info("options alert for %s: %d transaction(s)",
+                 filing["member_name"] or filing["filer_name"], delivered)
+    return delivered
 
 
 def notify_clusters(conn: sqlite3.Connection, config: Config, dry_run: bool = False) -> int:

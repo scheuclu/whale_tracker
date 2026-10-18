@@ -15,6 +15,7 @@ const calls: Array<[string, () => Promise<unknown>]> = [
   ["getConsensusTickers", () => q.getConsensusTickers(90, 6)],
   ["getTransactions", () => q.getTransactions({ limit: 5 })],
   ["getTransactions(buy)", () => q.getTransactions({ action: "buy", limit: 5 })],
+  ["getTransactions(options)", () => q.getTransactions({ ticker: "MSFT", options: true, limit: 5 })],
   ["getPoliticians", () => q.getPoliticians(undefined, 5)],
   ["getPoliticianTotals", () => q.getPoliticianTotals()],
   ["getPoliticianDetail", () => q.getPoliticianDetail("Nancy Pelosi")],
