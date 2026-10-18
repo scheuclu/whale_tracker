@@ -5,7 +5,7 @@ import { Landmark } from "lucide-react";
 import { getPipeline } from "@/lib/queries";
 import { getInsiderTotals } from "@/lib/insider-queries";
 import { relativeTime } from "@/lib/format";
-import { Tabs, ThemeToggle } from "./nav";
+import { SearchForm, Tabs, ThemeToggle } from "./nav";
 import "./globals.css";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
@@ -66,8 +66,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               </span>
               <ThemeToggle />
             </div>
-            <div className="mx-auto max-w-6xl px-4 py-3 sm:px-6">
+            <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3 sm:px-6">
               <Tabs />
+              <SearchForm className="ml-auto" />
             </div>
           </header>
           <main className="mx-auto max-w-6xl px-4 py-8 pb-28 sm:px-6">{children}</main>

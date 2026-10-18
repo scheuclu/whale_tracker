@@ -1,5 +1,14 @@
 import { getDb } from "./db";
-import { COUNTED, DELAY, NO_SECTOR_COLS, SECTOR_COLS, hasIssuerTables, sinceClause, type SectorFields } from "./queries";
+import {
+  COUNTED,
+  DELAY,
+  NO_SECTOR_COLS,
+  SECTOR_COLS,
+  hasIssuerTables,
+  likePattern,
+  sinceClause,
+  type SectorFields,
+} from "./queries";
 import { dense, monthKeys, monthStart } from "./months";
 
 /**
@@ -325,6 +334,48 @@ export async function getInsiderSectors(days?: number): Promise<InsiderSectorRow
        ORDER BY s.industry_group IS NULL, buy_value + sell_value DESC`
     )
     .all() as InsiderSectorRow[];
+}
+
+export type IssuerSearchRow = {
+  issuer_cik: string;
+  ticker: string | null;
+  issuer_name: string | null;
+  insiders: number;
+  filings: number;
+  trades: number;
+  last_tx_date: string | null;
+};
+
+/**
+ * Issuers by ticker or name; an exact ticker match ranks first. Counts
+ * primary reporting owners, like every insider figure. Kept apart from the
+ * congressional search: the two sets of tables are never joined.
+ */
+export async function searchInsiderIssuers(q: string, limit = 20): Promise<IssuerSearchRow[]> {
+  const db = await getDb();
+  const pattern = likePattern(q);
+  try {
+    return db
+      .prepare(
+        `SELECT f.issuer_cik,
+                MIN(f.ticker) AS ticker,
+                MIN(f.issuer_name) AS issuer_name,
+                COUNT(DISTINCT o.insider_cik) AS insiders,
+                COUNT(DISTINCT f.id) AS filings,
+                COUNT(*) AS trades,
+                MAX(t.tx_date) AS last_tx_date
+         ${FROM}
+         WHERE f.status IN ${COUNTED}
+           AND (f.ticker LIKE ? ESCAPE '\\' OR f.issuer_name LIKE ? ESCAPE '\\')
+         GROUP BY f.issuer_cik
+         ORDER BY (MIN(f.ticker) = ?) DESC, trades DESC, ticker
+         LIMIT ?`
+      )
+      .all(pattern, pattern, q.toUpperCase(), limit) as IssuerSearchRow[];
+  } catch {
+    // A database from before the insider source has no such tables.
+    return [];
+  }
 }
 
 export type InsiderPipeline = {
