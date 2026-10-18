@@ -16,7 +16,7 @@ import {
   StatTile,
   VolumeRange,
 } from "../charts";
-import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, ScanTag, TickerChip } from "../ui";
+import { ActionBadge, Amount, DelayTag, OwnerTag, PartyBadge, ScanTag, TickerChip, ResponsiveTable } from "../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -99,7 +99,7 @@ export default async function PoliticiansPage({
         >
           All members
         </SectionTitle>
-        <Card className="overflow-x-auto p-0">
+        <ResponsiveTable>
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.06em] text-muted-foreground">
@@ -154,7 +154,7 @@ export default async function PoliticiansPage({
               ))}
             </tbody>
           </table>
-        </Card>
+        </ResponsiveTable>
         <p className="mt-3 text-[11px] text-muted-foreground">
           &ldquo;Delay&rdquo; is measured from the trade to the date the report reached
           the Clerk, and &ldquo;Late&rdquo; counts trades filed more than 45 days after

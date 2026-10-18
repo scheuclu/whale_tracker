@@ -49,7 +49,7 @@ export default async function PipelinePage() {
                 senateOk ? "bg-emerald-500" : p.senateStatus ? "bg-amber-500" : "bg-zinc-400"
               }`}
             />
-            <div>
+            <div className="min-w-0">
               <div className="text-[13px] font-medium">
                 US Senate — {senateOk ? "live" : p.senateStatus ? "attention" : "not yet attempted"}
               </div>
@@ -63,7 +63,7 @@ export default async function PipelinePage() {
                   : null}
               </p>
               {p.senateStatus ? (
-                <p className="mt-1 font-mono text-[11px] text-muted-foreground">{p.senateStatus}</p>
+                <p className="mt-1 break-words font-mono text-[11px] text-muted-foreground">{p.senateStatus}</p>
               ) : null}
             </div>
           </div>
@@ -85,7 +85,7 @@ export default async function PipelinePage() {
               </p>
               {ins ? (
                 <>
-                  <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+                  <p className="mt-1 break-words font-mono text-[11px] text-muted-foreground">
                     {edgarStatus ?? "no run recorded"}
                     {ins.state.edgar_cursor ? ` · cursor ${relativeTime(ins.state.edgar_cursor)}` : ""}
                   </p>

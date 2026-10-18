@@ -1,7 +1,7 @@
 import { getScanFilings, getScanTotals } from "@/lib/scan-queries";
 import { shortDate } from "@/lib/format";
 import { Card, Empty, SectionTitle, StatTile } from "../charts";
-import { PartyBadge, StatusBadge } from "../ui";
+import { PartyBadge, StatusBadge, ResponsiveTable } from "../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -60,7 +60,7 @@ export default async function ScansPage({
           {params.m ? `Scanned filings — ${params.m}` : "Scanned filings"}
         </SectionTitle>
         {filings.length ? (
-          <Card className="overflow-x-auto p-0">
+          <ResponsiveTable wrap>
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.06em] text-muted-foreground">
@@ -90,7 +90,7 @@ export default async function ScansPage({
                     <td className="px-4 py-2">
                       <div className="flex items-center gap-2">
                         <PartyBadge party={f.party} />
-                        <a href={`/politicians?m=${encodeURIComponent(f.member_name)}`} className="font-medium hover:text-primary">
+                        <a href={`/politicians?m=${encodeURIComponent(f.member_name)}`} className="whitespace-nowrap font-medium hover:text-primary">
                           {f.member_name}
                         </a>
                       </div>
@@ -147,7 +147,7 @@ export default async function ScansPage({
                 ))}
               </tbody>
             </table>
-          </Card>
+          </ResponsiveTable>
         ) : (
           <Empty>No scanned filings{params.m ? ` for ${params.m}` : ""}.</Empty>
         )}

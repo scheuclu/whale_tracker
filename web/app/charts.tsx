@@ -30,7 +30,7 @@ export function StatTile({
       <div className="text-[11px] font-medium uppercase tracking-[0.07em] text-muted-foreground">
         {label}
       </div>
-      <div className="mt-1 text-2xl font-semibold tracking-tight">{value}</div>
+      <div className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">{value}</div>
       {hint ? <div className="mt-0.5 text-xs text-muted-foreground">{hint}</div> : null}
     </div>
   );
@@ -71,8 +71,13 @@ export function MagnitudeBars({
         const row = (
           <div
             className={cn(
+              // Narrower label column on a phone so the bar keeps enough
+              // width to compare; the label truncates with its full text in
+              // the title.
               "grid items-center gap-3",
-              isName ? "grid-cols-[11rem_1fr_auto]" : "grid-cols-[7rem_1fr_auto]"
+              isName
+                ? "grid-cols-[8rem_1fr_auto] sm:grid-cols-[11rem_1fr_auto]"
+                : "grid-cols-[5.5rem_1fr_auto] sm:grid-cols-[7rem_1fr_auto]"
             )}
           >
             <div className="min-w-0">
@@ -105,7 +110,7 @@ export function MagnitudeBars({
                 }}
               />
             </div>
-            <div className="tabular w-20 text-right text-[13px] text-muted-foreground">
+            <div className="tabular w-16 text-right text-[13px] text-muted-foreground sm:w-20">
               {d.valueLabel}
             </div>
           </div>
@@ -159,7 +164,7 @@ export function DivergingSplit({ data, unit }: { data: SplitDatum[]; unit: strin
       <ol className="mt-3 space-y-1.5">
         {data.map((d) => {
           const row = (
-            <div className="grid grid-cols-[7rem_1fr] items-center gap-3">
+            <div className="grid grid-cols-[5.5rem_1fr] items-center gap-3 sm:grid-cols-[7rem_1fr]">
               <div className="min-w-0">
                 <div className="truncate font-mono text-[13px] font-semibold tracking-tight">
                   {d.label}
@@ -274,7 +279,7 @@ export function Legend({
   note?: string;
 }) {
   return (
-    <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
       {items.map((i) => (
         <span key={i.label} className="inline-flex items-center gap-1.5">
           <span className="size-2 rounded-full" style={{ background: i.color }} />

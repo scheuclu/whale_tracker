@@ -9,7 +9,7 @@ import {
 } from "@/lib/insider-queries";
 import { price, shares, shortDate, usd } from "@/lib/format";
 import { Card, DivergingSplit, Empty, MagnitudeBars, SectionTitle, StatTile } from "../charts";
-import { ActionBadge, Amount, InsiderDelayTag, PlanTag, RoleTag, TickerChip } from "../ui";
+import { ActionBadge, Amount, InsiderDelayTag, PlanTag, RoleTag, TickerChip, ResponsiveTable } from "../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -147,7 +147,7 @@ export default async function InsidersPage({
         </Card>
       </section>
 
-      <div className="flex items-center gap-1 text-[11px]">
+      <div className="flex flex-wrap items-center gap-1 text-[11px]">
         {WINDOWS.map((w) => {
           const key = w.days ? String(w.days) : "all";
           return (
@@ -197,7 +197,7 @@ export default async function InsidersPage({
       <section>
         <SectionTitle>All issuers</SectionTitle>
         {issuers.length ? (
-          <Card className="overflow-x-auto p-0">
+          <ResponsiveTable>
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.06em] text-muted-foreground">
@@ -236,7 +236,7 @@ export default async function InsidersPage({
                 ))}
               </tbody>
             </table>
-          </Card>
+          </ResponsiveTable>
         ) : (
           <Empty>No insider trades in this window.</Empty>
         )}

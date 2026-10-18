@@ -1,7 +1,7 @@
 import { getScanFiling, type ScanRow } from "@/lib/scan-queries";
 import { ACTION_LABEL, isBuy, isSell, memberLabel, range, shortDate } from "@/lib/format";
 import { Card, Empty, SectionTitle, StatTile } from "../../charts";
-import { PartyBadge, StatusBadge } from "../../ui";
+import { PartyBadge, StatusBadge, ResponsiveTable } from "../../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -77,7 +77,7 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ doc
           <span>· filed {shortDate(filing.filing_date)}</span>
           <StatusBadge value={filing.status} />
           <span className="font-mono text-[11px]">{filing.parse_method}</span>
-          {filing.last_error ? <span className="font-mono text-[11px]">{filing.last_error}</span> : null}
+          {filing.last_error ? <span className="break-all font-mono text-[11px]">{filing.last_error}</span> : null}
           <a
             href={filing.pdf_url}
             target="_blank"
@@ -126,10 +126,10 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ doc
             </SectionTitle>
             {page.error ? (
               <p className="mb-2 text-xs text-amber-600 dark:text-amber-400">
-                Reader could not decompose this page: <span className="font-mono">{page.error}</span>
+                Reader could not decompose this page: <span className="break-all font-mono">{page.error}</span>
               </p>
             ) : null}
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
               <Card className="p-2">
                 <div className="relative w-full">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -143,7 +143,7 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ doc
                   <Overlay width={page.width} height={page.height} rows={pageRows} />
                 </div>
               </Card>
-              <Card className="overflow-x-auto p-0">
+              <ResponsiveTable wrap>
                 {pageRows.length ? (
                   <table className="w-full text-[12px]">
                     <thead>
@@ -228,7 +228,7 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ doc
                     {page.error ? "No rows: the page could not be decomposed." : "No transaction rows on this page."}
                   </p>
                 )}
-              </Card>
+              </ResponsiveTable>
             </div>
           </section>
         );

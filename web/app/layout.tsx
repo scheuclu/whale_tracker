@@ -43,7 +43,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="min-h-screen bg-background font-sans text-foreground antialiased">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <header className="sticky top-0 z-30 border-b border-border/70 bg-background/60 backdrop-blur-xl">
-            <div className="mx-auto flex max-w-6xl items-center gap-3 px-6 pt-4">
+            <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 pt-4 sm:px-6">
               <div className="brand-mark flex size-9 items-center justify-center rounded-xl">
                 <Landmark className="size-[18px] text-white" aria-hidden />
               </div>
@@ -66,12 +66,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               </span>
               <ThemeToggle />
             </div>
-            <div className="mx-auto max-w-6xl px-6 py-3">
+            <div className="mx-auto max-w-6xl px-4 py-3 sm:px-6">
               <Tabs />
             </div>
           </header>
-          <main className="mx-auto max-w-6xl px-6 py-8 pb-28">{children}</main>
-          <footer className="mx-auto max-w-6xl px-6 pb-10 text-xs leading-relaxed text-muted-foreground">
+          <main className="mx-auto max-w-6xl px-4 py-8 pb-28 sm:px-6">{children}</main>
+          <footer className="mx-auto max-w-6xl px-4 pb-10 text-xs sm:px-6 leading-relaxed text-muted-foreground">
             Sources: US House Clerk and US Senate eFD periodic transaction reports
             (STOCK Act disclosures) and SEC EDGAR Form 4 filings. Members disclose an{" "}
             <strong>amount bracket</strong>, not an exact figure — every congressional

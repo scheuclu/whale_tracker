@@ -8,6 +8,60 @@ import {
   isSell,
   range,
 } from "@/lib/format";
+import { Card } from "./charts";
+import { ScrollX } from "./scroll-area";
+
+/**
+ * The card every `<table>` goes in. The leaderboards are 7–9 columns wide
+ * and do not fit a phone; rather than drop columns, the table scrolls
+ * sideways inside a container that fades its open edge and pins the first
+ * column (the ticker, member or filing id) so a row keeps its name while the
+ * numbers move. It replaces `<Card className="overflow-x-auto p-0">`, which
+ * scrolled silently:
+ *
+ *   <ResponsiveTable>
+ *     <table className="w-full text-[13px]">…</table>
+ *   </ResponsiveTable>
+ *
+ * Cells do not wrap: once the table is wider than its card it sits at its
+ * min-content width, where "535 / 402" would break across three lines.
+ * `wrap` restores wrapping for a table with a prose column.
+ *
+ * `lib/responsive-tables.test.ts` fails any page that renders a bare table.
+ */
+export function ResponsiveTable({
+  children,
+  className,
+  stickyFirstColumn = true,
+  wrap = false,
+}: {
+  children: React.ReactNode;
+  /** Merged onto the card. */
+  className?: string;
+  /** Off for a table whose first column is not the row's identity. */
+  stickyFirstColumn?: boolean;
+  /** Let cells wrap (a column of free text) instead of extending the scroll. */
+  wrap?: boolean;
+}) {
+  return (
+    <Card className={cn("p-0", className)}>
+      <ScrollX className={wrap ? undefined : "whitespace-nowrap"} stickyFirstColumn={stickyFirstColumn}>
+        {children}
+      </ScrollX>
+    </Card>
+  );
+}
+
+/**
+ * A single row of chips or filter pills that is allowed to be wider than a
+ * phone: it scrolls sideways with an edge fade instead of wrapping into a
+ * ragged stack or pushing the page out.
+ */
+export function ScrollRow({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <ScrollX viewportClassName={cn("scrollbar-none flex items-center gap-1", className)}>{children}</ScrollX>
+  );
+}
 
 /**
  * Direction pills. The dot carries the diverging colour and the word carries

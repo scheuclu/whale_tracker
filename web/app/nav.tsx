@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Activity, Briefcase, Landmark, LineChart, Moon, Receipt, ScanLine, Sun } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { revealOffset } from "@/lib/scroll-edges";
+import { ScrollX } from "./scroll-area";
 
 const TABS = [
   { href: "/", label: "Feed", icon: Receipt },
@@ -16,29 +18,51 @@ const TABS = [
   { href: "/pipeline", label: "Pipeline", icon: Activity },
 ];
 
+/**
+ * Six labelled tabs are ~610px: wider than a phone. The strip scrolls
+ * sideways behind an edge fade rather than wrapping or shedding its labels
+ * (the icons alone do not say "Scans" or "Pipeline"), and the active tab is
+ * scrolled into view on arrival so the reader can see where they are.
+ */
 export function Tabs() {
   const pathname = usePathname();
+  const viewport = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const vp = viewport.current;
+    const active = vp?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!vp || !active) return;
+    vp.scrollLeft = revealOffset({
+      scrollLeft: vp.scrollLeft,
+      clientWidth: vp.clientWidth,
+      itemLeft: active.offsetLeft,
+      itemWidth: active.offsetWidth,
+    });
+  }, [pathname]);
+
   return (
-    <nav className="glass flex w-fit gap-1 rounded-full border border-border bg-card p-1">
-      {TABS.map(({ href, label, icon: Icon }) => {
-        const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
-        return (
-          <Link
-            key={href}
-            href={href}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              "flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors",
-              active
-                ? "bg-primary/15 text-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground"
-            )}
-          >
-            <Icon className={cn("size-3.5", active && "text-primary")} aria-hidden />
-            {label}
-          </Link>
-        );
-      })}
+    <nav aria-label="Sections" className="glass w-fit max-w-full rounded-full border border-border bg-card">
+      <ScrollX viewportRef={viewport} viewportClassName="scrollbar-none flex gap-1 p-1">
+        {TABS.map(({ href, label, icon: Icon }) => {
+          const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+          return (
+            <Link
+              key={href}
+              href={href}
+              aria-current={active ? "page" : undefined}
+              className={cn(
+                "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors",
+                active
+                  ? "bg-primary/15 text-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              )}
+            >
+              <Icon className={cn("size-3.5", active && "text-primary")} aria-hidden />
+              {label}
+            </Link>
+          );
+        })}
+      </ScrollX>
     </nav>
   );
 }
