@@ -340,6 +340,43 @@ CREATE TABLE IF NOT EXISTS issuer_tickers (
 CREATE INDEX IF NOT EXISTS idx_issuer_tickers_cik ON issuer_tickers(cik);
 """
 
+# Committee assignments (#56), from the same congress-legislators dataset as
+# the roster and refreshed with it (`roster.sync_committees`). Both tables are
+# a snapshot of the *current* Congress — the source publishes no history —
+# so a refresh replaces them wholesale rather than upserting: a member who
+# leaves a committee must leave the table too.
+#
+# Subcommittees are rows of `committees` with `parent_id` set; their id is
+# the parent's thomas_id followed by the subcommittee's two-digit code
+# ('HSIF16'), which is how the membership file keys them.
+_COMMITTEE_DDL = """
+CREATE TABLE IF NOT EXISTS committees (
+  thomas_id TEXT PRIMARY KEY,            -- 'HSIF'; 'HSIF16' for a subcommittee
+  parent_id TEXT REFERENCES committees(thomas_id) ON DELETE CASCADE,
+  chamber TEXT NOT NULL,                 -- house | senate | joint
+  name TEXT NOT NULL,
+  house_committee_id TEXT,               -- the Clerk's own code ('IF'), where the source has one
+  senate_committee_id TEXT,
+  url TEXT,
+  jurisdiction TEXT,                     -- prose from the committee's site, where the source has it
+  jurisdiction_source TEXT,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_committees_parent ON committees(parent_id);
+
+CREATE TABLE IF NOT EXISTS committee_members (
+  committee_id TEXT NOT NULL REFERENCES committees(thomas_id) ON DELETE CASCADE,
+  politician_id INTEGER NOT NULL REFERENCES politicians(id) ON DELETE CASCADE,
+  rank INTEGER,                          -- seniority within the member's side; 1 is the chair / ranking member
+  party TEXT,                            -- majority | minority: the side, not D/R (independents caucus)
+  title TEXT,                            -- Chairman, Ranking Member, Vice Chair, Ex Officio ...
+  chamber TEXT,                          -- only joint committees say which chamber a member sits for
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (committee_id, politician_id)
+);
+CREATE INDEX IF NOT EXISTS idx_committee_members_politician ON committee_members(politician_id);
+"""
+
 # Statuses whose transactions count toward statistics. A filing that failed to
 # parse contributes nothing, and one that is merely 'new' has no rows yet.
 COUNTED_STATUSES = ("parsed", "notified", "backfilled")
@@ -403,6 +440,11 @@ def _migrate(conn: sqlite3.Connection) -> None:
         # `issuers.classify` step or `whale classify-issuers` fills them;
         # the fill needs EDGAR, so there is nothing to do at migration time.
         conn.executescript(_ISSUER_DDL)
+    if version < 10:
+        # Committee tables (#56). Numbered past concurrent migrations so they
+        # can be reconciled at merge; idempotent, so running it on either side
+        # is safe. Empty until the next roster refresh fills them.
+        conn.executescript(_COMMITTEE_DDL)
     if version < 11:
         # Options as structured data (#58). A fresh DB has the columns from
         # the DDL and no rows; an existing one gains them here and has them
@@ -520,6 +562,70 @@ def upsert_politician(conn: sqlite3.Connection, **fields) -> int:
 
 def all_politicians(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     return conn.execute("SELECT * FROM politicians").fetchall()
+
+
+def politician_ids_by_bioguide(conn: sqlite3.Connection) -> dict[str, int]:
+    return {
+        r["bioguide_id"]: r["id"]
+        for r in conn.execute("SELECT bioguide_id, id FROM politicians WHERE bioguide_id IS NOT NULL")
+    }
+
+
+# --- committees -------------------------------------------------------------
+
+
+COMMITTEE_COLUMNS = ("thomas_id", "parent_id", "chamber", "name", "house_committee_id",
+                     "senate_committee_id", "url", "jurisdiction", "jurisdiction_source")
+COMMITTEE_MEMBER_COLUMNS = ("committee_id", "politician_id", "rank", "party", "title", "chamber")
+
+
+def replace_committees(conn: sqlite3.Connection, committees: Iterable[dict],
+                       members: Iterable[dict]) -> tuple[int, int]:
+    """Replace both committee tables with the given rows, in one transaction.
+
+    The source is a snapshot of the current Congress, so the old rows are not
+    reconciled, they are dropped: a committee or seat missing from the new
+    snapshot no longer exists. Parents must precede their subcommittees in
+    `committees`. The caller commits — or rolls back, leaving the previous
+    snapshot in place.
+    """
+    ts = now_iso()
+    conn.execute("DELETE FROM committee_members")
+    conn.execute("DELETE FROM committees")
+    cols = ", ".join(COMMITTEE_COLUMNS) + ", updated_at"
+    marks = ", ".join("?" for _ in COMMITTEE_COLUMNS) + ", ?"
+    n_committees = 0
+    for row in committees:
+        conn.execute(
+            f"INSERT INTO committees ({cols}) VALUES ({marks})",
+            [row.get(c) for c in COMMITTEE_COLUMNS] + [ts],
+        )
+        n_committees += 1
+    cols = ", ".join(COMMITTEE_MEMBER_COLUMNS) + ", updated_at"
+    marks = ", ".join("?" for _ in COMMITTEE_MEMBER_COLUMNS) + ", ?"
+    n_members = 0
+    for row in members:
+        conn.execute(
+            f"INSERT INTO committee_members ({cols}) VALUES ({marks})",
+            [row.get(c) for c in COMMITTEE_MEMBER_COLUMNS] + [ts],
+        )
+        n_members += 1
+    return n_committees, n_members
+
+
+def committee_counts(conn: sqlite3.Connection) -> dict[str, int]:
+    """Row counts for logs and status: full committees, subcommittees, seats."""
+    row = conn.execute(
+        """SELECT SUM(parent_id IS NULL) AS committees,
+                  SUM(parent_id IS NOT NULL) AS subcommittees,
+                  (SELECT COUNT(*) FROM committee_members) AS memberships
+           FROM committees"""
+    ).fetchone()
+    return {
+        "committees": row["committees"] or 0,
+        "subcommittees": row["subcommittees"] or 0,
+        "memberships": row["memberships"] or 0,
+    }
 
 
 # --- filings ----------------------------------------------------------------
