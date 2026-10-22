@@ -244,7 +244,7 @@ export function PriceOverlayChart({ symbol, priceable, fromYear, lo, hi, lanes, 
             .join(" · ")}
         </span>
         {priceable && symbol !== BENCH && !(main?.state === "done" && status) ? (
-          <div role="group" aria-label="Price scale" className="inline-flex rounded-md border border-border p-0.5 sm:ml-auto">
+          <div role="group" aria-label="Price scale" className="inline-flex rounded-control p-0.5 ring-1 ring-inset ring-border sm:ml-auto">
             {(["price", "relative"] as const).map((m) => (
               <button
                 key={m}
@@ -252,8 +252,8 @@ export function PriceOverlayChart({ symbol, priceable, fromYear, lo, hi, lanes, 
                 aria-pressed={mode === m}
                 onClick={() => setMode(m)}
                 className={cn(
-                  "rounded-[5px] px-2 py-0.5 text-[12px] font-medium",
-                  mode === m ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
+                  "rounded-chip px-2 py-0.5 text-[12px] font-medium",
+                  mode === m ? "bg-foreground text-background" : "text-ink-2 hover:bg-secondary hover:text-foreground"
                 )}
               >
                 {m === "price" ? "Price" : `vs ${BENCH}`}

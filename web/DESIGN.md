@@ -122,9 +122,9 @@ Amber used to mark them; it now belongs to nobody, and gold is the accent.
 Families (all self-hosted by `next/font`, Latin subset, `display: swap` with
 metric-adjusted fallbacks; no third-party origin):
 
-- **Newsreader** (`font-serif`, `--font-serif`) — variable, with the optical
-  size axis on, so the same family is a display face at 46px and a text face
-  at 16px. Lining figures (`.font-serif` sets `lining-nums`).
+- **Newsreader** (`font-serif`, `--font-serif`) — variable on the weight axis
+  only (the optical-size axis would more than double the file, 132 KB against
+  58 KB, and the headline is the phone LCP). Lining figures (`.font-serif`).
 - **Inter** (`font-sans`, the body default) — `cv05`/`cv08` on, so l/I/1 are
   distinct in names and tickers.
 - **Geist Mono** (`font-mono`) — tickers, filing ids, code.

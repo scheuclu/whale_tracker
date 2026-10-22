@@ -2,7 +2,9 @@ import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * "How to read this": an explanation whose first sentence stays in view and
+ * "How to read this" — the site's one home for caveats (DESIGN.md): say a
+ * caveat once, here, rather than as a grey sentence under every widget.
+ * An explanation whose first sentence stays in view and
  * whose detail waits behind a native `<details>`. Native on purpose — it
  * opens with Enter or Space, needs no JavaScript, and the collapsed text is
  * still in the document (and in find-in-page), so a caveat moved in here is

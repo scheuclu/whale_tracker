@@ -20,12 +20,13 @@ import "./motion.css";
 
 // Self-hosted by next/font (no third-party origin at runtime; the CSP stays
 // 'self'), subset to Latin, `swap` with metric-adjusted fallbacks so the
-// swap does not shift the layout. Newsreader carries its optical-size axis:
-// the same family is a display face at 46px and a text face at 18px.
-const sans = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
+// swap does not shift the layout. Newsreader is the weight axis only: its
+// optical-size axis refines the 46px headline a little but more than doubles
+// the file (132 KB against 58 KB), and the headline is the page's Largest
+// Contentful Paint on a phone. Measured with Lighthouse; see the PR.
+const sans = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap", preload: false });
 const serif = Newsreader({
   subsets: ["latin"],
-  axes: ["opsz"],
   style: ["normal"],
   variable: "--font-serif",
   display: "swap",
