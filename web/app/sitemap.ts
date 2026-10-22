@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 import { getFilingSpan, getSitemapMembers, getSitemapTickers } from "@/lib/entities";
 import { memberHref, tickerHref } from "@/lib/format";
 import { absoluteUrl } from "@/lib/site";
+import { PRIVACY_UPDATED, TERMS_UPDATED } from "@/lib/legal";
 
 /**
  * Every indexable page: home, the section pages, every member and every
@@ -48,6 +49,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     section("/alerts", 0.5),
     section("/pipeline", 0.4),
     section("/scans", 0.3),
+    // Dated by their own last change, not the data (lib/legal.ts).
+    { url: absoluteUrl("/privacy"), lastModified: PRIVACY_UPDATED, changeFrequency: "yearly", priority: 0.2 },
+    { url: absoluteUrl("/terms"), lastModified: TERMS_UPDATED, changeFrequency: "yearly", priority: 0.2 },
     ...members.map((m) => ({
       url: absoluteUrl(memberHref(m.name, m.bioguide_id)),
       lastModified: m.last_filed ?? undefined,

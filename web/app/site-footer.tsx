@@ -20,6 +20,12 @@ const SOURCES = [
   },
 ];
 
+/** The footer's last row: the pages that govern using the site. */
+const LEGAL_LINKS = [
+  { href: "/privacy", label: "Privacy" },
+  { href: "/terms", label: "Terms" },
+];
+
 /**
  * Sources and the caveats that govern every figure on the site. Each note
  * here is deliberate (see CLAUDE.md, "amounts are ranges"): restructure it
@@ -115,9 +121,20 @@ export function SiteFooter() {
             </dl>
           </div>
         </div>
-        <p className="mt-8 border-t border-border pt-5 text-xs text-muted-foreground">
-          Public disclosures, shown for information — not investment advice.
-        </p>
+        <div className="mt-8 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 border-t border-border pt-5 text-xs text-muted-foreground">
+          <p>Public disclosures, shown for information — not investment advice.</p>
+          <nav aria-label="Legal" className="flex flex-wrap gap-x-4 gap-y-1">
+            {LEGAL_LINKS.map((l) => (
+              <Link
+                key={l.href}
+                href={l.href}
+                className="rounded-sm font-medium text-ink-2 transition-colors duration-150 hover:text-primary"
+              >
+                {l.label}
+              </Link>
+            ))}
+          </nav>
+        </div>
       </div>
     </footer>
   );

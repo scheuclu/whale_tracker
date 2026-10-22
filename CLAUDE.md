@@ -468,6 +468,29 @@ skill before changing any palette value.
   not on the document's first paint (`data-first-load`, `header-shell.tsx`):
   holding first-load content at opacity 0 delayed LCP by ~0.2 s real, ~1 s in
   Lighthouse's mobile model.
+- **Security headers** (CSP, HSTS, framing, nosniff, referrer, permissions)
+  are set on every path from `web/lib/security-headers.ts`. The CSP allows
+  inline scripts on purpose: a nonce cannot survive the CDN page cache (a
+  cached page replays one nonce), and the App Router's inline RSC payload
+  cannot be hashed. Everything else is locked to `'self'`; the only
+  third-party origins are the admin sign-in redirect in `form-action`, plus
+  dev/preview-only allowances. A new third-party origin (script, embed,
+  client-side fetch, font) is a deliberate CSP change in that file, with
+  `/privacy` updated in the same PR — never a wildcard.
+- **`/privacy` must describe what the code does.** Any change to what the site
+  collects or who processes it (a new script, stored field, cookie or vendor)
+  updates `web/app/privacy/page.tsx` and `PRIVACY_UPDATED` (`web/lib/legal.ts`)
+  in the same PR. `/terms` restates the methodology's rules (not advice, not
+  evidence of wrongdoing, as filed) and must never contradict
+  `web/lib/methodology.ts`.
+- **`/api/health`** is for uptime monitors: 200 `ok` / 503 `degraded`, never
+  cached, no error text. Freshness is judged on the last pipeline write
+  (`MAX(sync_state.updated_at)`, written by every run) against
+  `STALE_AFTER_HOURS` (12, shared with the header's sync pill;
+  `HEALTH_STALE_AFTER_HOURS` overrides it), not on the last filing change,
+  which is legitimately old on a quiet day; two failed runs in a row also
+  degrade it. Error text shown to readers goes through `publicErrorMessage`
+  (`web/lib/public-error.ts`): no paths, credentials or stacks.
 
 ## Late-filing compliance
 

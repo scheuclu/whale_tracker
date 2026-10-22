@@ -52,6 +52,7 @@ import {
   type TransactionRow,
 } from "./queries";
 import { POLITICIAN_SORT, TICKER_SORT, type PoliticianSortKey, type TickerSortKey } from "./table-sort";
+import { publicErrorMessage } from "./public-error";
 
 export const MAX_LIMIT = 500;
 const MAX_OFFSET = 1_000_000;
@@ -286,7 +287,7 @@ async function guard(origin: string, run: () => Promise<ApiResult>): Promise<Api
   try {
     return await run();
   } catch (err) {
-    return apiError(origin, 503, `data unavailable: ${(err as Error).message}`);
+    return apiError(origin, 503, `data unavailable: ${publicErrorMessage(err)}`);
   }
 }
 

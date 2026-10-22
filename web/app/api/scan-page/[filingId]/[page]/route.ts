@@ -1,5 +1,6 @@
 import { getScanPagePng } from "@/lib/scan-queries";
 import { parsePageParams, pngHeaders } from "@/lib/scan-image";
+import { publicErrorMessage } from "@/lib/public-error";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ export async function GET(
   try {
     png = await getScanPagePng(params.filingId, params.page);
   } catch (err) {
-    return new Response((err as Error).message, { status: 503 });
+    return new Response(publicErrorMessage(err), { status: 503 });
   }
   if (!png) return new Response("not found", { status: 404 });
   return new Response(new Uint8Array(png), { headers: pngHeaders(png.byteLength) });

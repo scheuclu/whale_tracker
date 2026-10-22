@@ -4,6 +4,7 @@ import { feedMarkdown } from "@/lib/api-markdown";
 import { getCoverage } from "@/lib/api-queries";
 import { originOf } from "@/lib/api-route";
 import { buildTickers, buildTrades, type TradeJson } from "@/lib/api-v1";
+import { publicErrorMessage } from "@/lib/public-error";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest) {
       origin
     );
   } catch (err) {
-    return jsonResponse(apiError(origin, 503, `data unavailable: ${(err as Error).message}`), origin);
+    return jsonResponse(apiError(origin, 503, `data unavailable: ${publicErrorMessage(err)}`), origin);
   }
 }
 
