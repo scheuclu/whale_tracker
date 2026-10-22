@@ -49,3 +49,22 @@ export const PAGE_CDN_CACHE_CONTROL = `public, s-maxage=${PAGE_CDN_SECONDS}, sta
  */
 export const PAGE_SOURCE =
   "/((?!api/|_next/)(?!(?:.*/)?(?:opengraph-image|twitter-image|apple-icon|icon)(?:[-./]|$))(?!.*\\.(?:svg|png|jpe?g|gif|webp|ico|txt|xml|json|md|webmanifest|csv)$).*)";
+
+/**
+ * Share cards (every `opengraph-image`). They read the database, so Next
+ * renders them per request and sends `public, max-age=0, must-revalidate`:
+ * until this header every unfurl re-rendered the PNG (production,
+ * 2026-10-22: `x-vercel-cache: MISS` on every repeat request, ~0.9 s each).
+ * A card is a count summary that the sites fetching it cache for days
+ * anyway, so the CDN holds it an hour and serves a stale copy for a day
+ * while one request re-renders it. This sits outside the 120 s page bound
+ * above on purpose: a card a few hours behind the page misstates nothing,
+ * it says "21 trades" where the page now says 22.
+ *
+ * Set by the card renderers on their own response (app/share-card.tsx),
+ * not in `next.config.ts`, so the policy travels with the image. Browsers
+ * get the same `CDN-Cache-Control`-ignoring treatment as pages.
+ */
+export const CARD_CDN_SECONDS = 3600;
+export const CARD_SWR_SECONDS = 86400;
+export const CARD_CDN_CACHE_CONTROL = `public, s-maxage=${CARD_CDN_SECONDS}, stale-while-revalidate=${CARD_SWR_SECONDS}`;

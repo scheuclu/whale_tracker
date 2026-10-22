@@ -10,7 +10,9 @@ import { MemberHero } from "../../politicians/member-hero";
 import { AgentAlternates } from "../../agent-alternates";
 import { assetLabel } from "@/lib/asset-label";
 import { Disclosure, RangeCaption } from "../../disclosure";
-import { DataError, PAGE_STACK, Quiet } from "../../page-header";
+import { BackLink, DataError, PAGE_STACK, Quiet } from "../../page-header";
+import { ShareControl } from "../../share-control";
+import { absoluteUrl } from "@/lib/site";
 import { Segmented } from "../../ui";
 
 /*
@@ -70,12 +72,13 @@ export async function MemberDetail({
       <AgentAlternates member={bioguideId} />
       <header className="space-y-5">
         <div className="space-y-2">
-          <a
-            href="/politicians"
-            className="inline-flex rounded-md text-xs text-muted-foreground transition-colors duration-150 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          >
-            ← all members
-          </a>
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <BackLink href="/politicians" label="all members" />
+            <ShareControl
+              url={absoluteUrl(memberHref(member, bioguideId))}
+              text={`${member}${detail.party && detail.state ? ` (${detail.party}-${detail.state})` : ""}: disclosed stock trades from STOCK Act filings`}
+            />
+          </div>
           <MemberHero
             detail={detail}
             tickers={tickers}

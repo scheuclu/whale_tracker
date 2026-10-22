@@ -14,8 +14,9 @@ import {
 } from "@/lib/queries";
 import type { Metadata } from "next";
 import { committeeHref, memberHref, range, shortDate, usd } from "@/lib/format";
-import { plural } from "@/lib/site";
-import { clip, pageMetadata } from "@/lib/seo";
+import { absoluteUrl, plural } from "@/lib/site";
+import { ShareControl } from "../share-control";
+import { clip, pageCard, pageMetadata } from "@/lib/seo";
 import {
   Card,
   ColumnSeries,
@@ -76,16 +77,21 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
       description:
         "Members of Congress ranked by trades disclosed more than 45 days after the trade, the STOCK Act deadline, with the filings behind each count. A reporting fact, not an allegation.",
       path: "/politicians?view=late",
+      card: pageCard("/cards/late", "Late STOCK Act disclosures: late trades, their share of all disclosed trades, members late and filings"),
     });
   }
   if (params.committee) {
     const path = `/politicians?committee=${encodeURIComponent(params.committee)}`;
     let name: string | null = null;
+    let id = params.committee;
     let seats = 0;
+    let traders = 0;
     try {
       const [committee, members] = await Promise.all([getCommittee(params.committee), getCommitteeMembers(params.committee)]);
       name = committee?.name ?? null;
+      id = committee?.thomas_id ?? id;
       seats = members.length;
+      traders = members.filter((m) => m.trades > 0).length;
     } catch {
       /* metadata degrades to the id */
     }
@@ -98,6 +104,10 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
         `Stock trades disclosed by the ${plural(seats, "member")} seated on the ${name}, from House and Senate STOCK Act filings, with each seat holder's trade count and disclosed range.`
       ),
       path,
+      card: pageCard(
+        `/cards/committee/${encodeURIComponent(id)}`,
+        `${name}: ${plural(seats, "seat")}, ${plural(traders, "member")} with disclosed trades, and their buy and sell counts`
+      ),
     });
   }
   let members = 0;
@@ -110,6 +120,7 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
     title: "Members of Congress trading stocks",
     description: `${members ? `${plural(members, "member")} of Congress` : "Members of Congress"} with disclosed stock trades, ranked by trades, tickers, estimated volume and late filings. Amounts are the ranges filed.`,
     path: "/politicians",
+    card: pageCard("/politicians", "Members of Congress trading stocks: members, disclosed trades, tickers and members who filed late"),
   });
 }
 
@@ -383,6 +394,7 @@ async function CommitteeView({ id }: { id: string }) {
     <div className={PAGE_STACK}>
       <PageHeader
         back={{ href: "/politicians", label: "all members" }}
+        share={<ShareControl url={absoluteUrl(committeeHref(committee.thomas_id))} text={`${committee.name}: members' disclosed stock trades`} />}
         eyebrow="Committee"
         title={committee.name}
         subtitle={
@@ -631,6 +643,7 @@ async function LateView() {
     <div className={PAGE_STACK}>
       <PageHeader
         back={{ href: "/politicians", label: "all members" }}
+        share={<ShareControl url={absoluteUrl("/politicians?view=late")} text="Late STOCK Act disclosures by members of Congress" />}
         title="Late disclosures"
         subtitle={
           <>

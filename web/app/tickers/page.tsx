@@ -7,7 +7,7 @@ import {
   getTransactions,
 } from "@/lib/queries";
 import { range, tickerHref, usd, memberHref, memberLabel, shortDate, ASSET_TYPE_LABEL } from "@/lib/format";
-import { pageMetadata } from "@/lib/seo";
+import { pageCard, pageMetadata } from "@/lib/seo";
 import {
   Card,
   DivergingSplit,
@@ -88,6 +88,10 @@ export async function generateMetadata(): Promise<Metadata> {
     title: "Stocks traded by members of Congress",
     description: `${tickers ? `${tickers.toLocaleString("en-US")} tickers` : "Every ticker"} disclosed in House and Senate STOCK Act filings, ranked by members trading, trades and estimated volume, with buy/sell split and sectors.`,
     path: "/tickers",
+    card: pageCard(
+      "/tickers",
+      "Stocks traded by members of Congress: tickers, disclosed trades, members trading, and the tickers most members traded in the last 90 days"
+    ),
   });
 }
 

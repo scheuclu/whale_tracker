@@ -29,9 +29,12 @@ export function PageHeader({
   badges,
   subtitle,
   aside,
+  share,
   children,
 }: {
   back?: { href: string; label: string };
+  /** The page's `ShareControl` (app/share-control.tsx), on the back link's row, right-aligned. */
+  share?: React.ReactNode;
   eyebrow?: React.ReactNode;
   title: React.ReactNode;
   /** Merged onto the h1 — a ticker or filing id sets it in mono. */
@@ -46,13 +49,11 @@ export function PageHeader({
   return (
     <header className="space-y-5">
       <div className="space-y-2">
-        {back ? (
-          <a
-            href={back.href}
-            className="inline-flex rounded-md text-xs text-muted-foreground transition-colors duration-150 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          >
-            ← {back.label}
-          </a>
+        {back || share ? (
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            {back ? <BackLink href={back.href} label={back.label} /> : <span />}
+            {share}
+          </div>
         ) : null}
         <div className="flex flex-wrap items-end justify-between gap-x-10 gap-y-4">
           <div className="min-w-0 max-w-full">
@@ -81,6 +82,18 @@ export function PageHeader({
       </div>
       {children}
     </header>
+  );
+}
+
+/** "← all members": the way back to a detail page's list. */
+export function BackLink({ href, label }: { href: string; label: string }) {
+  return (
+    <a
+      href={href}
+      className="inline-flex rounded-md text-xs text-muted-foreground transition-colors duration-150 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+    >
+      ← {label}
+    </a>
   );
 }
 

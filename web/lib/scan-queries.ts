@@ -132,6 +132,12 @@ export async function getScanFilings(opts: { member?: string } = {}): Promise<Sc
   return db.prepare(sql).all(...params) as ScanFilingRow[];
 }
 
+/** One scan's summary row, without its pages and rows — what its share card needs. */
+export async function getScanFilingSummary(docId: string): Promise<ScanFilingRow | null> {
+  const db = await getDb();
+  return (db.prepare(`${FILINGS} AND f.doc_id = ?`).get(docId) as ScanFilingRow | undefined) ?? null;
+}
+
 /** `?page=` as typed: a positive integer, else page 1. Whether it exists is the page's to check. */
 export function parsePageNo(raw: string | undefined): number {
   if (raw == null || raw === "") return 1;
@@ -200,9 +206,9 @@ export type ScanFiling = {
 };
 
 export async function getScanFiling(docId: string, page = 1): Promise<ScanFiling | null> {
-  const db = await getDb();
-  const filing = db.prepare(`${FILINGS} AND f.doc_id = ?`).get(docId) as ScanFilingRow | undefined;
+  const filing = await getScanFilingSummary(docId);
   if (!filing) return null;
+  const db = await getDb();
   const pages = db
     .prepare(
       `SELECT s.page_no, s.width, s.height, s.dpi, s.rotation, s.error,

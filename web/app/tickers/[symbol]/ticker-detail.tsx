@@ -1,6 +1,6 @@
 import { getTickerMembers, getTransactions, type TickerRow } from "@/lib/queries";
 import { getInsiderIssuer, getIssuerInsiders, type IssuerInsiderRow, type IssuerRow } from "@/lib/insider-queries";
-import { ASSET_TYPE_LABEL, memberHref, memberLabel, range, shortDate, usd } from "@/lib/format";
+import { ASSET_TYPE_LABEL, memberHref, memberLabel, range, shortDate, tickerHref, usd } from "@/lib/format";
 import { Card, Empty, SectionTitle, StatTile, VolumeRange } from "../../charts";
 import { ExportLink } from "../../feed-controls";
 import { ActionBadge, Amount, OptionBadge, OwnerTag, ResponsiveTable, RoleTag, SectorTag } from "../../ui";
@@ -13,6 +13,8 @@ import { AgentAlternates } from "../../agent-alternates";
 import { assetLabel } from "@/lib/asset-label";
 import { Disclosure, RangeCaption } from "../../disclosure";
 import { DataError, PAGE_STACK, PageHeader, Quiet } from "../../page-header";
+import { ShareControl } from "../../share-control";
+import { absoluteUrl } from "@/lib/site";
 
 /*
  * One ticker's page, `/tickers/<SYMBOL>`. Moved out of app/tickers/page.tsx
@@ -49,6 +51,7 @@ export async function TickerDetail({ stat }: { stat: TickerRow }) {
       <AgentAlternates ticker={ticker} />
       <PageHeader
         back={{ href: "/tickers", label: "all tickers" }}
+        share={<ShareControl url={absoluteUrl(tickerHref(ticker))} text={`${ticker}: stock trades disclosed by members of Congress`} />}
         title={stat.ticker}
         titleClassName="font-mono sm:text-[44px]"
         badges={

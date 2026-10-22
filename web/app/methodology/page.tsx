@@ -1,4 +1,4 @@
-import { pageMetadata } from "@/lib/seo";
+import { pageCard, pageMetadata } from "@/lib/seo";
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { getCoverage } from "@/lib/api-queries";
@@ -21,6 +21,10 @@ export const metadata = pageMetadata({
   description:
     "Where the data comes from, why congressional amounts are ranges, how estimates, disclosure delays and insider values are computed, and what is not covered.",
   path: "/methodology",
+  card: pageCard(
+    "/methodology",
+    "Methodology: congressional amounts are ranges, delay is trade date to filing date, insider values are shares × reported price, scanned filings stay out of totals"
+  ),
 });
 
 /** `code` spans in the shared rule text become <code>; nothing else is markup. */
