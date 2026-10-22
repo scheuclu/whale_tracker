@@ -487,10 +487,9 @@ skill before changing any palette value.
   `web/lib/cache-policy.ts`) and are sent `no-store`; a signed-in view or a
   form's result must never be cached or shared. `/admin` is also `noindex` and
   disallowed in robots.txt.
-- `/contact` must work without JavaScript. Every page streams inside the root
-  `loading.tsx` boundary, which React 19.2 outlines into a hidden div that
-  only a script reveals; the page's `<noscript>` style undoes that for this
-  page. Keep the form a plain server-action POST.
+- `/contact` must work without JavaScript: keep the form a plain
+  server-action POST (the site-wide `app/no-script.tsx` makes the page
+  visible with scripting off).
 
 ## Dashboard conventions
 
