@@ -436,6 +436,26 @@ measures 23.8 light / 19.2 dark. Direction is always spelled out in text too,
 so colour never carries meaning alone. Re-run the validator in the `dataviz`
 skill before changing any palette value.
 
+## Price overlay (ticker and insider-issuer pages)
+
+- "Price and trading activity" (`web/app/price-overlay*.tsx`, logic in
+  `web/lib/price-overlay.ts`) draws daily closes over the symbol's trades on
+  one trade-date axis: congressional and Form 4 trades in **separate lanes**,
+  never pooled, each population's cluster rule shaded on its own. The rules are
+  mirrored from `config.yaml` (90 d / 3 members over the $15,001 floor / $500k
+  est.; 30 d / 3 insiders) and a web test fails if they drift.
+- Closes are **not stored**. `GET /api/prices/<SYMBOL>?from=<year>` fetches
+  them from the pipeline's source (Yahoo chart endpoint, `close` =
+  split-adjusted, same User-Agent, same 16:05 ET final-close rule as
+  `prices.py`) for symbols we hold only; CDN `s-maxage` 12 h + 2 d SWR, Next
+  data cache 12 h, a source failure cached 5 min. Stored `prices` rows are only
+  the fallback. Years of closes for ~2,000 symbols do not belong in a database
+  committed on every run.
+- **Descriptive only**: no return, alpha, profit or causal wording, and no
+  outcome computed outside `stats.alert_outcomes`. The caption must keep
+  saying that trades sit on their trade date (disclosed up to 45 days later)
+  and that a move after a cluster is not evidence of knowledge.
+
 ## Dashboard conventions
 
 - Vercel builds a preview for every PR — point the user at it for UI review.
