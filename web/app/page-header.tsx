@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import { Segmented } from "./ui";
 import { Empty } from "./charts";
+import { publicErrorMessage } from "@/lib/public-error";
 
 /**
  * Page composition shared by every route: one hero, then sections at one
@@ -105,7 +106,7 @@ export function BackLink({ href, label }: { href: string; label: string }) {
  * of this function.
  */
 export function DataError({ error, context }: { error: unknown; context?: string }) {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = publicErrorMessage(error);
   return <Empty>{context ? `${context}: ${message}` : message}</Empty>;
 }
 

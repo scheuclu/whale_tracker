@@ -3,6 +3,7 @@ import { optionsResponse, textResponse } from "@/lib/api-format";
 import { getCoverage } from "@/lib/api-queries";
 import { originOf } from "@/lib/api-route";
 import { llmsFullTxt } from "@/lib/methodology";
+import { publicErrorMessage } from "@/lib/public-error";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,7 @@ export async function GET(request: NextRequest) {
   try {
     return textResponse(llmsFullTxt(origin, await getCoverage()), "text/plain; charset=utf-8", 200, origin);
   } catch (err) {
-    return textResponse(`llms-full.txt unavailable: ${(err as Error).message}`, "text/plain; charset=utf-8", 503, origin);
+    return textResponse(`llms-full.txt unavailable: ${publicErrorMessage(err)}`, "text/plain; charset=utf-8", 503, origin);
   }
 }
 

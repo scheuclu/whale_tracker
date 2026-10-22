@@ -25,6 +25,7 @@ import { getTimelineTrades, type TimelineTrade } from "@/lib/timeline-queries";
 import { cn } from "@/lib/utils";
 import { Card, Empty, SectionTitle } from "./charts";
 import { TimelineFrame } from "./timeline-frame";
+import { publicErrorMessage } from "@/lib/public-error";
 
 type Mode = "ticker" | "member";
 
@@ -105,7 +106,7 @@ export async function MemberTimeline({ member }: { member: string }) {
   try {
     trades = await getTimelineTrades({ member });
   } catch (err) {
-    return <Empty>{(err as Error).message}</Empty>;
+    return <Empty>{publicErrorMessage(err)}</Empty>;
   }
   if (!trades.length) return null;
   return (

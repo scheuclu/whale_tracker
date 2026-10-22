@@ -31,7 +31,7 @@ const AI_CRAWLERS = [
   "MistralAI-User",
 ];
 
-const DISALLOW = ["/api/export.csv", "/api/scan-page/"];
+const DISALLOW = ["/api/export.csv", "/api/scan-page/", "/api/health"];
 
 export default function robots(): MetadataRoute.Robots {
   return {

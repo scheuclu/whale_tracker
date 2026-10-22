@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { transactionsCsv } from "@/lib/csv";
 import { exportFilename, parseTransactionFilters } from "@/lib/feed-filters";
 import { getTransactions } from "@/lib/queries";
+import { publicErrorMessage } from "@/lib/public-error";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
   try {
     rows = await getTransactions({ ...filters, limit: MAX_ROWS + 1 });
   } catch (err) {
-    return text((err as Error).message, 503);
+    return text(publicErrorMessage(err), 503);
   }
   if (rows.length > MAX_ROWS) return text(`more than ${MAX_ROWS} rows match; narrow the filter`, 413);
 

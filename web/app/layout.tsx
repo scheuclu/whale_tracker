@@ -8,6 +8,8 @@ import { HeaderShell } from "./header-shell";
 import { SiteFooter } from "./site-footer";
 import { AgentAlternates } from "./agent-alternates";
 import { getPipeline } from "@/lib/queries";
+// Past this the sync pill turns amber; /api/health shares the threshold.
+import { STALE_AFTER_HOURS } from "@/lib/health";
 import { getInsiderTotals } from "@/lib/insider-queries";
 import { relativeTime } from "@/lib/format";
 import { SITE_DESCRIPTION, SITE_NAME, siteUrl } from "@/lib/site";
@@ -38,13 +40,6 @@ export const viewport: Viewport = {
     { media: "(prefers-color-scheme: dark)", color: "#0b0c0f" },
   ],
 };
-
-/**
- * Past this the sync pill turns amber. The poll is scheduled every 90
- * minutes, but GitHub delivers scheduled runs late and unevenly (a ~5 h
- * median gap), so a few hours without a write is normal, not stale.
- */
-const STALE_AFTER_HOURS = 12;
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   let transactions = 0;

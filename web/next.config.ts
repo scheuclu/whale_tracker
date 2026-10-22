@@ -1,9 +1,12 @@
 import path from "node:path";
 import type { NextConfig } from "next";
 import { PAGE_CDN_CACHE_CONTROL, PAGE_SOURCE } from "./lib/cache-policy";
+import { SECURITY_SOURCE, securityHeaders } from "./lib/security-headers";
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["better-sqlite3"],
+  // No `X-Powered-By: Next.js`: it tells a scanner which advisories to try.
+  poweredByHeader: false,
   // Pin the workspace root: without it Turbopack walks up past the repo and
   // picks up an unrelated package-lock.json from the home directory.
   turbopack: { root: path.join(__dirname) },
@@ -38,8 +41,22 @@ const nextConfig: NextConfig = {
   // `Cache-Control: private, no-store`; this targeted header lets Vercel's
   // CDN hold each URL for a minute anyway. The lifetimes, and the staleness
   // bound they add up to: lib/cache-policy.ts.
+  //
+  // Security headers (CSP, HSTS, framing, sniffing, referrer, permissions) go
+  // on every path, pages and API alike; why the CSP is shaped the way it is,
+  // and how to add an origin to it: lib/security-headers.ts. VERCEL_ENV is
+  // read at build time, so only a preview build allows the Vercel Toolbar.
   async headers() {
-    return [{ source: PAGE_SOURCE, headers: [{ key: "CDN-Cache-Control", value: PAGE_CDN_CACHE_CONTROL }] }];
+    return [
+      { source: PAGE_SOURCE, headers: [{ key: "CDN-Cache-Control", value: PAGE_CDN_CACHE_CONTROL }] },
+      {
+        source: SECURITY_SOURCE,
+        headers: securityHeaders({
+          dev: process.env.NODE_ENV === "development",
+          preview: process.env.VERCEL_ENV === "preview",
+        }),
+      },
+    ];
   },
 };
 
