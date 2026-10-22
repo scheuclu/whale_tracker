@@ -107,7 +107,7 @@ export async function TickerDetail({ stat }: { stat: TickerRow }) {
       <PriceOverlay ticker={ticker} focus="congress" congress={timeline} />
 
       <section>
-        <SectionTitle right={<span className="text-[11px] text-muted-foreground">by trade date</span>}>
+        <SectionTitle right={<span className="text-muted-foreground">By trade date</span>}>
           Trades over time
         </SectionTitle>
         <TradeTimeline trades={timeline} mode="ticker" />

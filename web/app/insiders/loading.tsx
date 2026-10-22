@@ -25,7 +25,7 @@ export default function Loading() {
 /** Overview: six tiles, the convergence chart, window pills, bought/sold bars. */
 function InsidersLoading() {
   return (
-    <SkeletonPage label="insiders">
+    <SkeletonPage label="insiders" head>
       <TilesSkeleton count={6} cols="sm:grid-cols-3 lg:grid-cols-6" wrap={false} />
       <section>
         <SectionTitleSkeleton width="w-36" right />

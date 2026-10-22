@@ -77,7 +77,7 @@ export function TradeTimeline({
   const hasOther = wide.counts.other > 0;
 
   return (
-    <Card className="px-3 pb-3 pt-4 sm:px-5">
+    <Card>
       <TimelineLegend
         layout={wide}
         hasOption={hasOption}
@@ -111,7 +111,7 @@ export async function MemberTimeline({ member }: { member: string }) {
   if (!trades.length) return null;
   return (
     <section>
-      <SectionTitle right={<span className="text-[11px] text-muted-foreground">by trade date</span>}>
+      <SectionTitle right={<span className="text-muted-foreground">By trade date</span>}>
         Trades over time
       </SectionTitle>
       <TradeTimeline trades={trades} mode="member" />

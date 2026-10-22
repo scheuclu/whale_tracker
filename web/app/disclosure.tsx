@@ -2,7 +2,9 @@ import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * "How to read this": an explanation whose first sentence stays in view and
+ * "How to read this" — the site's one home for caveats (DESIGN.md): say a
+ * caveat once, here, rather than as a grey sentence under every widget.
+ * An explanation whose first sentence stays in view and
  * whose detail waits behind a native `<details>`. Native on purpose — it
  * opens with Enter or Space, needs no JavaScript, and the collapsed text is
  * still in the document (and in find-in-page), so a caveat moved in here is
@@ -33,25 +35,30 @@ export function Disclosure({
   size?: "md" | "sm";
   className?: string;
 }) {
+  // `md` is a reader's note: the lead at reading size in secondary ink, the
+  // detail behind a "How to read this ›" disclosure — Apple's footnote
+  // voice. `sm` is a chart footnote: smaller and muted — present, never loud.
   return (
     <div
       data-disclosure
       className={cn(
-        "max-w-[68ch] text-muted-foreground",
-        size === "sm" ? "text-[12px] leading-relaxed" : "text-[14px] leading-relaxed",
+        "max-w-[68ch]",
+        size === "sm"
+          ? "text-[13px] leading-relaxed text-muted-foreground"
+          : "text-[14px] leading-relaxed text-ink-2",
         className
       )}
     >
-      {lead ? <p>{lead}</p> : null}
+      {lead ? <p className={size === "md" ? "text-[15px] leading-normal text-ink-2" : undefined}>{lead}</p> : null}
       {children ? (
-        <details className={cn("group/disclosure", lead ? "mt-1" : undefined)}>
+        <details className={cn("group/disclosure", lead ? (size === "md" ? "mt-1.5" : "mt-1") : undefined)}>
           <summary
             className={cn(
-              "inline-flex cursor-pointer select-none list-none items-center gap-1 rounded-md py-0.5 pr-1 font-medium text-ink-2",
-              "transition-colors duration-150 ease-out hover:text-foreground motion-reduce:transition-none",
+              "inline-flex cursor-pointer select-none list-none items-center gap-1 rounded-sm py-0.5 pr-1 font-medium text-ink-2",
+              "underline decoration-transparent underline-offset-[3px] transition-colors duration-150 ease-out hover:text-foreground hover:decoration-current motion-reduce:transition-none",
               "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
               "[&::-webkit-details-marker]:hidden",
-              size === "sm" ? "text-[12px]" : "text-[13px]"
+              size === "sm" ? "text-[13px]" : "text-[14px]"
             )}
           >
             <ChevronRight
@@ -60,7 +67,14 @@ export function Disclosure({
             />
             {summary}
           </summary>
-          <div className="mt-2 space-y-2 border-l border-border pl-3">{children}</div>
+          <div
+            className={cn(
+              "mt-2 space-y-2",
+              size === "sm" ? "pl-[18px]" : "pl-[18px] text-muted-foreground"
+            )}
+          >
+            {children}
+          </div>
         </details>
       ) : null}
     </div>

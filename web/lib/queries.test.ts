@@ -387,3 +387,13 @@ test("a type dispute is one of direction, as vision.join counts it", () => {
   assert.equal(sq.isTypeDisputed(null, "sale"), false);
   assert.equal(sq.isTypeDisputed("purchase", "unknown"), false);
 });
+
+test("getPipeline().lastUpdated is the last pipeline run, not the last filing change", async () => {
+  // A run that finds nothing new still writes sync_state; the footer's
+  // "Updated … ago" line and /pipeline's "Last run" must follow it.
+  const db = await (await import("./db.ts")).getDb();
+  const run = (db.prepare("SELECT MAX(updated_at) AS t FROM sync_state").get() as { t: string | null }).t;
+  const p = await q.getPipeline();
+  assert.ok(run, "fixture database has sync_state rows");
+  assert.equal(p.lastUpdated, run);
+});

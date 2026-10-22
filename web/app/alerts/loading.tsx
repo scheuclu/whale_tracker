@@ -3,7 +3,7 @@ import { Bone, PillsSkeleton, SectionTitleSkeleton, SkeletonPage, TilesSkeleton 
 /** Alerts: intro, six tiles, the price-move note, then the alert log cards. */
 export default function Loading() {
   return (
-    <SkeletonPage label="alerts">
+    <SkeletonPage label="alerts" head>
       <div className="max-w-[68ch]">
         {["w-full", "w-full", "w-full", "w-2/3"].map((w, i) => (
           <span key={i} className="flex h-5 items-center">

@@ -6,7 +6,7 @@ import { Card, DivergingSplit, Empty, MagnitudeBars, SectionTitle, StatTile, VOL
 import { ExportLink } from "../../feed-controls";
 
 import { TradeList, TradeRow } from "../../trade-row";
-import { MemberHero } from "../../politicians/member-hero";
+import { MemberGlance, MemberHero } from "../../politicians/member-hero";
 import { AgentAlternates } from "../../agent-alternates";
 import { assetLabel } from "@/lib/asset-label";
 import { Disclosure, RangeCaption } from "../../disclosure";
@@ -70,54 +70,56 @@ export async function MemberDetail({
   return (
     <div className={PAGE_STACK}>
       <AgentAlternates member={bioguideId} />
-      <header className="space-y-5">
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-            <BackLink href="/politicians" label="all members" />
+      <header className="space-y-8 sm:space-y-10">
+        <div className="-mb-2 flex items-center justify-between sm:-mb-4">
+          <BackLink href="/politicians" label="Members" />
+        </div>
+        <MemberHero
+          detail={detail}
+          scanCount={scans.length}
+          scansHref={`/scans?m=${encodeURIComponent(member)}`}
+          share={
             <ShareControl
               url={absoluteUrl(memberHref(member, bioguideId))}
               text={`${member}${detail.party && detail.state ? ` (${detail.party}-${detail.state})` : ""}: disclosed stock trades from STOCK Act filings`}
             />
-          </div>
-          <MemberHero
-            detail={detail}
-            tickers={tickers}
-            scanCount={scans.length}
-            scansHref={`/scans?m=${encodeURIComponent(member)}`}
-          />
+          }
+        />
+        <div className="space-y-3 sm:space-y-4">
+          <section aria-label="Totals" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+            <StatTile
+              label="Trades"
+              value={String(detail.trades)}
+              hint={`${detail.buys} buy / ${detail.sells} sell`}
+            />
+            <StatTile
+              label="Tickers"
+              value={tickersUnprinted ? "—" : String(detail.tickers)}
+              hint={
+                tickersUnprinted
+                  ? "tickers not printed on paper filings"
+                  : `across ${detail.filings} filing${detail.filings === 1 ? "" : "s"}`
+              }
+            />
+            <StatTile
+              label="Volume (est.)"
+              value={usd(detail.volume_mid)}
+              hint={
+                detail.transcribed
+                  ? `bracket midpoints · ${detail.transcribed} transcribed row${detail.transcribed === 1 ? "" : "s"} not counted`
+                  : "bracket midpoints"
+              }
+            />
+            <StatTile
+              label="Late disclosures"
+              value={String(detail.late_count)}
+              hint={
+                detail.avg_delay == null ? "past 45 days" : `mean delay ${Math.round(detail.avg_delay)}d`
+              }
+            />
+          </section>
+          <MemberGlance detail={detail} tickers={tickers} />
         </div>
-      <section aria-label="Totals" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatTile
-          label="Trades"
-          value={String(detail.trades)}
-          hint={`${detail.buys} buy / ${detail.sells} sell`}
-        />
-        <StatTile
-          label="Tickers"
-          value={tickersUnprinted ? "—" : String(detail.tickers)}
-          hint={
-            tickersUnprinted
-              ? "tickers not printed on paper filings"
-              : `across ${detail.filings} filing${detail.filings === 1 ? "" : "s"}`
-          }
-        />
-        <StatTile
-          label="Volume (est.)"
-          value={usd(detail.volume_mid)}
-          hint={
-            detail.transcribed
-              ? `bracket midpoints · ${detail.transcribed} transcribed row${detail.transcribed === 1 ? "" : "s"} not counted`
-              : "bracket midpoints"
-          }
-        />
-        <StatTile
-          label="Late disclosures"
-          value={String(detail.late_count)}
-          hint={
-            detail.avg_delay == null ? "past 45 days" : `mean delay ${Math.round(detail.avg_delay)}d`
-          }
-        />
-      </section>
       </header>
 
       <MemberTimeline member={member} />
@@ -137,8 +139,8 @@ export async function MemberDetail({
 
       {committees.length ? <MemberCommittees seats={committees} /> : null}
 
-      <section className="grid gap-6 lg:grid-cols-2">
-        <div>
+      <section className="grid gap-8 lg:grid-cols-2 lg:gap-4">
+        <div className="flex flex-col [&>:last-child]:flex-1">
           <SectionTitle>Most traded by volume</SectionTitle>
           <Card>
             <MagnitudeBars
@@ -154,13 +156,13 @@ export async function MemberDetail({
               }))}
               note={VOLUME_NOTE}
             />
-            <p className="mt-3 text-xs text-muted-foreground">
+            <p className="mt-4 text-[13px] leading-relaxed text-muted-foreground">
               Estimated from disclosure brackets. Assets without a ticker — Treasuries,
               funds — appear in the trade list below.
             </p>
           </Card>
         </div>
-        <div>
+        <div className="flex flex-col [&>:last-child]:flex-1">
           <SectionTitle>Buy / sell by ticker</SectionTitle>
           <Card>
             <DivergingSplit
@@ -202,7 +204,7 @@ export async function MemberDetail({
 
         {trades.length ? (
           <>
-            <p className="mb-3 text-xs text-muted-foreground">
+            <p className="mb-3 pl-1 text-[13px] text-muted-foreground">
               {trades.length < matching
                 ? `Newest ${trades.length} of ${matching} trades`
                 : `${trades.length} trades, newest first`}
@@ -240,7 +242,7 @@ function MemberSectors({
   return (
     <section>
       <SectionTitle
-        right={<span className="text-[11px] text-muted-foreground">trade count · disclosed range</span>}
+        right={<span className="text-muted-foreground">Trade count · disclosed range</span>}
       >
         By sector
       </SectionTitle>
@@ -294,7 +296,7 @@ export function SeatTag({
   return (
     <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground">
       {seat.title ? (
-        <span className="rounded bg-muted px-1.5 py-px text-[10px] font-medium text-ink-2">
+        <span className="rounded-md bg-fill px-1.5 py-px text-[11px] font-medium text-ink-2">
           {seat.title}
         </span>
       ) : null}
@@ -331,30 +333,30 @@ function MemberCommittees({ seats }: { seats: CommitteeSeatRow[] }) {
     <section>
       <SectionTitle
         right={
-          <span className="text-[11px] text-muted-foreground">
-            current Congress · {groups.size} committee{groups.size === 1 ? "" : "s"}
+          <span className="text-muted-foreground">
+            Current Congress · {groups.size} committee{groups.size === 1 ? "" : "s"}
           </span>
         }
       >
         Committees
       </SectionTitle>
       <Card className="p-0 sm:p-0">
-        <ul className="divide-y divide-border/50">
+        <ul className="inset-rows py-1">
           {[...groups.values()].map((g) => (
-            <li key={g.id} className="px-4 py-2.5">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
-                <a href={committeeHref(g.id)} className="font-medium hover:text-primary">
+            <li key={g.id} className="px-4 py-3 sm:px-5">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[14px]">
+                <a href={committeeHref(g.id)} className="font-semibold decoration-border-strong underline-offset-[3px] hover:underline">
                   {g.name}
                 </a>
                 {g.seat ? <SeatTag seat={g.seat} /> : null}
               </div>
               {g.subs.length ? (
-                <ul className="mt-1 space-y-0.5 pl-4 text-[12px]">
+                <ul className="mt-1.5 space-y-1 pl-4 text-[13px]">
                   {g.subs.map((s) => (
                     <li key={s.thomas_id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
                       <a
                         href={committeeHref(s.thomas_id)}
-                        className="text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
+                        className="text-ink-2 decoration-border-strong underline-offset-[3px] hover:underline"
                       >
                         {s.name}
                       </a>

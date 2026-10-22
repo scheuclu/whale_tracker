@@ -42,6 +42,7 @@ export default async function ScansPage({
     <div className={PAGE_STACK}>
       <PageHeader
         back={params.m ? { href: "/scans", label: "all scans" } : undefined}
+        eyebrow="About the data"
         title="Scanned filings"
         subtitle="Paper filings with no text layer, and what the grid reader made of each — the audit trail for the transcription path, not a statistic."
       >

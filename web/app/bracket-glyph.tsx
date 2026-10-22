@@ -13,7 +13,7 @@
  *                invented ("≥$50M" in the text).
  *   exact        a dot on the rung the printed figure falls in (at the foot
  *                of the ladder when below $1,001), labelled "exact".
- *   transcribed  the same geometry in amber, matching ScanTag: the bracket
+ *   transcribed  the same geometry drawn hollow and dashed, matching ScanTag: the bracket
  *                is a box ticked on a scan, and the row is in no total.
  *   unknown      empty rungs, "—".
  *
@@ -55,8 +55,11 @@ export function BracketGlyph({
 }) {
   const span = bracketSpan(min, max, exact);
   const fadeId = useId();
-  const on = transcribed ? "var(--viz-rung-scan)" : "var(--viz-rung-on)";
-  const below = transcribed ? "var(--viz-rung-scan-below)" : "var(--viz-rung-below)";
+  const on = "var(--viz-rung-on)";
+  const below = "var(--viz-rung-below)";
+  // A transcribed row keeps the geometry and the inks but is drawn hollow
+  // and dashed — provisional, the timeline's convention — never a colour.
+  const scan = !!transcribed;
 
   return (
     <svg
@@ -97,6 +100,23 @@ export function BracketGlyph({
         }
         // Open rungs are square-topped: a rounded cap would read as an end.
         const rx = span.kind === "open" && i >= span.lo ? 0 : 1;
+        if (scan && fill !== "var(--viz-rung-off)") {
+          const stroke = fill.startsWith("url(") ? on : fill;
+          return (
+            <rect
+              key={i}
+              x={x + 0.5}
+              y={H - h + 0.5}
+              width={RUNG_W - 1}
+              height={h - 1}
+              rx={0.5}
+              fill="none"
+              stroke={stroke}
+              strokeWidth={1}
+              strokeDasharray="1.5 1"
+            />
+          );
+        }
         return <rect key={i} x={x} y={H - h} width={RUNG_W} height={h} rx={rx} fill={fill} />;
       })}
       {span.kind === "exact" ? (
@@ -165,7 +185,7 @@ export function BracketAmount({
       <BracketGlyph min={min} max={max} exact={exact} transcribed={scan} />
       <MoneyText
         value={range(min, max, exact)}
-        className={cn("text-[13px]", scan && "text-amber-800 dark:text-amber-200")}
+        className={cn("text-[13px]", scan && "text-ink-2 underline decoration-dashed decoration-border-strong underline-offset-[3px]")}
       />
       {exact != null ? (
         <span className="rounded-[4px] border border-border px-1 text-[10px] font-medium uppercase leading-4 tracking-wide text-muted-foreground">

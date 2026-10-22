@@ -3,7 +3,7 @@ import { SectionTitleSkeleton, SkeletonPage, TableSkeleton, TilesSkeleton } from
 /** Scans: four tiles, then the scanned-filings table. */
 export default function Loading() {
   return (
-    <SkeletonPage label="scanned filings">
+    <SkeletonPage label="scanned filings" head>
       <TilesSkeleton tall />
       <section>
         <SectionTitleSkeleton width="w-32" right />

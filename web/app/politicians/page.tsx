@@ -197,6 +197,7 @@ export default async function PoliticiansPage({
   return (
     <div className={PAGE_STACK}>
       <PageHeader
+        eyebrow="Congress · by member"
         title="Members of Congress"
         subtitle="Every member with a disclosed trade, by estimated volume and by number of trades. Amounts are disclosed brackets, so every volume here is an estimate."
       >
@@ -873,9 +874,9 @@ async function LateView() {
         >
           The filings behind the numbers
         </SectionTitle>
-        <div className="space-y-3">
+        <div className="divide-y divide-border border-y border-border">
           {filings.map((f) => (
-            <Card key={f.filing_id} className="px-4 py-3">
+            <Card key={f.filing_id} className="py-3">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
                 <PartyBadge party={f.party} />
                 <a href={memberHref(f.member_name, f.bioguide_id)} className="font-medium hover:text-primary">

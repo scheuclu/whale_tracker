@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Briefcase, ChevronRight, Landmark, LineChart, Receipt } from "lucide-react";
+import { ArrowRight, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BrandMark } from "./brand";
 
@@ -11,17 +11,17 @@ import { BrandMark } from "./brand";
  * and the client error boundary alike.
  */
 const SECTIONS = [
-  { href: "/", label: "Feed", icon: Receipt, hint: "Latest disclosed trades" },
-  { href: "/tickers", label: "Tickers", icon: LineChart, hint: "What is being traded" },
-  { href: "/politicians", label: "Politicians", icon: Landmark, hint: "Who is trading" },
-  { href: "/insiders", label: "Insiders", icon: Briefcase, hint: "Form 4 open-market trades" },
+  { href: "/", label: "Feed", hint: "Latest disclosed trades" },
+  { href: "/politicians", label: "Members", hint: "Who is trading" },
+  { href: "/tickers", label: "Tickers", hint: "What is being traded" },
+  { href: "/insiders", label: "Insiders", hint: "Form 4 open-market trades" },
 ];
 
 /** Status colours describe system state only — never buy/sell. */
 const TONE = {
   neutral: { chip: "bg-muted text-ink-2", dot: "bg-muted-foreground" },
   attention: { chip: "bg-attention-soft text-attention", dot: "bg-attention" },
-  error: { chip: "bg-error-soft text-error", dot: "bg-error" },
+  error: { chip: "bg-error-soft text-error ring-1 ring-inset ring-error/40", dot: "bg-error rounded-[1px]! rotate-45" },
 } as const;
 
 export function StatusScreen({
@@ -50,7 +50,7 @@ export function StatusScreen({
   return (
     <div className="mx-auto flex max-w-xl flex-col items-center pb-4 pt-6 text-center sm:pt-12">
       <div className="status-mark">
-        <BrandMark className="size-12" />
+        <BrandMark className="size-14" />
       </div>
       <p
         className={cn(
@@ -61,10 +61,10 @@ export function StatusScreen({
         <span aria-hidden className={cn("size-1.5 rounded-full", t.dot)} />
         {code}
       </p>
-      <h1 className="mt-3 text-balance text-[28px] font-semibold leading-tight tracking-[-0.02em] sm:text-4xl">
+      <h1 className="display mt-3 text-balance text-[34px] leading-[1.08] sm:text-[44px]">
         {title}
       </h1>
-      <div className="mt-3 max-w-[60ch] text-pretty text-sm leading-relaxed text-muted-foreground">{children}</div>
+      <div className="dek mt-3 max-w-[56ch] text-pretty text-[17px] leading-normal">{children}</div>
       {action || secondary ? (
         <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-3">
           {action}
@@ -77,33 +77,30 @@ export function StatusScreen({
             <ChevronRight aria-hidden className="size-3.5 transition-transform group-open:rotate-90" />
             Technical details
           </summary>
-          <div className="mt-2 overflow-x-auto rounded-lg border border-border bg-raised px-3 py-2.5 font-mono text-xs leading-relaxed text-ink-2">
+          <div className="mt-2 overflow-x-auto rounded-control border border-border bg-card px-3 py-2.5 font-mono text-xs leading-relaxed text-ink-2">
             {details}
           </div>
         </details>
       ) : null}
 
       <nav aria-label="Main sections" className="mt-12 w-full text-left">
-        <p className="mb-2 text-xs text-muted-foreground">Or go to</p>
-        <ul className="glass grid overflow-hidden rounded-xl border border-border bg-card sm:grid-cols-2">
-          {SECTIONS.map(({ href, label, icon: Icon, hint }, i) => (
+        <p className="kicker mb-2 border-b border-rule pb-2 text-foreground">Or go to</p>
+        <ul className="grid sm:grid-cols-2">
+          {SECTIONS.map(({ href, label, hint }, i) => (
             <li
               key={href}
               className={cn(
-                "border-border",
-                i > 0 && "border-t",
-                // Two columns from sm: hairlines between cells, none on the outer edge.
-                i === 1 && "sm:border-t-0",
+                "border-b border-border",
+                // Two columns from sm: a hairline between them.
                 i % 2 === 1 && "sm:border-l"
               )}
             >
               <Link
                 href={href}
-                className="group flex items-center gap-3 px-4 py-3 outline-offset-[-2px] transition-colors hover:bg-raised"
+                className="group flex items-center gap-3 px-3 py-3 outline-offset-[-2px] transition-colors hover:bg-raised"
               >
-                <Icon className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" aria-hidden />
                 <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium">{label}</span>
+                  <span className="block font-display text-[17px] font-semibold">{label}</span>
                   <span className="block truncate text-xs text-muted-foreground">{hint}</span>
                 </span>
                 <ArrowRight
@@ -147,9 +144,9 @@ export function DataUnavailable({ message, action }: { message: string; action?:
   );
 }
 
-/** The one primary action: an indigo control-radius button, with a pressed state. */
+/** The one primary action: an ink button (gold is never a button), with a pressed state. */
 export const primaryAction =
-  "inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground shadow-card transition-[background-color,transform] duration-[var(--dur-fast)] ease-out hover:bg-primary/90 active:translate-y-px motion-reduce:active:translate-y-0";
+  "inline-flex h-9 items-center gap-1.5 rounded-control bg-foreground px-4 text-sm font-semibold text-background transition-[background-color,transform] duration-[var(--dur-fast)] ease-out hover:bg-foreground/85 active:translate-y-px motion-reduce:active:translate-y-0";
 /** The quieter alternative: a text link. */
 export const secondaryAction =
   "inline-flex items-center gap-1 rounded-md text-sm font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline";

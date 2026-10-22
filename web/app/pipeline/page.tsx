@@ -37,6 +37,7 @@ export default async function PipelinePage() {
   return (
     <div className={PAGE_STACK}>
       <PageHeader
+        eyebrow="About the data"
         title="Pipeline"
         subtitle="Where the data comes from, how much of it could be read, and what each run did."
       >
@@ -390,7 +391,7 @@ function Source({
   children?: React.ReactNode;
 }) {
   return (
-    <li className="px-4 py-4 sm:px-5" data-source={name}>
+    <li className="py-4" data-source={name}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <h3 className="text-[14px] font-semibold">{name}</h3>
         <HealthPill health={health} title={raw ?? undefined}>
@@ -425,7 +426,7 @@ function Failure({
   tag?: string;
 }) {
   return (
-    <li className="px-4 py-2.5 sm:px-5">
+    <li className="py-2.5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[13px]">
         <span className="font-medium">{who}</span>
         {tag ? (

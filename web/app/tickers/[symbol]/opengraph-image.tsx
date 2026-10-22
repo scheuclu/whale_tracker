@@ -1,5 +1,5 @@
 import { getTickerDetail } from "@/lib/queries";
-import { BUY, CARD_SIZE, SELL, count, renderCard, renderPlainCard } from "../../share-card";
+import { BUY, CARD_SIZE, SELL, count, renderCard, renderPlainCard, INK, DISPLAY } from "../../share-card";
 
 export const alt = "A ticker's congressional trades on FatCat Watch: members trading and buy/sell counts";
 export const size = CARD_SIZE;
@@ -20,11 +20,11 @@ export default async function Image({ params }: { params: Promise<{ symbol: stri
   return renderCard({
     body: (
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <div style={{ display: "flex", fontSize: 132, lineHeight: 1, letterSpacing: "-0.04em", fontFamily: "monospace" }}>
+        <div style={{ display: "flex", fontSize: 140, lineHeight: 1, letterSpacing: "-0.02em", fontFamily: DISPLAY }}>
           {stat.ticker}
         </div>
         {name ? (
-          <div style={{ display: "flex", fontSize: 32, color: "#a3a3b8", maxWidth: 1050 }}>
+          <div style={{ display: "flex", fontSize: 32, color: INK[2], maxWidth: 1050 }}>
             {name.length > 64 ? `${name.slice(0, 63)}…` : name}
           </div>
         ) : null}

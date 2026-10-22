@@ -25,7 +25,7 @@ export default function Loading() {
 /** The leaderboards: four tiles, volume and trade-count bars, the table. */
 function MembersLoading() {
   return (
-    <SkeletonPage label="members">
+    <SkeletonPage label="members" head>
       <TilesSkeleton />
       <section className="grid gap-6 lg:grid-cols-2">
         <div>

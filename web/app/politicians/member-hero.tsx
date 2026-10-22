@@ -1,109 +1,120 @@
+import { ArrowUpRight } from "lucide-react";
 import type { PoliticianDetail, PoliticianTickerRow } from "@/lib/queries";
-import { longDate, seatLabel, tradeSummary } from "@/lib/members";
+import { PARTY_LABEL, longDate, seatLabel, tradeSummary } from "@/lib/members";
+import { cn } from "@/lib/utils";
 import { MemberAvatar } from "../avatar";
-import { PartyBadge, TickerChip } from "../ui";
+import { BUTTON, TickerChip } from "../ui";
 
 /**
- * The top of a member's page: portrait, name, seat, party and one line of
- * plain language computed from the whole record. Nothing here is a dollar
- * figure — the stat tiles below carry the estimate, labelled as one.
+ * The top of a member's page, set like an iOS contact card: a round
+ * portrait, the name large and bold, chamber · seat · party in grey, one
+ * line of plain language computed from the whole record, then the card's
+ * actions as capsules. Nothing here is a dollar figure — the stat tiles
+ * below carry the estimate, labelled as one.
  */
 export function MemberHero({
   detail,
-  tickers,
   scanCount,
   scansHref,
+  share,
+}: {
+  detail: PoliticianDetail;
+  scanCount: number;
+  scansHref: string;
+  /** The page's ShareControl, set among the card's actions. */
+  share?: React.ReactNode;
+}) {
+  const seat = seatLabel(detail.chamber, detail.state, detail.district);
+  const party = detail.party ? PARTY_LABEL[detail.party] ?? detail.party : null;
+  const sameDay = detail.first_tx_date === detail.last_tx_date;
+
+  return (
+    <section className="flex flex-col items-center text-center">
+      <MemberAvatar name={detail.member_name} bioguideId={detail.bioguide_id} size="xl" />
+      <h1 className="display mt-4 max-w-full break-words text-[32px] leading-[1.1] sm:mt-5 sm:text-[44px] sm:leading-[1.05]">
+        {detail.member_name}
+      </h1>
+      <p className="mt-1.5 text-[17px] leading-snug text-muted-foreground sm:text-[19px]">
+        {seat ? (
+          [seat, party].filter(Boolean).join(" · ")
+        ) : (
+          <span title="The filer's name as printed on the filing; it did not match the congressional roster">
+            Not matched to the roster{party ? ` · ${party}` : ""}
+          </span>
+        )}
+      </p>
+      <p className="mt-3 max-w-[46ch] text-[15px] leading-normal text-ink-2 first-letter:uppercase sm:text-[16px]">
+        {tradeSummary(detail)}.
+      </p>
+      <p className="tabular mt-0.5 text-[13px] text-muted-foreground sm:text-[14px]">
+        {detail.filings} filing{detail.filings === 1 ? "" : "s"} ·{" "}
+        {sameDay
+          ? `traded ${longDate(detail.first_tx_date)}`
+          : `traded ${longDate(detail.first_tx_date)} – ${longDate(detail.last_tx_date)}`}
+      </p>
+      <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+        {share}
+        {detail.bioguide_id ? (
+          <a
+            href={`https://bioguide.congress.gov/search/bio/${detail.bioguide_id}`}
+            target="_blank"
+            rel="noreferrer"
+            className={BUTTON}
+          >
+            Congress bio
+            <ArrowUpRight className="size-3.5 opacity-60" strokeWidth={2.25} aria-hidden />
+          </a>
+        ) : null}
+        {scanCount ? (
+          <a
+            href={scansHref}
+            className={BUTTON}
+            title="Paper filings scanned without a text layer; inspect what the grid reader saw"
+          >
+            {scanCount} scanned filing{scanCount === 1 ? "" : "s"}
+          </a>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Direction at a glance, in one tile: the share of buys and sells as one
+ * thin bar with both counts written beside it, and the three tickers the
+ * member trades most often.
+ */
+export function MemberGlance({
+  detail,
+  tickers,
+  className,
 }: {
   detail: PoliticianDetail;
   /** The member's tickers (any order); the three most often traded are named. */
   tickers: PoliticianTickerRow[];
-  scanCount: number;
-  scansHref: string;
+  className?: string;
 }) {
-  const seat = seatLabel(detail.chamber, detail.state, detail.district);
   const exchanges = Math.max(detail.trades - detail.buys - detail.sells, 0);
   const top = [...tickers]
     .sort((a, b) => b.trades - a.trades || b.volume_mid - a.volume_mid)
     .slice(0, 3);
-  const sameDay = detail.first_tx_date === detail.last_tx_date;
-
   return (
-    <section className="glass relative overflow-hidden rounded-xl border border-border bg-card p-5 sm:p-6">
-      {/* A soft wash behind the portrait; neutral, so it never reads as a party. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -left-24 -top-28 size-80 rounded-full opacity-60 blur-3xl"
-        style={{ background: "radial-gradient(closest-side, color-mix(in oklab, var(--primary) 16%, transparent), transparent)" }}
-      />
-      <div className="relative flex items-start gap-4 sm:gap-6">
-        <MemberAvatar
-          name={detail.member_name}
-          bioguideId={detail.bioguide_id}
-          size="xl"
-          className="shadow-[0_12px_32px_-16px_rgba(12,12,17,0.55)]"
-        />
-        <div className="min-w-0 flex-1">
-          <div className="text-[12px] font-medium text-muted-foreground">
-            {seat ?? (
-              <span title="The filer's name as printed on the filing; it did not match the congressional roster">
-                Not matched to the roster
-              </span>
-            )}
-          </div>
-          <h1 className="mt-1 text-[28px] font-semibold leading-tight tracking-tight sm:text-[36px]">
-            {detail.member_name}
-          </h1>
-          <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[13px] text-muted-foreground">
-            <PartyBadge party={detail.party} full />
-            <span>
-              {sameDay
-                ? `traded ${longDate(detail.first_tx_date)}`
-                : `trades dated ${longDate(detail.first_tx_date)} – ${longDate(detail.last_tx_date)}`}
-            </span>
-          </div>
-          <p className="mt-3 text-[15px] leading-snug text-ink-2 sm:text-base">
-            {tradeSummary(detail)}
-            <span className="text-muted-foreground">
-              {" "}
-              in {detail.filings} filing{detail.filings === 1 ? "" : "s"}.
-            </span>
-          </p>
+    <div
+      className={cn(
+        "tile grid gap-x-10 gap-y-4 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-6 sm:py-5",
+        className
+      )}
+    >
+      <DirectionSplit buys={detail.buys} sells={detail.sells} exchanges={exchanges} />
+      {top.length ? (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-[13px] text-muted-foreground">
+          <span className="mr-1 font-semibold">Most traded</span>
+          {top.map((t) => (
+            <TickerChip key={t.ticker} ticker={t.ticker} />
+          ))}
         </div>
-      </div>
-
-      <div className="relative mt-5 grid gap-4 border-t border-border/70 pt-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-8">
-        <DirectionSplit buys={detail.buys} sells={detail.sells} exchanges={exchanges} />
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[12px] text-muted-foreground">
-          {top.length ? (
-            <span className="inline-flex flex-wrap items-center gap-1.5">
-              <span>Most traded</span>
-              {top.map((t) => (
-                <TickerChip key={t.ticker} ticker={t.ticker} />
-              ))}
-            </span>
-          ) : null}
-          {detail.bioguide_id ? (
-            <a
-              href={`https://bioguide.congress.gov/search/bio/${detail.bioguide_id}`}
-              target="_blank"
-              rel="noreferrer"
-              className="underline-offset-2 hover:text-primary hover:underline"
-            >
-              bioguide ↗
-            </a>
-          ) : null}
-          {scanCount ? (
-            <a
-              href={scansHref}
-              className="underline-offset-2 hover:text-primary hover:underline"
-              title="Paper filings scanned without a text layer; inspect what the grid reader saw"
-            >
-              {scanCount} scanned filing{scanCount === 1 ? "" : "s"}
-            </a>
-          ) : null}
-        </div>
-      </div>
-    </section>
+      ) : null}
+    </div>
   );
 }
 
@@ -116,33 +127,33 @@ export function MemberHero({
 function DirectionSplit({ buys, sells, exchanges }: { buys: number; sells: number; exchanges: number }) {
   const total = buys + sells;
   if (!total) {
-    return <div className="text-[12px] text-muted-foreground">No buys or sells — exchanges only</div>;
+    return <div className="text-[13px] text-muted-foreground">No buys or sells — exchanges only</div>;
   }
   const buyPct = (buys / total) * 100;
   return (
     <div className="min-w-0">
-      <div className="flex items-baseline justify-between gap-3 text-[12px]">
-        <span className="inline-flex items-center gap-1.5">
-          <span className="size-2 rounded-full" style={{ background: "var(--viz-buy)" }} />
-          <span className="tabular font-medium text-foreground">{buys}</span>
+      <div className="flex items-baseline justify-between gap-3 text-[13px]">
+        <span className="inline-flex items-baseline gap-1.5">
+          <span className="size-2 self-center rounded-full" style={{ background: "var(--viz-buy)" }} />
+          <span className="figure text-[22px] leading-none text-foreground">{buys}</span>
           <span className="text-muted-foreground">bought</span>
         </span>
-        <span className="inline-flex items-center gap-1.5">
+        <span className="inline-flex items-baseline gap-1.5">
           <span className="text-muted-foreground">sold</span>
-          <span className="tabular font-medium text-foreground">{sells}</span>
-          <span className="size-2 rounded-full" style={{ background: "var(--viz-sell)" }} />
+          <span className="figure text-[22px] leading-none text-foreground">{sells}</span>
+          <span className="size-2 self-center rounded-full" style={{ background: "var(--viz-sell)" }} />
         </span>
       </div>
       <div
-        className="mt-1.5 flex h-2 gap-0.5 overflow-hidden rounded-full"
+        className="mt-2.5 flex h-2 gap-[3px]"
         role="img"
         aria-label={`${buys} buys and ${sells} sells`}
       >
-        {buys ? <div style={{ width: `${buyPct}%`, background: "var(--viz-buy)" }} /> : null}
-        {sells ? <div className="flex-1" style={{ background: "var(--viz-sell)" }} /> : null}
+        {buys ? <div className="rounded-full" style={{ width: `${buyPct}%`, background: "var(--viz-buy)" }} /> : null}
+        {sells ? <div className="flex-1 rounded-full" style={{ background: "var(--viz-sell)" }} /> : null}
       </div>
       {exchanges ? (
-        <div className="mt-1 text-[11px] text-muted-foreground">
+        <div className="mt-1.5 text-[12px] text-muted-foreground">
           + {exchanges} exchange{exchanges === 1 ? "" : "s"}, neither direction
         </div>
       ) : null}

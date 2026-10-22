@@ -87,7 +87,7 @@ export async function PriceOverlay({
       <SectionTitle right={<span className="text-[11px] text-muted-foreground">daily closes · trades by trade date</span>}>
         Price and trading activity
       </SectionTitle>
-      <Card className="px-3 pb-3 pt-4 sm:px-5">
+      <Card>
         <PriceOverlayChart
           symbol={symbol}
           priceable={priceable}

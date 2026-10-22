@@ -10,7 +10,7 @@ import {
 /** Trends: window pills, four tiles, two monthly charts, then rising tickers beside insiders. */
 export default function Loading() {
   return (
-    <SkeletonPage label="trends">
+    <SkeletonPage label="trends" head>
       <PillsSkeleton count={3} />
       <TilesSkeleton cols="lg:grid-cols-4" />
       <section>

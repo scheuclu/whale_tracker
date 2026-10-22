@@ -141,10 +141,11 @@ export default async function FeedPage({
       <SiteStructuredData />
       <AgentAlternates markdown="/api/v1/feed.md" json="/api/v1/trades" />
       <PageHeader
+        eyebrow="House and Senate"
         title="Congressional trades"
         subtitle="Stock trades members of the House and Senate disclose under the STOCK Act, reproduced as filed. Amounts are the disclosed bracket, never one exact figure."
       >
-      <section aria-label="All disclosed trades" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <section aria-label="All disclosed trades" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatTile
           label="Trades"
           value={pipeline.totals.transactions.toLocaleString()}
@@ -179,7 +180,7 @@ export default async function FeedPage({
 
       {consensus.length ? (
         <section>
-          <SectionTitle right={<span className="text-[11px] text-muted-foreground">last 90 days</span>}>
+          <SectionTitle right={<span className="text-muted-foreground">Last 90 days</span>}>
             Where members agree
           </SectionTitle>
           <Card>
@@ -199,28 +200,25 @@ export default async function FeedPage({
       ) : null}
 
       <section id="trades">
-        <SectionTitle
-          right={<span className="text-[11px] text-muted-foreground">by trade date, newest first</span>}
-        >
+        <SectionTitle right={<span className="text-muted-foreground">By trade date, newest first</span>}>
           Recent trades
         </SectionTitle>
-
-        <FilterBar filters={filters} ignored={ignored} />
 
         <FeedList
           rows={rows}
           toolbar={
             <>
               <DirectionFilter current={filters.action} hrefFor={(k) => feedHref({ ...filters, action: k })} />
-              <ExportLink filters={filters} />
+              <FilterBar filters={filters} ignored={ignored} />
             </>
           }
+          actions={<ExportLink filters={filters} />}
           summary={<ShownLine offset={offset} shown={rows.length} totals={totals} />}
           empty={
             offset > 0 && totals.trades ? (
               <>
                 Nothing past trade {totals.trades.toLocaleString()}.{" "}
-                <a href={feedHref(filters)} className="underline underline-offset-2 hover:text-primary">
+                <a href={feedHref(filters)} className="ink-link text-foreground">
                   Back to the newest
                 </a>
               </>
@@ -266,8 +264,8 @@ async function BothSides() {
     <section>
       <SectionTitle
         right={
-          <span className="text-[11px] text-muted-foreground">
-            last {BOTH_SIDES_DAYS} days · {plural(shared.tickers, "ticker")} traded by both,{" "}
+          <span className="text-muted-foreground">
+            Last {BOTH_SIDES_DAYS} days · {plural(shared.tickers, "ticker")} traded by both,{" "}
             {shared.same_direction} the same way
           </span>
         }
@@ -275,43 +273,43 @@ async function BothSides() {
         Both sides
       </SectionTitle>
       <ResponsiveTable>
-        <table className="w-full text-[13px]">
+        <table className="w-full text-[14px]">
           <thead>
-            <tr className="border-b border-border text-left text-[12px] font-medium text-muted-foreground">
-              <th className="px-4 py-2.5 font-medium">Ticker</th>
-              <th className="px-4 py-2.5 font-medium">Direction</th>
-              <th className="px-4 py-2.5 text-right font-medium">Members</th>
-              <th className="px-4 py-2.5 text-right font-medium">Insiders</th>
-              <th className="px-4 py-2.5 font-medium">Issuer</th>
+            <tr className="border-b border-border text-left text-[13px] font-medium text-muted-foreground">
+              <th className="px-4 py-3 font-medium">Ticker</th>
+              <th className="px-4 py-3 font-medium">Direction</th>
+              <th className="px-4 py-3 text-right font-medium">Members</th>
+              <th className="px-4 py-3 text-right font-medium">Insiders</th>
+              <th className="px-4 py-3 font-medium">Issuer</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={`${r.ticker}-${r.direction}`} className="border-b border-border/60 transition-colors duration-(--dur-fast) last:border-0 hover:bg-raised">
-                <td className="px-4 py-2">
+              <tr key={`${r.ticker}-${r.direction}`} className="border-b border-border/70 transition-colors duration-(--dur-fast) last:border-0 hover:bg-foreground/[0.03]">
+                <td className="px-4 py-2.5">
                   <a
                     href={tickerHref(r.ticker)}
-                    className="font-mono font-semibold hover:text-primary"
+                    className="font-semibold decoration-border-strong underline-offset-[3px] hover:underline"
                   >
                     {r.ticker}
                   </a>
                 </td>
-                <td className="px-4 py-2">
+                <td className="px-4 py-2.5">
                   <ActionBadge action={r.direction === "buy" ? "purchase" : "sale"} />
                 </td>
-                <td className="tabular px-4 py-2 text-right">
-                  <a href={tickerHref(r.ticker)} className="font-medium hover:text-primary">
+                <td className="tabular px-4 py-2.5 text-right">
+                  <a href={tickerHref(r.ticker)} className="font-medium decoration-border-strong underline-offset-[3px] hover:underline">
                     {plural(r.members, "member")}
                   </a>
                   <span className="text-muted-foreground"> · {plural(r.member_trades, "trade")}</span>
                 </td>
-                <td className="tabular px-4 py-2 text-right">
-                  <a href={`/insiders?t=${encodeURIComponent(r.ticker)}`} className="font-medium hover:text-primary">
+                <td className="tabular px-4 py-2.5 text-right">
+                  <a href={`/insiders?t=${encodeURIComponent(r.ticker)}`} className="font-medium decoration-border-strong underline-offset-[3px] hover:underline">
                     {plural(r.insiders, "insider")}
                   </a>
                   <span className="text-muted-foreground"> · {plural(r.insider_filings, "filing")}</span>
                 </td>
-                <td className="max-w-[18rem] truncate px-4 py-2 text-muted-foreground" title={r.issuer_name ?? r.asset_name ?? undefined}>
+                <td className="max-w-[18rem] truncate px-4 py-2.5 text-muted-foreground" title={r.issuer_name ?? r.asset_name ?? undefined}>
                   {assetLabel(r.issuer_name ?? r.asset_name, { ticker: r.ticker })}
                 </td>
               </tr>

@@ -41,11 +41,35 @@ function Line({ h, bone, className }: { h: string; bone: string; className?: str
  * (`space-y-8`, as every page root). Tall enough that the footer stays
  * below the fold until the content arrives, so it never jumps down.
  */
-export function SkeletonPage({ label, children }: { label: string; children: React.ReactNode }) {
+export function SkeletonPage({
+  label,
+  head = false,
+  children,
+}: {
+  label: string;
+  /** Lead with a `PageHeader` (kicker, serif headline, dek), as the index pages do. */
+  head?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <div role="status" aria-live="polite" aria-busy="true" className="min-h-[calc(100svh-8rem)] space-y-8">
       <span className="sr-only">Loading {label}…</span>
+      {head ? <PageHeadSkeleton /> : null}
       {children}
+    </div>
+  );
+}
+
+/** `PageHeader` (page-header.tsx): the kicker, the 46px serif headline, a two-line dek. */
+export function PageHeadSkeleton() {
+  return (
+    <div>
+      <Line h="h-4" bone="h-2.5 w-28" className="mb-2" />
+      <Bone className="h-9 w-64 max-w-full sm:h-12 sm:w-80" />
+      <div className="mt-2.5 max-w-[60ch] space-y-1">
+        <Line h="h-[25px] sm:h-[27px]" bone="h-3.5 w-full" />
+        <Line h="h-[25px] sm:h-[27px]" bone="h-3.5 w-2/3" />
+      </div>
     </div>
   );
 }
@@ -62,13 +86,13 @@ export function TileSkeleton({
   wrap?: boolean;
 }) {
   return (
-    <div className="glass flex h-full flex-col rounded-xl border border-border bg-card p-4 sm:px-5">
+    <div className="flex h-full flex-col rounded-tile bg-card p-4 shadow-card sm:px-5 sm:pb-5 sm:pt-4">
       <Line h="h-5" bone="h-3 w-16" />
-      <div className="mt-2 flex items-end justify-between gap-3">
-        <Bone className="h-6 w-16 sm:h-7 sm:w-20" />
+      <div className="mt-1.5 flex items-end justify-between gap-3">
+        <Bone className="h-7 w-16 sm:h-[34px] sm:w-24" />
         {trend ? <Bone className="hidden h-6 w-20 rounded-sm sm:block" /> : null}
       </div>
-      <Line h="h-[16.5px]" bone="h-2.5 w-28 max-w-full" className="mt-2.5" />
+      <Line h="h-[16.5px]" bone="h-2.5 w-28 max-w-full" className="mt-2" />
       {wrap ? <Line h="h-[16.5px]" bone="h-2.5 w-16" className="sm:hidden" /> : null}
       {tall ? <Line h="h-[16.5px]" bone="h-2.5 w-20" className="mt-1" /> : null}
     </div>
@@ -93,7 +117,7 @@ export function TilesSkeleton({
   wrap?: boolean;
 }) {
   return (
-    <section className={cn("grid grid-cols-2 gap-3", cols)}>
+    <section className={cn("grid grid-cols-2 gap-3 sm:gap-4", cols)}>
       {Array.from({ length: count }, (_, i) => (
         <TileSkeleton key={i} tall={tall && i === 0} trend={trend && (i === 0 || i === count - 1)} wrap={wrap} />
       ))}
@@ -101,12 +125,14 @@ export function TilesSkeleton({
   );
 }
 
-/** `SectionTitle` (charts.tsx): the 14px heading, its meta on the right. */
+/** `SectionTitle` (charts.tsx): the bold heading on the canvas, its meta on the right. */
 export function SectionTitleSkeleton({ width = "w-32", right = false }: { width?: string; right?: boolean }) {
   return (
-    <div className="mb-3 flex min-h-7 items-center justify-between gap-x-4">
-      <Bone className={cn("h-3.5", width)} />
-      {right ? <Bone className="h-2.5 w-24" /> : null}
+    <div className="mb-3 sm:mb-4">
+      <div className="flex min-h-7 items-center justify-between gap-x-4">
+        <Bone className={cn("h-4", width)} />
+        {right ? <Bone className="h-2.5 w-24" /> : null}
+      </div>
     </div>
   );
 }
@@ -232,8 +258,8 @@ export function TableSkeleton({ rows = 8, cols = 6 }: { rows?: number; cols?: nu
  */
 export function FeedSkeleton({ days = 4 }: { days?: number }) {
   return (
-    <div className="glass overflow-hidden rounded-xl border border-border bg-card">
-      <div className="flex h-[55px] items-center gap-3 border-b border-border px-3 sm:px-4">
+    <div>
+      <div className="flex h-[55px] items-center gap-3">
         <Bone className="h-7 w-44 rounded-lg" />
         <Bone className="hidden h-7 w-16 rounded-full sm:block" />
         <Bone className="hidden h-2.5 w-96 max-w-[40%] md:block" />
@@ -241,15 +267,16 @@ export function FeedSkeleton({ days = 4 }: { days?: number }) {
         <Bone className="hidden h-3 w-28 md:block" />
       </div>
       {Array.from({ length: days }, (_, d) => (
-        <div key={d} className="border-b border-border last:border-0">
-          <div className="flex h-[42px] items-center gap-3 border-b border-border px-3 sm:px-4">
+        <div key={d}>
+          <div className="flex h-12 items-end gap-3 px-1 pb-2.5">
             <Bone className="h-3 w-24" />
             <Bone className="h-2.5 w-10" />
             <div className="flex-1" />
             <Bone className="h-2.5 w-24" />
           </div>
+          <div className="tile inset-rows mb-2 [--sep-inset:3.25rem]">
           {Array.from({ length: d % 2 ? 2 : 1 }, (_, b) => (
-            <div key={b} className="border-b border-border/60 last:border-0 lg:grid lg:grid-cols-[15rem_minmax(0,1fr)]">
+            <div key={b} className="lg:grid lg:grid-cols-[15rem_minmax(0,1fr)]">
               <div className="space-y-1.5 px-3 pt-2 sm:px-4 lg:py-2.5 lg:pr-2">
                 <div className="flex items-center gap-1.5">
                   <Bone className="size-5 rounded" />
@@ -271,6 +298,7 @@ export function FeedSkeleton({ days = 4 }: { days?: number }) {
               </div>
             </div>
           ))}
+          </div>
         </div>
       ))}
     </div>
@@ -281,7 +309,7 @@ export function FeedSkeleton({ days = 4 }: { days?: number }) {
 export function FiltersSkeleton({ fields = 7 }: { fields?: number }) {
   const widths = ["w-20", "w-28", "w-36", "w-28", "w-32", "w-32", "w-40"];
   return (
-    <Card className="mb-4 px-4 py-3">
+    <Card variant="panel" className="mb-5 px-4 py-3">
       <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
         {Array.from({ length: fields }, (_, i) => (
           <div key={i} className="space-y-1">
@@ -298,9 +326,9 @@ export function FiltersSkeleton({ fields = 7 }: { fields?: number }) {
 /** One `Card` per trade (ticker and member pages): pill, chips, amount, member; date at the end. */
 export function TradeRowsSkeleton({ rows = 6 }: { rows?: number }) {
   return (
-    <div className="space-y-1.5">
+    <div className="tile inset-rows py-1">
       {Array.from({ length: rows }, (_, i) => (
-        <Card key={i} className="px-4 py-3">
+        <Card key={i} variant="open" className="px-3 py-2.5 sm:px-4">
           <div className="flex h-6 items-center gap-3">
             <Bone className="h-5 w-12 rounded-full" />
             <Bone className="h-3.5 w-24" />
@@ -451,7 +479,7 @@ export function CardGridSkeleton({ count = 6 }: { count?: number }) {
   return (
     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
       {Array.from({ length: count }, (_, i) => (
-        <div key={i} className="glass flex items-center gap-3 rounded-xl border border-border bg-card px-3.5 py-3">
+        <div key={i} className="flex items-center gap-3 rounded-card border border-border bg-card px-3.5 py-3">
           <Bone className="size-10 shrink-0 rounded-full" />
           <div className="min-w-0 flex-1">
             <Line h="h-5" bone={cn("h-3", ["w-32", "w-40", "w-28"][i % 3])} />
@@ -473,7 +501,7 @@ export function HeadingSkeleton({ split = false }: { split?: boolean }) {
       <div className="mt-3 flex flex-wrap items-end justify-between gap-x-10 gap-y-5">
         <div className="min-w-0">
           <Bone className="h-9 w-36 sm:h-12 sm:w-44" />
-          <Line h="h-6" bone="h-3.5 w-72 max-w-full" className="mt-1.5" />
+          <Line h="h-7" bone="h-4 w-72 max-w-full" className="mt-2.5" />
         </div>
         {split ? (
           <div className="w-full sm:w-72">
@@ -498,7 +526,7 @@ export function ProfileSkeleton() {
   return (
     <div>
       <Line h="h-6" bone="h-2.5 w-24" />
-      <div className="glass flex h-[345px] flex-col gap-5 rounded-xl sm:h-[270px] border border-border bg-card p-5 sm:flex-row sm:items-start sm:p-6">
+      <div className="flex h-[345px] flex-col gap-5 border-y border-border py-5 sm:h-[270px] sm:flex-row sm:items-start sm:py-6">
         <Bone className="size-20 shrink-0 rounded-full sm:size-24" />
         <div className="min-w-0 flex-1 space-y-3">
           <Bone className="h-8 w-64 max-w-full" />

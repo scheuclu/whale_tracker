@@ -5,6 +5,13 @@ import { SECURITY_SOURCE, securityHeaders } from "./lib/security-headers";
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["better-sqlite3"],
+  // The share cards read their fonts from assets/fonts at render time
+  // (app/share-card.tsx); a path built from process.cwd() is not traced, so
+  // the files are named for every card route here.
+  outputFileTracingIncludes: {
+    "/**/opengraph-image*": ["./assets/fonts/*.ttf"],
+    "/**/twitter-image*": ["./assets/fonts/*.ttf"],
+  },
   // No `X-Powered-By: Next.js`: it tells a scanner which advisories to try.
   poweredByHeader: false,
   // Pin the workspace root: without it Turbopack walks up past the repo and

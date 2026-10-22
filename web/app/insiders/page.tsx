@@ -231,6 +231,7 @@ export default async function InsidersPage({
   return (
     <div className={PAGE_STACK}>
       <PageHeader
+        eyebrow="SEC Form 4"
         title="Corporate insiders"
         subtitle="Officers, directors and 10% owners trading their own company’s stock on the open market, from SEC Form 4. Only filings of $50k or more in one direction are kept."
       >
@@ -537,9 +538,10 @@ function InsiderSectors({ sectors }: { sectors: InsiderSectorRow[] }) {
 
 function TradeList({ trades, showIssuer }: { trades: InsiderTradeRow[]; showIssuer: boolean }) {
   return (
-    <div className="space-y-1.5">
+    // A list of rows under hairlines, open on the paper (DESIGN.md, "Fewer boxes").
+    <div className="divide-y divide-border border-y border-border">
       {trades.map((r) => (
-        <Card key={r.id} className="lift px-4 py-3">
+        <Card key={r.id} className="lift px-1.5 py-3 sm:px-2">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <ActionBadge action={r.action} />
             {showIssuer ? (
@@ -549,11 +551,11 @@ function TradeList({ trades, showIssuer }: { trades: InsiderTradeRow[]; showIssu
               // Reproduced, not believed: the figure is what was filed, and
               // the label says it counts toward nothing on this page.
               <span className="inline-flex items-center gap-1.5">
-                <span className="tabular text-[13px] text-muted-foreground line-through decoration-amber-500/60">
+                <span className="tabular text-[13px] text-muted-foreground line-through decoration-attention/60">
                   {usd(r.amount_exact_cents)}
                 </span>
                 <span
-                  className="text-[11px] text-amber-600 dark:text-amber-400"
+                  className="text-[11px] text-attention"
                   title="The price cell appears to hold the aggregate consideration (or is otherwise beyond belief). Shown as filed; excluded from every total, cluster value and alert."
                 >
                   as filed, implausible

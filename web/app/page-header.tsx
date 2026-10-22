@@ -1,24 +1,29 @@
+import { ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Segmented } from "./ui";
 import { Empty } from "./charts";
 import { publicErrorMessage } from "@/lib/public-error";
 
 /**
- * Page composition shared by every route: one hero, then sections at one
- * rhythm (40px apart on desktop, 28px on a phone). Kept apart from the
- * section and card components so each route reads the same top to bottom.
+ * Page composition shared by every route: one large title, then sections
+ * at one rhythm (48px apart on desktop, 32px on a phone). Kept apart from
+ * the section and card components so each route reads the same top to
+ * bottom.
  */
 
 /**
- * A page's wrapper. The rhythm itself (28px phone / 40px from `sm`) is set
+ * A page's wrapper. The rhythm itself (32px phone / 48px from `sm`) is set
  * once by `.page-flow` on `<main>`, which targets this class; pages add no
  * section margins of their own.
  */
 export const PAGE_STACK = "space-y-8";
 
 /**
- * A page's hero: an optional back link, an eyebrow, the title, one line of
- * subtitle, and a slot for the key facts (usually a row of stat tiles).
+ * A page's head, iOS "large title" style: an optional grey eyebrow → the
+ * title (display face, bold, 34px on a phone, 48px from 640px, tight) →
+ * the subtitle (one sentence, 17–19px, secondary grey) → the key facts
+ * (usually a row of StatTiles). An optional back link and share control
+ * sit above.
  * `aside` sits to the right of the title on a wide screen and under it on a
  * phone — a split bar, a window picker.
  */
@@ -48,8 +53,8 @@ export function PageHeader({
   children?: React.ReactNode;
 }) {
   return (
-    <header className="space-y-5">
-      <div className="space-y-2">
+    <header className="space-y-6 sm:space-y-8">
+      <div className="space-y-3">
         {back || share ? (
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
             {back ? <BackLink href={back.href} label={back.label} /> : <span />}
@@ -58,13 +63,11 @@ export function PageHeader({
         ) : null}
         <div className="flex flex-wrap items-end justify-between gap-x-10 gap-y-4">
           <div className="min-w-0 max-w-full">
-            {eyebrow ? (
-              <div className="mb-1 text-[12px] font-medium text-muted-foreground">{eyebrow}</div>
-            ) : null}
+            {eyebrow ? <div className="kicker mb-1">{eyebrow}</div> : null}
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
               <h1
                 className={cn(
-                  "min-w-0 break-words text-[28px] font-semibold leading-tight tracking-tight sm:text-[36px]",
+                  "display min-w-0 break-words text-[34px] leading-[1.1] text-foreground sm:text-[48px] sm:leading-[1.06]",
                   titleClassName
                 )}
               >
@@ -73,9 +76,7 @@ export function PageHeader({
               {badges}
             </div>
             {subtitle ? (
-              <p className="mt-1.5 max-w-[68ch] text-[14px] leading-relaxed text-muted-foreground sm:text-[15px]">
-                {subtitle}
-              </p>
+              <p className="dek mt-2 max-w-[62ch] text-[17px] leading-[1.42] sm:mt-3 sm:text-[19px] sm:leading-[1.4]">{subtitle}</p>
             ) : null}
           </div>
           {aside ? <div className="w-full min-w-0 sm:w-auto">{aside}</div> : null}
@@ -86,14 +87,15 @@ export function PageHeader({
   );
 }
 
-/** "← all members": the way back to a detail page's list. */
+/** "‹ All members": the way back to a detail page's list, iOS-style. */
 export function BackLink({ href, label }: { href: string; label: string }) {
   return (
     <a
       href={href}
-      className="inline-flex rounded-md text-xs text-muted-foreground transition-colors duration-150 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      className="-ml-1 inline-flex items-center gap-0.5 rounded-md pr-1 text-[15px] font-medium text-ink-2 transition-colors duration-(--dur) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
     >
-      ← {label}
+      <ChevronLeft className="size-5" strokeWidth={2.25} aria-hidden />
+      <span className="first-letter:uppercase">{label}</span>
     </a>
   );
 }
@@ -112,7 +114,7 @@ export function DataError({ error, context }: { error: unknown; context?: string
 
 /** An empty section or a zero state: one muted line, not a box the size of a chart. */
 export function Quiet({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <p className={cn("max-w-[68ch] text-[13px] text-muted-foreground", className)}>{children}</p>;
+  return <p className={cn("max-w-[68ch] text-[14px] text-muted-foreground", className)}>{children}</p>;
 }
 
 export type Health = "ok" | "attention" | "error" | "off";
@@ -121,7 +123,7 @@ export type Health = "ok" | "attention" | "error" | "off";
 const HEALTH_TONE: Record<Health, { cls: string; dot: string }> = {
   ok: { cls: "text-ok bg-ok-soft border-ok/25", dot: "bg-ok" },
   attention: { cls: "text-attention bg-attention-soft border-attention/25", dot: "bg-attention" },
-  error: { cls: "text-error bg-error-soft border-error/25", dot: "bg-error" },
+  error: { cls: "text-error bg-error-soft border-error/45", dot: "bg-error rounded-[1px]! rotate-45" },
   off: { cls: "text-muted-foreground bg-muted border-border", dot: "bg-muted-foreground" },
 };
 
