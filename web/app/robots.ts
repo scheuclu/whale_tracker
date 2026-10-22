@@ -7,7 +7,8 @@ import { absoluteUrl } from "@/lib/site";
  *
  * Disallowed: the CSV export (a download of rows the pages already show, at
  * up to 5,000 rows a request) and the scan-image route behind the noindexed
- * scan pages. Nothing else under /api/ — in particular not the
+ * scan pages; /admin (also `noindex`) and the sign-in endpoints behind it.
+ * Nothing else under /api/ — in particular not the
  * public /api/v1/, which is meant to be read by agents.
  */
 const AI_CRAWLERS = [
@@ -31,7 +32,7 @@ const AI_CRAWLERS = [
   "MistralAI-User",
 ];
 
-const DISALLOW = ["/api/export.csv", "/api/scan-page/", "/api/health"];
+const DISALLOW = ["/api/export.csv", "/api/scan-page/", "/api/health", "/admin", "/api/auth/"];
 
 export default function robots(): MetadataRoute.Robots {
   return {

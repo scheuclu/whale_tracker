@@ -8,6 +8,9 @@ import {
   PAGE_CDN_SECONDS,
   PAGE_SOURCE,
   PAGE_SWR_SECONDS,
+  PRIVATE_CACHE_CONTROL,
+  PRIVATE_PAGES,
+  PRIVATE_SOURCE,
 } from "./cache-policy.ts";
 
 test("caching pages cannot make the dashboard staler than the old 120 s database TTL", () => {
@@ -69,4 +72,21 @@ test("API routes, Next assets, files and metadata images keep their own policy",
   ]) {
     assert.ok(!matches(p), p);
   }
+});
+
+test("admin and contact are never CDN-cached, and get the private header instead", () => {
+  const priv = (path: string) => new RegExp(`^${PRIVATE_SOURCE}$`).test(path);
+  for (const p of ["/admin", "/admin/", "/admin?status=handled", "/contact", "/contact?topic=press"]) {
+    const path = p.split("?")[0];
+    assert.ok(!matches(path), `${p} must not get the CDN header`);
+    assert.ok(priv(path), `${p} must get the private header`);
+  }
+  for (const page of PRIVATE_PAGES) assert.ok(!matches(`/${page}`) && priv(`/${page}`), page);
+  // Only those exact segments: a page merely starting with the word is still a page.
+  for (const p of ["/administrators", "/contacts", "/tickers/ADMN"]) {
+    assert.ok(matches(p), p);
+    assert.ok(!priv(p), p);
+  }
+  assert.match(PRIVATE_CACHE_CONTROL, /no-store/);
+  assert.doesNotMatch(PRIVATE_CACHE_CONTROL, /public|s-maxage/);
 });

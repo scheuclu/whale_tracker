@@ -468,6 +468,30 @@ skill before changing any palette value.
   saying that trades sit on their trade date (disclosed up to 45 days later)
   and that a move after a cluster is not evidence of knowledge.
 
+## Contact form and /admin
+
+- Contact messages live in a **private Vercel Blob store** (one JSON file per
+  message, `contact/<ip-hash>/<stamp>_<id>.json`), never in
+  `data/trades.sqlite3`: the dashboard only ever reads a fetched copy of the
+  pipeline's file and must not write to it. Code reaches the store only through
+  the `BlobBackend` interface (`web/lib/contact-store.ts`; the `@vercel/blob`
+  adapter is `contact-blob.ts`), so tests fake it in memory. Every call is
+  `access: "private"`; blob URLs and IP hashes never reach a browser. Triage
+  edits are conditional writes on the ETag (`ifMatch`), never blind overwrites.
+- `/admin` is Sign in with Vercel (Auth.js OIDC) plus `ADMIN_VERCEL_USER_IDS`,
+  and **fails closed**: missing secret, App or allowlist means nobody gets in.
+  The allowlist is checked again on every request and in every server action.
+  There is no password or dev login, in any environment — tests mint a session
+  cookie with the local `AUTH_SECRET`. Do not add a bypass.
+- `/admin` and `/contact` are outside the CDN page rule (`PRIVATE_PAGES` in
+  `web/lib/cache-policy.ts`) and are sent `no-store`; a signed-in view or a
+  form's result must never be cached or shared. `/admin` is also `noindex` and
+  disallowed in robots.txt.
+- `/contact` must work without JavaScript. Every page streams inside the root
+  `loading.tsx` boundary, which React 19.2 outlines into a hidden div that
+  only a script reveals; the page's `<noscript>` style undoes that for this
+  page. Keep the form a plain server-action POST.
+
 ## Dashboard conventions
 
 - Vercel builds a preview for every PR — point the user at it for UI review.

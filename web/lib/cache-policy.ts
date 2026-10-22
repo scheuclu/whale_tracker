@@ -35,8 +35,27 @@ export const MAX_STALENESS_SECONDS = 120;
 export const PAGE_CDN_CACHE_CONTROL = `public, s-maxage=${PAGE_CDN_SECONDS}, stale-while-revalidate=${PAGE_SWR_SECONDS}`;
 
 /**
+ * Pages that must never be held by the CDN or shared between readers:
+ * `/admin` (a signed-in view) and `/contact` (a server action posts to it,
+ * and its response is one sender's result). They get `PRIVATE_CACHE_CONTROL`.
+ */
+export const PRIVATE_PAGES = ["admin", "contact"] as const;
+
+/** path-to-regexp source for `next.config.ts` matching each private page and anything under it. */
+export const PRIVATE_SOURCE = `/((?:${PRIVATE_PAGES.join("|")})(?:/.*)?)`;
+
+/**
+ * Sent on the private pages: no CDN copy (`CDN-Cache-Control` too, since
+ * Vercel's CDN reads that one first) and no browser copy. Next already sends
+ * `no-store` for a dynamic page; this states it where a later change to the
+ * page rule cannot silently undo it.
+ */
+export const PRIVATE_CACHE_CONTROL = "private, no-store, max-age=0";
+
+/**
  * Which request paths get it: every page, and not
  *
+ * - `/admin`, `/contact` — `PRIVATE_PAGES`, never cached;
  * - `/api/…` — each route handler states its own policy (the CSV export is
  *   `no-store`, a scan image is cached for a week);
  * - `/_next/…` — hashed assets and the image optimizer, which Next caches;
@@ -48,7 +67,7 @@ export const PAGE_CDN_CACHE_CONTROL = `public, s-maxage=${PAGE_CDN_SECONDS}, sta
  * the whole string is also a plain regex, which is how the tests check it.
  */
 export const PAGE_SOURCE =
-  "/((?!api/|_next/)(?!(?:.*/)?(?:opengraph-image|twitter-image|apple-icon|icon)(?:[-./]|$))(?!.*\\.(?:svg|png|jpe?g|gif|webp|ico|txt|xml|json|md|webmanifest|csv)$).*)";
+  "/((?!api/|_next/)(?!(?:admin|contact)(?:/|$))(?!(?:.*/)?(?:opengraph-image|twitter-image|apple-icon|icon)(?:[-./]|$))(?!.*\\.(?:svg|png|jpe?g|gif|webp|ico|txt|xml|json|md|webmanifest|csv)$).*)";
 
 /**
  * Share cards (every `opengraph-image`). They read the database, so Next

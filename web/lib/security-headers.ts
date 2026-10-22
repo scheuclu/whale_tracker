@@ -60,11 +60,10 @@ export function cspDirectives({ dev = false, preview = false }: CspEnv = {}): Di
     "frame-src": ["'none'"],
     "object-src": ["'none'"],
     "base-uri": ["'self'"],
-    // The operator's sign-in to /admin may post to our own auth route, which
-    // answers with a redirect to the identity provider — and Chrome applies
-    // form-action to that redirect. Google or Vercel, whichever the admin
-    // uses; drop the other once that is settled. Readers never sign in.
-    "form-action": ["'self'", "https://accounts.google.com", "https://vercel.com"],
+    // The operator's sign-in to /admin posts to a server action that answers
+    // with a redirect to Sign in with Vercel (vercel.com/oauth/authorize) —
+    // and Chrome applies form-action to that redirect. Readers never sign in.
+    "form-action": ["'self'", "https://vercel.com"],
     // No site may frame a page (clickjacking); X-Frame-Options says the same
     // for browsers that predate CSP 2.
     "frame-ancestors": ["'none'"],

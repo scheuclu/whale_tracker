@@ -146,7 +146,7 @@ const SECTIONS: LegalSection[] = [
           <TextLink href="https://vercel.com/legal/privacy-policy">Vercel&apos;s privacy policy</TextLink>.
         </li>
         <li>
-          <strong>The operator&apos;s sign-in provider</strong> confirms who is signing in to the admin page. It
+          <strong>Sign in with Vercel</strong> (also Vercel Inc.) confirms who is signing in to the admin page. It
           receives nothing about readers or about anyone who writes to us.
         </li>
         <li>

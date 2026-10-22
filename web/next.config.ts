@@ -1,6 +1,6 @@
 import path from "node:path";
 import type { NextConfig } from "next";
-import { PAGE_CDN_CACHE_CONTROL, PAGE_SOURCE } from "./lib/cache-policy";
+import { PAGE_CDN_CACHE_CONTROL, PAGE_SOURCE, PRIVATE_CACHE_CONTROL, PRIVATE_SOURCE } from "./lib/cache-policy";
 import { SECURITY_SOURCE, securityHeaders } from "./lib/security-headers";
 
 const nextConfig: NextConfig = {
@@ -56,6 +56,15 @@ const nextConfig: NextConfig = {
           preview: process.env.VERCEL_ENV === "preview",
         }),
       },
+      // /admin and /contact: never cached or shared (a signed-in view; a form's result).
+      {
+        source: PRIVATE_SOURCE,
+        headers: [
+          { key: "Cache-Control", value: PRIVATE_CACHE_CONTROL },
+          { key: "CDN-Cache-Control", value: "no-store" },
+        ],
+      },
+      { source: "/admin/:path*", headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }] },
     ];
   },
 };
