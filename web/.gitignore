@@ -4,3 +4,8 @@ next-env.d.ts
 
 # tsc --incremental state (web/tsconfig.json sets incremental)
 tsconfig.tsbuildinfo
+
+# Playwright output (npm run test:e2e)
+/playwright-report/
+/test-results/
+/blob-report/

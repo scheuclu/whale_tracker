@@ -4,21 +4,48 @@ name: web
 # check cannot tell a working tab from a broken one: the Insiders tab shipped
 # "no such column: f.parse_method" for a day. `npm test` executes every
 # dashboard query against the committed database and fails on the first error.
+#
+# The e2e suite (web/e2e, Playwright) then loads every main route of a
+# production build in Chromium: no console/page errors, one <h1>, canonical,
+# sitemap, legacy redirects, API shapes, the bracket rules, a few
+# interactions. It is the check for what unit tests cannot see — a merge
+# that broke a page's CSS, its hydration, or its SEO markup.
+#
+# When it runs:
+# - Every pull request touching the dashboard or the database.
+# - Once a day on main, against whatever the pipeline last committed. The
+#   poll workflow commits data/trades.sqlite3 straight to main ~8 times a
+#   day; running the suite on each of those pushes would spend ~25 runner
+#   minutes a day re-testing unchanged code, while a once-a-day run still
+#   catches data that breaks a page within a day. Pushes to main are not a
+#   trigger: code reaches main only through a PR, which ran the suite.
 on:
   pull_request:
     paths:
       - "web/**"
       - "data/trades.sqlite3"
       - ".github/workflows/web.yml"
+  schedule:
+    - cron: "41 7 * * *"
   workflow_dispatch:
+
+concurrency:
+  group: web-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: web
+    env:
+      # Canonicals, robots.txt and the sitemap are absolute URLs on this
+      # origin, inlined at build time; the e2e suite runs against it.
+      E2E_PORT: "3245"
+      NEXT_PUBLIC_SITE_URL: http://localhost:3245
+      NEXT_TELEMETRY_DISABLED: "1"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -28,4 +55,41 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci
       - run: npm test
-      - run: npm run build
+
+      # Its own step so a type error is named as one. `next build` also
+      # type-checks, but prints "Compiled successfully" before it does.
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+      - name: Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright Chromium
+        id: pw-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}-chromium-shell
+      - name: Install Playwright Chromium
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps --only-shell chromium
+      - name: Install Playwright system dependencies
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      # playwright.config.ts starts `next start` on E2E_PORT itself.
+      - name: End-to-end tests
+        run: npm run test:e2e
+
+      - name: Upload Playwright report and traces
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            web/playwright-report/
+            web/test-results/
+          retention-days: 14

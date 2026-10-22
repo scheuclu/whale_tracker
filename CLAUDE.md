@@ -193,6 +193,18 @@ parser stays faithful to the PDF and the UI flags the row rather than
   them. The web queries guard on the tables existing: the committed database
   gains a new schema version only on the pipeline's next run after a merge.
 - Tests: `.venv/bin/python -m pytest -q` (run before every PR).
+- Dashboard tests: `cd web && npm test` (unit tests in `lib/*.test.ts`,
+  every query against the committed database) and the Playwright e2e suite
+  in `web/e2e/` against a production build:
+  `cd web && NEXT_PUBLIC_SITE_URL=http://localhost:3245 npm run build && npm run test:e2e`
+  (the origin is inlined at build time and the canonical checks compare
+  against it; the config starts `next start` on port 3245, or reuses a
+  server already there). Both run in CI (`.github/workflows/web.yml`) on
+  every PR touching `web/**` or the database, and daily on main; a failed
+  run uploads the HTML report and traces as an artifact. A new page or
+  route is one line in `web/e2e/routes.ts`. Known bugs are pinned with
+  `test.fail` and a note — remove the annotation when the fix lands, since
+  the test then fails as "unexpectedly passed".
 
 ## Watchlist (per-member alerting)
 
@@ -440,7 +452,8 @@ skill before changing any palette value.
 
 - Vercel builds a preview for every PR — point the user at it for UI review.
 - Verify `cd web && npm run build` passes and render the pages headless before
-  opening a PR; say what was checked.
+  opening a PR (`npm run test:e2e` covers every main route); say what was
+  checked.
 - Summary stat tiles must aggregate over the whole dataset, not the rendered
   page slice (see `getPoliticianTotals`) — summing a truncated list understates
   the total it claims to report.
