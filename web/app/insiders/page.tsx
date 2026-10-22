@@ -18,6 +18,7 @@ import { Card, DivergingSplit, Empty, MagnitudeBars, SectionTitle, StatTile } fr
 import { ActionBadge, Amount, InsiderDelayTag, PartyBadge, PlanTag, ResponsiveTable, RoleTag, SectorTag, TickerChip } from "../ui";
 import { MemberAvatar } from "../avatar";
 import { Disclosure } from "../disclosure";
+import { PriceOverlay } from "../price-overlay";
 import { DataError, PAGE_STACK, PageHeader, PillLinks, Quiet } from "../page-header";
 import {
   ISSUER_SORT,
@@ -659,6 +660,8 @@ async function IssuerDetail({ ticker }: { ticker: string }) {
         <StatTile label="Sold" value={issuer.sell_value ? usd(issuer.sell_value) : "—"} hint="shares × reported price" />
       </section>
       </PageHeader>
+
+      <PriceOverlay ticker={issuer.ticker ?? ticker} focus="insider" />
 
       <section>
         <SectionTitle>Who traded</SectionTitle>

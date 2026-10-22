@@ -929,3 +929,63 @@
 .tl-tip {
   background: var(--card-solid);
 }
+
+/* ------------------------------------------------------------------
+   Price overlay (app/price-overlay-chart.tsx). The close is a neutral
+   ink line — blue<->red is reserved for buy/sell — and the "vs SPY"
+   benchmark a recessive gray: the emphasis form (one ink, one gray), so
+   the categorical lightness/chroma bands do not apply. Measured with the
+   dataviz validator against the card surface, all pairs with the buy/sell
+   pair: light ink/bench ΔE 29.1, bench vs buy 15.9 normal / sell 12.8
+   deutan, contrast >= 3:1; dark ink/bench ΔE 36.0, bench vs buy 15.8
+   normal / sell 8.0 protan, contrast >= 3:1. Cluster washes are the
+   buy/sell hues at ~10%, the area-fill spec.
+   ------------------------------------------------------------------ */
+:root {
+  --viz-price: #3a3a48;
+  --viz-bench: #8c8c9c;
+}
+.dark {
+  --viz-price: #ececf2;
+  --viz-bench: #6e6e80;
+}
+.po-wash-buy {
+  fill: var(--viz-buy);
+  fill-opacity: 0.1;
+}
+.po-wash-sell {
+  fill: var(--viz-sell);
+  fill-opacity: 0.1;
+}
+.dark .po-wash-buy,
+.dark .po-wash-sell {
+  fill-opacity: 0.16;
+}
+.po-span-buy {
+  fill: var(--viz-buy);
+}
+.po-span-sell {
+  fill: var(--viz-sell);
+}
+.po-lane-label {
+  font-size: 12px;
+  font-weight: 500;
+  fill: var(--ink-2);
+  paint-order: stroke;
+  stroke: var(--card-solid);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+.po-note {
+  font-size: 12px;
+  fill: var(--muted-foreground);
+}
+.po-plot {
+  touch-action: pan-y;
+  cursor: crosshair;
+  outline: none;
+}
+.po-plot:focus-visible {
+  box-shadow: 0 0 0 2px var(--card-solid), 0 0 0 4px var(--ring);
+  border-radius: 8px;
+}

@@ -7,6 +7,7 @@ import { ActionBadge, Amount, OptionBadge, OwnerTag, ResponsiveTable, RoleTag, S
 import { TradeList, TradeRow } from "../../trade-row";
 import { getTimelineTrades, type TimelineTrade } from "@/lib/timeline-queries";
 import { TradeTimeline } from "../../timeline";
+import { PriceOverlay } from "../../price-overlay";
 
 import { TickerMembers } from "../ticker-members";
 import { AgentAlternates } from "../../agent-alternates";
@@ -102,6 +103,8 @@ export async function TickerDetail({ stat }: { stat: TickerRow }) {
         <StatTile label="Last trade" value={shortDate(stat.last_tx_date)} />
       </section>
       </PageHeader>
+
+      <PriceOverlay ticker={ticker} focus="congress" congress={timeline} />
 
       <section>
         <SectionTitle right={<span className="text-[11px] text-muted-foreground">by trade date</span>}>
