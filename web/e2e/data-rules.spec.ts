@@ -86,7 +86,8 @@ const TILE_PAGES = [
 for (const path of TILE_PAGES) {
   test(`single-figure stat tiles are labelled as estimates on ${path}`, async ({ page }) => {
     await visit(page, path);
-    const tiles = await page.locator("div.viz-rise.rounded-xl").evaluateAll((els) =>
+    // `data-stat-tile` (charts.tsx): a hook that survives restyling, unlike a class list.
+    const tiles = await page.locator("[data-stat-tile]").evaluateAll((els) =>
       els.map((t) => ({
         label: t.querySelector(":scope > div:first-child > div:first-child")?.textContent?.trim() ?? "",
         value: (t.querySelector(":scope > div:nth-child(2) > div:first-child")?.textContent ?? "").replace(/\s+/g, ""),

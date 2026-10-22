@@ -58,6 +58,8 @@ const BUY = "var(--viz-buy)";
 const SELL = "var(--viz-sell)";
 const SEQ = "var(--viz-seq)";
 const GREY = "var(--viz-axis)";
+/** Transcribed from a scan: ink, hatched — provisional, never the accent (DESIGN.md). */
+const SCAN = "var(--viz-price)";
 
 const num = (n: number) => n.toLocaleString();
 const days = (d: number | null) => (d == null ? "—" : `${Number.isInteger(d) ? d : d.toFixed(1)}d`);
@@ -161,7 +163,7 @@ export default async function TrendsPage({
     label: labels[i],
     name: names[i],
     up: [
-      { key: "transcribed", label: "Transcribed", value: r.transcribed, fill: SEQ },
+      { key: "transcribed", label: "Transcribed", value: r.transcribed, fill: SCAN, texture: "hatch" },
       { key: "not", label: "Not transcribed", value: r.unread + r.refused, fill: GREY },
     ],
     upLabel: r.scans ? num(r.scans) : "",
@@ -177,6 +179,7 @@ export default async function TrendsPage({
   return (
     <div className={PAGE_STACK}>
       <PageHeader
+        eyebrow="Over time"
         title="Trends"
         subtitle="Change over time, by calendar month: trading, filing delay, insiders and scans."
         aside={
@@ -461,7 +464,7 @@ export default async function TrendsPage({
         <Card>
           <ChartLegend
             items={[
-              { label: "Transcribed", style: textureStyle(SEQ) },
+              { label: "Transcribed", style: textureStyle(SCAN, "hatch") },
               { label: "Not transcribed", style: textureStyle(GREY) },
             ]}
             note="filings"

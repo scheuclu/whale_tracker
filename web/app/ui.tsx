@@ -19,7 +19,7 @@ import { MoneyText } from "./money";
 export { MoneyText };
 
 /**
- * The card every `<table>` goes in. The leaderboards are 7–9 columns wide
+ * The frame every `<table>` goes in. The leaderboards are 7–9 columns wide
  * and do not fit a phone; rather than drop columns, the table scrolls
  * sideways inside a container that fades its open edge and pins the first
  * column (the ticker, member or filing id) so a row keeps its name while the
@@ -50,8 +50,13 @@ export function ResponsiveTable({
   /** Let cells wrap (a column of free text) instead of extending the scroll. */
   wrap?: boolean;
 }) {
+  // Open, not boxed: the table stands on the paper under its section rule.
+  // From 640px it is flush with the column — the outer cells lose their
+  // inset (globals.css, .table-open) so the first column meets the title's
+  // edge. On a phone it runs edge to edge with the gutter as the inset,
+  // which is what a sideways-scrolling table wants.
   return (
-    <Card className={cn("p-0", className)}>
+    <Card className={cn("table-open -mx-4 border-b border-border sm:mx-0", className)}>
       <ScrollX className={wrap ? undefined : "whitespace-nowrap"} stickyFirstColumn={stickyFirstColumn}>
         {children}
       </ScrollX>
@@ -88,6 +93,8 @@ const CHIP = "inline-flex h-5 shrink-0 align-middle items-center gap-1 whitespac
 const NEUTRAL = "bg-muted text-muted-foreground";
 const HAIRLINE = "ring-1 ring-inset ring-border";
 const AMBER = "bg-attention-soft text-attention";
+/** A transcribed (scanned) row: neutral and dashed — provisional, not a colour. */
+const SCAN = "border border-dashed border-border-strong text-ink-2";
 /** Focus ring for every link and control: 2px primary, offset off the surface. */
 export const FOCUS_RING =
   "outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
@@ -151,7 +158,7 @@ export function ActionBadge({ action }: { action: string }) {
 
 /**
  * Filing states. Round pills with a dot, in the muted status set: green ok,
- * primary in flight, attention (amber), error, grey history — the status
+ * ink in flight, attention (burnt orange), error, grey history — the status
  * tokens, never the buy/sell pair.
  */
 const OK = { cls: "bg-ok-soft text-ok", dot: "bg-ok" };
@@ -161,7 +168,7 @@ const WARN = { cls: AMBER, dot: "bg-attention" };
 const STATUS_TONE: Record<string, { label: string; cls: string; dot: string }> = {
   notified: { label: "alerted", ...OK },
   backfilled: { label: "history", ...GREY },
-  parsed: { label: "sending", cls: "bg-primary/10 text-primary", dot: "bg-primary" },
+  parsed: { label: "sending", cls: "bg-foreground/[0.07] text-foreground", dot: "bg-foreground" },
   new: { label: "processing", cls: AMBER, dot: "bg-attention motion-safe:animate-pulse" },
   backfill_queued: { label: "queued", ...WARN },
   failed: {
@@ -249,9 +256,9 @@ export function TickerChip({
         CHIP,
         HAIRLINE,
         FOCUS_RING,
-        "bg-[var(--card-solid)] px-1.5 font-mono text-[11.5px] font-semibold tracking-tight text-foreground",
+        "bg-transparent px-1.5 font-mono text-[11.5px] font-semibold tracking-tight text-foreground",
         "transition-[background-color,box-shadow,color] duration-(--dur) ease-(--ease-out)",
-        "hover:bg-accent hover:text-accent-foreground hover:ring-primary/35 active:bg-primary/15"
+        "hover:bg-accent hover:text-accent-foreground hover:ring-gold/60 active:bg-gold/25"
       )}
     >
       {ticker}
@@ -273,14 +280,14 @@ export function ScanTag({
   docId?: string;
 }) {
   if (!transcribed) return null;
-  const cls = cn(CHIP, AMBER);
+  const cls = cn(CHIP, SCAN);
   const title =
     "Read from a scanned paper filing (text by a vision model, ticked boxes by the grid reader). Counted as a trade; excluded from every volume total.";
   if (docId) {
     return (
       <Link
         href={`/scans/${encodeURIComponent(docId)}`}
-        className={cn(cls, FOCUS_RING, "transition-[filter] duration-(--dur) ease-(--ease-out) hover:brightness-95 dark:hover:brightness-125")}
+        className={cn(cls, FOCUS_RING, "transition-[border-color,color] duration-(--dur) ease-(--ease-out) hover:border-foreground hover:text-foreground")}
         title={`${title} Click to inspect the scan.`}
       >
         transcribed from scan
@@ -525,22 +532,22 @@ export function Amount({
 /** A secondary button / link-button: hairline, soft hover, pressed tint. */
 export const BUTTON = cn(
   "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-control border border-border",
-  "bg-[var(--card-solid)] px-3 text-xs font-medium text-muted-foreground",
+  "bg-[var(--field)] px-3 text-xs font-medium text-ink-2",
   "transition-[background-color,border-color,color] duration-(--dur) ease-(--ease-out)",
   "hover:border-border-strong hover:bg-raised hover:text-foreground active:bg-secondary",
   FOCUS_RING
 );
-/** The one filled button in a form: its submit. */
+/** The one filled button in a form: its submit. Ink, not the accent — gold is never a button. */
 export const BUTTON_PRIMARY = cn(
-  "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-control bg-primary px-3.5",
-  "text-xs font-medium text-primary-foreground shadow-[inset_0_1px_0_0_rgb(255_255_255/0.12)]",
-  "transition-[filter,background-color] duration-(--dur) ease-(--ease-out) hover:brightness-110 active:brightness-95",
+  "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-control bg-foreground px-3.5",
+  "text-xs font-semibold text-background",
+  "transition-[background-color] duration-(--dur) ease-(--ease-out) hover:bg-foreground/85 active:bg-foreground/75",
   FOCUS_RING
 );
 
 /** Text inputs and selects: one height, radius, hover and focus treatment. */
 export const FIELD = cn(
-  "h-8 w-full min-w-0 rounded-control border border-input bg-[var(--card-solid)] px-2.5 text-[13px] text-foreground",
+  "h-8 w-full min-w-0 rounded-control border border-input bg-[var(--field)] px-2.5 text-[13px] text-foreground",
   "transition-[border-color,box-shadow] duration-(--dur) ease-(--ease-out) dark:[color-scheme:dark]",
   // Focus keeps the base 2px ring (offset 2px); the border firms to match it.
   "hover:border-border-strong focus:border-ring",
@@ -555,8 +562,8 @@ export function segmentClass(active: boolean) {
     FOCUS_RING,
     "focus-visible:outline-offset-1",
     active
-      ? "bg-[var(--card-solid)] text-foreground shadow-[0_1px_2px_rgb(0_0_0/0.06)] ring-1 ring-border"
-      : "text-muted-foreground hover:bg-secondary hover:text-foreground active:bg-foreground/[0.08]"
+      ? "bg-foreground text-background"
+      : "text-ink-2 hover:bg-secondary hover:text-foreground active:bg-foreground/[0.08]"
   );
 }
 
@@ -578,7 +585,7 @@ export function Segmented({
   return (
     <nav
       aria-label={label}
-      className={cn("inline-flex max-w-full items-center gap-0.5 rounded-control bg-muted p-0.5 ring-1 ring-inset ring-border/60", className)}
+      className={cn("inline-flex max-w-full items-center gap-0.5 rounded-control p-0.5 ring-1 ring-inset ring-border", className)}
     >
       {items.map((it) => (
         <a key={it.key} href={it.href} aria-current={it.active ? "page" : undefined} className={segmentClass(it.active)}>

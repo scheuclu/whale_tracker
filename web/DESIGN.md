@@ -1,130 +1,259 @@
-# Dashboard design tokens
+# FatCat Watch — design system v2
 
-The values the dashboard's look is built from. They live in `app/globals.css`
-(`:root` / `.dark`, mapped to Tailwind utilities in `@theme inline`); this
-file records the decisions so later work stays consistent. Data-viz colours
-(`--viz-*`) are governed separately: see CLAUDE.md, "Data-viz".
+The spec every page is built to. Values live in `app/globals.css` (`:root` /
+`.dark`, mapped to Tailwind utilities in `@theme inline`); the components are
+in `app/charts.tsx`, `app/page-header.tsx`, `app/ui.tsx`, `app/disclosure.tsx`.
+Data-viz colours (`--viz-*`) are also governed by CLAUDE.md, "Data-viz".
 
-Direction: calm, precise, editorial-financial. Hairlines do the work, shadows
-are rare, colour is restrained, and dark mode is designed rather than inverted.
+## Direction
 
-## Surfaces
+**An editorial data publication, not a SaaS dashboard.** Think ProPublica's
+Represent, the FT and Bloomberg graphics desks, The Economist's charts — with
+a little wit from the fat cat. Concretely:
+
+1. **Paper and ink.** A warm paper page, near-black warm ink, a deep-ink dark
+   mode. Content sits *on the paper*; it is not put in boxes.
+2. **Rules, not cards.** A section is announced by a 1px ink rule and a serif
+   heading. Hairlines separate rows. Whitespace does the rest.
+3. **A typographic voice.** Newsreader (serif) for headlines, section heads
+   and hero figures; Inter for interface and body; Geist Mono for tickers and
+   ids. Real hierarchy: kicker → headline → dek → body.
+4. **One accent, used sparingly.** The gold of the cat's bow tie: the active
+   section, kickers, focus, selection, the reader's-note rule, magnitude bars.
+   Never a button, never body text on paper.
+5. **Blue↔red is direction, and only direction.** Bought is blue, sold is
+   red, everywhere, always also in words. Nothing else may be blue or red.
+6. **State the caveat once, well.** Load-bearing caveats (ranges, estimates,
+   shares × reported price, quarantined scans) live in a `Disclosure` — one
+   quiet, consistent place — not as repeated grey sentences under every widget.
+
+## Colour
+
+### Surfaces
 
 | Role | Token / utility | Light | Dark |
 | --- | --- | --- | --- |
-| Page | `--background` / `bg-background` | `#f6f7f9` | `#0b0c0f` |
-| Card | `--card` / `bg-card` | `#ffffff` | `#131419` |
-| Raised (inner panel, hover fill on a card) | `--raised` / `bg-raised` | `#f9fafb` | `#1a1b21` |
-| Popover / tooltip | `--popover` / `bg-popover` | `#ffffff` | `#1f2027` |
-| Card, solid (sticky column, scroll fade) | `--card-solid` | `#ffffff` | `#131419` |
+| Page (paper) | `--background` / `bg-background` | `#f7f4ed` | `#131311` |
+| Panel (a form, a link card) | `--card` / `bg-card` | `#fcfbf7` | `#1b1a17` |
+| Hover wash, raised step | `--raised` / `bg-raised` | `#efebe2` | `#24231f` |
+| Popover / tooltip | `--popover` / `bg-popover` | `#fffefa` | `#22211d` |
+| Text field, secondary button | `--field` | `#fffefa` | `#1b1a17` |
+| Opaque overlay that must match the page (sticky column, scroll fade, a mark's ring) | `--card-solid` | `#f7f4ed` | `#131311` |
 
-Cards are solid: the page tint is what makes them read as surfaces, not a
-shadow. Do not reintroduce translucent "glass" cards. `.glass` is kept only as
-the class name for the card elevation.
+`--card-solid` is the **paper**, because tables and charts now sit on it. If
+you put an overlaying element inside a panel, give it `bg-card` explicitly.
 
-## Ink
+### Ink
 
-| Level | Token / utility | Light | Dark | Use |
+| Level | Token / utility | Light | Dark | On paper (light / dark) |
 | --- | --- | --- | --- | --- |
-| 1 | `--foreground` / `text-foreground` | `#0f1117` | `#ededf0` | headings, figures, primary text |
-| 2 | `--ink-2` / `text-ink-2` | `#3f4451` | `#b9bcc6` | secondary labels, legend labels, link text in fine print |
-| 3 | `--muted-foreground` / `text-muted-foreground` | `#646a78` | `#8d919d` | meta, hints, captions, units |
+| 1 | `--foreground` / `text-foreground` | `#1a1915` | `#ede9df` | 16.0 / 15.3 |
+| 2 | `--ink-2` / `text-ink-2` | `#45423a` | `#c5c0b4` | 9.1 / 10.3 |
+| 3 | `--muted-foreground` / `text-muted-foreground` | `#6a6558` | `#9a9486` | 5.3 / 6.2 |
 
-All three meet WCAG AA (4.5:1) as text on every surface in both modes,
-including the 4–5% neutral chip fill. Do not fade muted text further with an
-opacity modifier (`text-muted-foreground/80`): that is what breaks AA.
+All three pass WCAG AA (4.5:1) on paper, panel and the hover wash in both
+modes. Do not fade muted text further with an opacity modifier.
 
-## Lines
+### Lines
 
 | Token / utility | Light | Dark | Use |
 | --- | --- | --- | --- |
-| `--border` / `border-border` | `rgba(15,17,23,.085)` | `rgba(255,255,255,.08)` | every hairline: card edges, dividers |
-| `--border-strong` / `border-border-strong` | `rgba(15,17,23,.14)` | `rgba(255,255,255,.13)` | hover edge, emphasised rule |
-| `--input` / `border-input` | `rgba(15,17,23,.12)` | `rgba(255,255,255,.11)` | form controls |
+| `--rule` / `border-rule` | `#1a1915` | `#ede9df` | the 1px ink rule over a section, under the masthead, over the footer |
+| `--border` / `border-border` | ink 13% | paper 12% | every hairline: rows, fact strips, panels |
+| `--border-strong` | ink 24% | paper 22% | hover edge, dashed "transcribed" chip |
+| `--input` / `border-input` | ink 22% | paper 20% | form controls |
 
-## Accent and status
+### The accent (bow-tie gold)
 
-Indigo is for accent roles only: active nav, links, focus ring, selection.
+| Token / utility | Light | Dark | Use |
+| --- | --- | --- | --- |
+| `--gold` / `bg-gold`, `border-gold` | `#e9a913` | `#f3c04f` | marks only: active-section bar, reader's-note rule, link-hover underline, the tie. 1.9:1 on light paper — never text. |
+| `--primary` / `text-primary` | `#8a5d00` | `#f3c04f` | the gold's text-safe ink: kickers, focus ring. 5.2:1 / 11.0:1. |
+| `--accent` / `bg-accent` | gold 16% | gold 14% | ticker-chip hover wash |
+| `--selection` | gold 40% | gold 30% | text selection — a highlighter |
+| `--ring` | `#8a5d00` | `#f3c04f` | focus ring |
 
-| Token / utility | Light | Dark |
+The **primary button is ink** (`bg-foreground text-background`), not gold. A
+gold button reads as a warning and spends the accent on chrome.
+
+### Status (pipeline and filing state — never buy/sell, never the accent)
+
+| Token | Light | Dark |
 | --- | --- | --- |
-| `--primary` / `text-primary`, `bg-primary` | `#5b5bd6` | `#8b8bf2` |
-| `--accent` / `bg-accent` (active-tab fill) | indigo 9% | indigo 14% |
-| `--ring` (focus) | `#6e6ee0` | `#8b8bf2` |
-| `--selection` | indigo 20% | indigo 32% |
-| `--ok` / `text-ok`, `bg-ok-soft` | `#2b7d55` | `#55b685` |
-| `--attention` / `text-attention`, `bg-attention-soft` | `#9a6412` | `#d6a24a` |
-| `--error` / `text-error`, `bg-error-soft` (`--destructive` aliases it) | `#c13d3d` | `#ec7a76` |
+| `--ok` | `#2a7049` | `#5bb585` |
+| `--attention` | `#a34f0b` (burnt orange, so it never reads as the brand gold) | `#f0954a` |
+| `--error` (`--destructive`) | `#b8322f` | `#ef7d74` |
 
-Status colours describe pipeline/system state (fresh, stale, failed). They are
-never a buy/sell encoding: direction is `--viz-buy` / `--viz-sell` only, and
-is always spelled out in text.
+Each has a `*-soft` 10–13% wash for pills. Status always ships with a word.
 
-## Radius
+### Data-viz roles (`--viz-*`)
 
-| Utility | Value | Use |
-| --- | --- | --- |
-| `rounded-card`, `rounded-xl` (and `2xl`–`4xl`) | 12px | cards, tiles, panels |
-| `rounded-control`, `rounded-lg` | 8px | inputs, buttons, inner panels, tooltips |
-| `rounded-chip`, `rounded-md` | 6px | chips, tags |
-| `rounded-sm` | 4px | small marks |
-| `rounded-full` | — | status pills, avatars |
+| Role | Light | Dark | Notes |
+| --- | --- | --- | --- |
+| `--viz-buy` | `#2a78d6` | `#3987e5` | bought; diverging pair with sell |
+| `--viz-sell` | `#d03b3b` | `#e66767` | sold |
+| `--viz-seq` | `#cf9a1c` | `#d9a53a` | single-series magnitude (volume bars, the range band, sparkbars' current period). Gold, stepped to stay clear of sell-red under deuteranopia. |
+| `--viz-track` | ink 7% | paper 8% | empty bar track |
+| `--viz-grid` / `--viz-axis` | `#e4dfd3` / `#8a8578` | `#2b2a26` / `#8a8578` | recessive grid and axes |
+| `--viz-rung-off/below/on` | `#e4dfd3` / `#a29c8d` / `#3b3830` | `#2a2925` / `#6a655b` / `#ece8df` | the bracket ladder (neutral ordinal ramp) |
+| `--viz-price` / `--viz-bench` | `#3b3830` / `#8e887b` | `#ece8df` / `#6a665d` | price overlay: one ink, one grey |
 
-The stock `rounded-2xl`/`3xl`/`4xl` utilities are capped at 12px on purpose,
-so nothing renders larger than a card.
+Validated with the `dataviz` skill's `validate_palette.js` against the v2
+surfaces (re-run it before changing any value):
 
-## Elevation
+- buy · sell · seq, `--pairs all` — light: worst CVD ΔE 14.6 (seq/sell,
+  deutan), normal-vision 21.6, seq contrast 2.31:1 (WARN: relief by direct
+  labels — every gold mark prints its value); dark: CVD 10.2, normal 16.8,
+  all ≥ 3:1, seq above the categorical dark L band (0.752) — accepted, it is
+  a single-hue magnitude role, never a categorical slot.
+- buy/sell alone (unchanged hues): 23.8 light / 19.2 dark, as before.
+- price · bench · buy · sell, `--pairs all` — light CVD 8.3, normal 18.5;
+  dark CVD 8.8, normal 20.8; all ≥ 3:1.
+- rung below → on, `--ordinal` — both modes pass (monotone L, ΔL ≥ 0.06,
+  light end 2.49:1 light / 3.21:1 dark).
 
-| Utility / token | Light | Dark |
-| --- | --- | --- |
-| `shadow-card` (`--elev-card`; also `.glass`) | `0 1px 2px` at 4% | `0 1px 2px` black 35% |
-| `--elev-card-hover` (`.lift:hover`) | adds a soft 12px drop | adds a 16px drop |
-| `shadow-popover` (`--elev-popover`) | 1px ring + 32px drop at 18% | white 9% ring + 40px drop |
-
-Card = hairline + `shadow-card`. Popovers and tooltips = `bg-popover` +
-`shadow-popover`. Nothing else casts a shadow.
+**Transcribed (scanned) rows are not a colour.** They are drawn hollow and
+dashed (the bracket ladder, the timeline) or hatched in ink (the Trends
+"Scans transcribed" columns), and always say "transcribed from scan" in words.
+Amber used to mark them; it now belongs to nobody, and gold is the accent.
 
 ## Type
 
-Geist Sans / Geist Mono. `tabular-nums` (the `.tabular` class) on every number.
+Families (all self-hosted by `next/font`, Latin subset, `display: swap` with
+metric-adjusted fallbacks; no third-party origin):
 
-| Size | Use |
-| --- | --- |
-| 12px (`text-xs`) | meta, tile hints, section-title meta, legend |
-| 13px | tables, captions, tile labels, empty states |
-| 14px (`text-sm`) | body; section titles (semibold, sentence case) |
-| 16px | card titles |
-| 20px | section heroes |
-| 28px (24px on a phone) | stat values: semibold, `-0.025em` tracking |
-| 36px | page titles |
+- **Newsreader** (`font-serif`, `--font-serif`) — variable, with the optical
+  size axis on, so the same family is a display face at 46px and a text face
+  at 16px. Lining figures (`.font-serif` sets `lining-nums`).
+- **Inter** (`font-sans`, the body default) — `cv05`/`cv08` on, so l/I/1 are
+  distinct in names and tickers.
+- **Geist Mono** (`font-mono`) — tickers, filing ids, code.
 
-Unit suffixes on a figure (k, M, B, %, d) render at 0.72em in muted ink
-(`StatTile` does this automatically). No tracked ALL-CAPS headings.
+Numbers: `.tabular` (tabular lining figures) on every number in a table or
+list; `.figure` for a serif hero number (lining + tabular).
 
-## Spacing and layout
+### Scale
 
-- 4px grid; gaps 8 / 12 / 16 / 24.
-- Content column: `max-w-6xl` (1152px), gutters 16px phone / 24px from `sm`.
-- Page sections: 28px apart on a phone, 40px from `sm`, set once by
-  `.page-flow` on `<main>` (pages keep their `space-y-8` wrapper).
-- Card padding: 16px phone / 20px from `sm` (`Card`: `p-4 sm:p-5`).
+| Role | Class / component | Size (phone → ≥640px) | Face |
+| --- | --- | --- | --- |
+| Page headline (h1) | `PageHeader` / `.display` | 34 → 46px, leading 1.04–1.06 | Newsreader 500 |
+| Dek (one-sentence summary) | `PageHeader subtitle` / `.dek` | 17 → 19px, leading 1.45 | Newsreader 400, ink 2 |
+| Kicker / eyebrow | `.kicker` | 11.5px caps, +0.085em | Inter 600, `--primary` |
+| Section head (h2) | `SectionTitle` | 19 → 21px | Newsreader 600 |
+| Hero figure | `StatTile` / `.figure` | 28 → 34px | Newsreader 500 |
+| Fact-strip figure | `FactStrip` | 20px | Newsreader 500 |
+| Reader's note lead | `Disclosure size="md"` | 16px | Newsreader 400 |
+| Body, list rows | — | 13–14px | Inter |
+| Meta, captions, footnotes | — | 12–12.5px | Inter, muted |
+| Badges | `ui.tsx` chips | 11px | Inter 500 |
 
-## Components (app/charts.tsx)
+Unit suffixes on a figure (k, M, B, %, d) render at 0.7em in muted ink
+(`Figure`, automatic in StatTile/FactStrip/MagnitudeBars). Sentence case
+everywhere except the kicker; no other tracked capitals.
 
-- `Card` — the one surface: `rounded-xl border bg-card shadow-card p-4 sm:p-5`.
-- `StatTile` — label (13px medium, muted) → value (28px) → hint (12px muted).
-  A zero value (`0`, `$0`, `0%`, `—`) is de-emphasised: muted figure, no card
-  fill, sparkline at 60%.
-- `SectionTitle` — 14px semibold foreground, sentence case; `right` is 12px muted.
-- `Empty` — one muted 13px line on a 2px left hairline; no box.
-- `Legend` — 12×8px bar swatches, labels in ink 2, note muted on the right.
+## Layout
 
-## Interaction
+- Content column `max-w-6xl` (1152px); gutters 16px phone / 24px from `sm`.
+- Sections 28px apart on a phone, 40px from `sm` (`.page-flow`); each one
+  opens with a `SectionTitle` rule.
+- Open content (charts, lists, tables) is **flush with the column** from
+  640px: its text meets the section title's edge and its rules meet the
+  section rule's ends. On a phone, lists and tables run edge to edge with the
+  16px gutter as their inset (`ResponsiveTable`, `FeedList`, `TradeList`).
+- 4px spacing grid; gaps 8 / 12 / 16 / 24.
 
-- Focus: every element gets a 2px `--ring` outline, offset 2px, from the base
-  layer. Restyle it if needed; never remove it.
-- Transitions 120–180ms ease-out (`--dur-fast` 120ms, `--dur` 160ms,
-  `--ease-out`). `.lift` firms the hairline and adds the hover shadow, with at
-  most a 1px nudge, and no movement under `prefers-reduced-motion`.
-- Scrollbars are thin, rounded and neutral (`--scrollbar`), `::selection` is
-  the indigo `--selection` tint.
+## Fewer boxes
+
+`Card` has two variants:
+
+- `open` (default) — no box. Use for charts, ranked bars, lists, tables:
+  almost everything.
+- `panel` — hairline, `bg-card`, 4px radius, no shadow. Only for things that
+  are genuinely an object: a form (`FilterBar`), a grid of link cards, a
+  popover-like box.
+
+Radius: 4px panels and controls, 3px chips, 2px small marks; fully round only
+for status pills and avatars (the `rounded-xl…4xl` utilities are capped at
+4px). Elevation: none, except popovers and tooltips (`shadow-popover`). No
+glass, no gradients, no glow.
+
+## Components
+
+- **Masthead** (`layout.tsx`, `nav.tsx`, `header-shell.tsx`) — solid paper,
+  ink rule beneath. Brand (tile-less cat + serif wordmark), five reader
+  sections in words — Feed, Members (`/politicians`), Tickers, Insiders,
+  Trends — search (a field from 640px, a link to `/search` on a phone), theme
+  toggle. Active section: ink text, a 3px gold bar standing on the rule,
+  `aria-current`. One row from 1024px; below it the sections take a second
+  row, and on a phone only that row stays pinned (`.site-header` sticks at
+  `top: -3rem`). No icons, no status pill.
+- **Footer** (`site-footer.tsx`) — ink rule above. Brand + counts + the one
+  freshness line ("Updated 25m ago", the pipeline's last run — the same clock
+  as `/api/health`; "the pipeline is behind schedule" in words when stale);
+  Sections; **About the data** (Methodology, Pipeline, Scanned filings, Alert
+  log, API — and Contact when it exists); Sources; "Reading the numbers" (the
+  three governing caveats; do not drop one); legal row.
+- **PageHeader** — `back` / `share` row, `eyebrow` (kicker), `title` (h1,
+  serif), `badges`, `subtitle` (dek), `aside`, then `children` (the facts).
+  Every index page sets a kicker ("Congress · by member", "SEC Form 4",
+  "About the data").
+- **SectionTitle** — ink rule, serif h2, optional `kicker`, `right` meta.
+- **StatTile** — a figure under a hairline, not a card: label (12.5px ink 2)
+  → serif figure → hint. A row of them is a fact strip. Zero figures go muted.
+  `data-stat-tile` is the e2e hook.
+- **FactStrip** — the quieter inline variant: "6,208 trades · 135 members",
+  serif figures with sans labels between two hairlines. Prefer it where the
+  counts are context rather than the news.
+- **Disclosure** — "How to read this". `md`: a reader's note with a 2px gold
+  rule, the lead in the serif, detail folded in a native `<details>`. `sm`: a
+  muted footnote under a chart. The single home for caveats.
+- **Badges** (`ui.tsx`) — chip (3px, facts), pill (round, filing state), text
+  (figures). Direction chips are buy/sell tints with a glyph and the word.
+  `ScanTag` is a dashed neutral outline. `StatusBadge` "sending" is ink.
+- **Controls** — `Segmented`: hairline group, active option ink-filled.
+  `BUTTON`: hairline on `--field`. `BUTTON_PRIMARY`: ink. `FIELD`: hairline on
+  `--field`. One focus ring: 2px `--ring`, offset 2px.
+- **Tables** (`ResponsiveTable`, `sortable-table.tsx`) — open, hairline rows,
+  sticky header and first column; the outer cells lose their inset from 640px
+  (`.table-open`) so the table aligns to the column.
+- **Feed** (`feed-list.tsx`) — day headers in the serif ("Sat, Dec 26"),
+  sticky under the masthead; one block per filing; bracket ladder + range.
+- **Charts** (`charts.tsx`) — pure CSS/SVG, no library. Single-series
+  magnitude in `--viz-seq` (gold) with the value printed at the tip;
+  direction in buy/sell with a legend and words; transcribed marks hollow,
+  dashed or hatched.
+- **Brand** (`lib/brand.ts`, `brand.tsx`) — on the site the cat stands on the
+  page with no tile (`currentColor` ink, gold tie). Icons and share cards use
+  `markSvg`: a paper cat on an ink tile, gold tie. `app/icon.svg` is checked
+  against `lib/brand.ts` by `lib/brand.test.ts`.
+- **Share cards** (`share-card.tsx`, `opengraph-image.tsx`) — the paper, the
+  masthead over an ink rule, a gold-ink kicker, a Newsreader headline,
+  hairline-separated counts. Fonts are static TTFs in `assets/fonts` (OFL).
+- **Skeletons** (`skeletons.tsx`) — mirror the above: hairline-topped tiles,
+  ink-ruled section titles, open lists. Index pages lead with
+  `PageHeadSkeleton`.
+
+## Do / don't
+
+- **Do** open a section with `SectionTitle`; **don't** wrap it in a card.
+- **Do** put a form in `Card variant="panel"`; **don't** make a panel for a
+  chart that already has a title and a rule.
+- **Do** set page titles, section heads and hero numbers in the serif;
+  **don't** set body copy, tables or controls in it.
+- **Do** use gold for the active state, kickers and single-series magnitude;
+  **don't** use it for buttons, body text, or anything that means "warning".
+- **Don't** use blue or red for anything but buy/sell; **don't** colour a
+  party.
+- **Do** give every number tabular figures; **don't** print a congressional
+  dollar figure without "est." or a range.
+- **Do** say a caveat once, in a `Disclosure`; **don't** repeat it under
+  every widget.
+- **Don't** add icons to navigation, shadows to content, gradients anywhere.
+
+## Interaction and motion
+
+- Focus: 2px `--ring` outline, offset 2px, from the base layer. Never removed.
+- Transitions 120–180ms ease-out (`--dur-fast`, `--dur`, `--ease-out`); bars
+  grow once on first paint; everything still under `prefers-reduced-motion`.
+- `prefers-contrast: more` thickens rules and darkens muted ink
+  (`motion.css`); forced colours keep the data marks.

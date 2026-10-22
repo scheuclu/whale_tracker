@@ -83,6 +83,7 @@ export default async function AlertsPage({
   return (
     <div className={PAGE_STACK}>
       <PageHeader
+        eyebrow="About the data"
         title="Alerts"
         subtitle="Every alert sent to Telegram, newest first, with the message as it went out."
       >

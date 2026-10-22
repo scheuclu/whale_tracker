@@ -1,8 +1,7 @@
 import { ImageResponse } from "next/og";
-import { markDataUri } from "@/lib/brand";
 import { getPipeline } from "@/lib/queries";
 import { getInsiderTotals } from "@/lib/insider-queries";
-import { CARD_HEADERS } from "./share-card";
+import { CARD_HEADERS, CardMasthead, HAIRLINE, INK, KICKER, PAPER, SERIF, cardFontsOrDefault } from "./share-card";
 
 export const alt =
   "FatCat Watch — US congressional and corporate-insider stock trades, from STOCK Act and SEC Form 4 filings";
@@ -50,9 +49,8 @@ async function headlines(): Promise<{ stats: Headline[]; synced: string | null }
 
 export async function renderShareCard() {
   const { stats, synced } = await headlines();
-  // The dashboard's dark surfaces (globals.css): page, card hairline, three ink levels.
-  const ink = { 1: "#ededf0", 2: "#b9bcc6", 3: "#8d919d" };
-  const hairline = "rgba(255,255,255,0.09)";
+  // The site's v2 paper (globals.css): ink, an ink rule under the masthead,
+  // the serif headline, hairline-separated counts. No gradient, no glow.
   return new ImageResponse(
     (
       <div
@@ -61,38 +59,47 @@ export async function renderShareCard() {
           height: "100%",
           display: "flex",
           flexDirection: "column",
-          padding: "60px 72px 56px",
-          backgroundColor: "#0b0c0f",
-          // One quiet indigo wash from the mark's corner; the rest is the flat page.
-          backgroundImage:
-            "radial-gradient(820px 520px at 0% 0%, rgba(139,139,242,0.20), transparent 62%), radial-gradient(640px 420px at 100% 100%, rgba(139,139,242,0.07), transparent 60%)",
-          color: ink[1],
+          padding: "48px 72px 52px",
+          backgroundColor: PAPER,
+          color: INK[1],
+          fontFamily: "Inter",
           fontSize: 28,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={markDataUri({ size: 60 })} width={60} height={60} alt="" />
-            <div style={{ display: "flex", fontSize: 34, letterSpacing: "-0.01em" }}>
-              FatCat<span style={{ color: "#a5a5f6", marginLeft: 10 }}>Watch</span>
-            </div>
-          </div>
-          {synced ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 21, color: ink[3] }}>
-              <div style={{ display: "flex", width: 9, height: 9, borderRadius: 9, backgroundColor: "#55b685" }} />
-              synced {synced}
-            </div>
-          ) : null}
-        </div>
+        <CardMasthead
+          right={
+            synced ? <div style={{ display: "flex", fontSize: 21, color: INK[3] }}>Updated {synced}</div> : null
+          }
+        />
 
-        <div style={{ display: "flex", flexDirection: "column", marginTop: "auto", gap: 18 }}>
-          <div style={{ display: "flex", fontSize: 62, lineHeight: 1.1, letterSpacing: "-0.02em", maxWidth: 1000 }}>
+        <div style={{ display: "flex", flexDirection: "column", marginTop: "auto", gap: 16 }}>
+          <div
+            style={{
+              display: "flex",
+              fontSize: 21,
+              fontWeight: 600,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              color: KICKER,
+            }}
+          >
+            STOCK Act · SEC Form 4
+          </div>
+          <div
+            style={{
+              display: "flex",
+              fontFamily: SERIF,
+              fontSize: 70,
+              lineHeight: 1.05,
+              letterSpacing: "-0.015em",
+              maxWidth: 1040,
+            }}
+          >
             What members of Congress and corporate insiders are trading.
           </div>
-          <div style={{ display: "flex", fontSize: 26, lineHeight: 1.45, color: ink[3], maxWidth: 1056 }}>
-            STOCK Act disclosures from the House and Senate, and SEC Form 4 open-market trades. Amounts
-            are shown as the ranges members file.
+          <div style={{ display: "flex", fontSize: 26, lineHeight: 1.45, color: INK[2], maxWidth: 1056 }}>
+            Disclosures from the House and Senate, and open-market Form 4 trades. Amounts are shown as the ranges
+            members file.
           </div>
         </div>
 
@@ -100,9 +107,9 @@ export async function renderShareCard() {
           style={{
             display: "flex",
             alignItems: "flex-end",
-            marginTop: 40,
-            paddingTop: 28,
-            borderTop: `1px solid ${hairline}`,
+            marginTop: 36,
+            paddingTop: 24,
+            borderTop: `1px solid ${HAIRLINE}`,
           }}
         >
           {stats.length ? (
@@ -112,22 +119,22 @@ export async function renderShareCard() {
                 style={{
                   display: "flex",
                   flexDirection: "column",
-                  paddingLeft: i ? 40 : 0,
-                  paddingRight: 40,
-                  borderLeft: i ? `1px solid ${hairline}` : "none",
+                  paddingLeft: i ? 36 : 0,
+                  paddingRight: 36,
+                  borderLeft: i ? `1px solid ${HAIRLINE}` : "none",
                 }}
               >
-                <div style={{ display: "flex", fontSize: 50, lineHeight: 1, letterSpacing: "-0.025em" }}>{s.value}</div>
-                <div style={{ display: "flex", marginTop: 10, fontSize: 21, color: ink[3] }}>{s.label}</div>
+                <div style={{ display: "flex", fontFamily: SERIF, fontSize: 54, lineHeight: 1 }}>{s.value}</div>
+                <div style={{ display: "flex", marginTop: 10, fontSize: 21, color: INK[3] }}>{s.label}</div>
               </div>
             ))
           ) : (
-            <div style={{ display: "flex", fontSize: 24, color: ink[2] }}>US House · US Senate · SEC EDGAR</div>
+            <div style={{ display: "flex", fontSize: 24, color: INK[2] }}>US House · US Senate · SEC EDGAR</div>
           )}
         </div>
       </div>
     ),
-    { ...size, headers: CARD_HEADERS }
+    { ...size, headers: CARD_HEADERS, fonts: await cardFontsOrDefault() }
   );
 }
 

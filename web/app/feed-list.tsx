@@ -50,7 +50,7 @@ export function DirectionFilter({
   ];
   const active = current === "buy" || current === "sell" ? current : undefined;
   return (
-    <nav aria-label="Trade direction" className="inline-flex rounded-lg border border-border bg-muted p-0.5 text-xs">
+    <nav aria-label="Trade direction" className="inline-flex rounded-control p-0.5 text-xs ring-1 ring-inset ring-border">
       {options.map((o) => {
         const on = active === o.k;
         return (
@@ -59,10 +59,8 @@ export function DirectionFilter({
             href={hrefFor(o.k)}
             aria-current={on ? "page" : undefined}
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
-              on
-                ? "bg-[var(--card-solid)] text-foreground shadow-sm ring-1 ring-border"
-                : "text-muted-foreground hover:text-foreground"
+              "inline-flex items-center gap-1.5 rounded-chip px-2.5 py-1 font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
+              on ? "bg-foreground text-background" : "text-ink-2 hover:bg-secondary hover:text-foreground"
             )}
           >
             {o.dot ? <span className={cn("size-1.5 rounded-full", o.dot)} aria-hidden /> : null}
@@ -92,10 +90,13 @@ export function FeedList({
   const today = todayIso();
   const days = groupFeed(rows, today);
   return (
-    // The shared Card surface, unpadded: the list's own rows carry the inset.
-    <Card className="p-0 sm:p-0">
+    // Open on the paper. From 640px the list is flush with the column: its
+    // rules meet the section rule's ends and its text the title's edge; only
+    // a row's hover wash reaches 6px past. On a phone it runs edge to edge
+    // with the gutter as its inset.
+    <Card className="-mx-4 border-b border-border sm:mx-0">
       <StickyOffset />
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border px-3 py-3 sm:px-4">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border px-4 py-3 sm:px-0">
         {toolbar}
         {/* ShownLine brings a bottom margin for a standalone line; in the bar it has none. */}
         <div className="order-last min-w-0 basis-full sm:order-none sm:basis-0 sm:flex-1 [&>p]:mb-0">
@@ -121,11 +122,11 @@ function DaySection({ day, today, index }: { day: DayGroup<TransactionRow>; toda
       <h3
         id={id}
         className={cn(
-          "feed-day-head sticky z-20 flex h-9 items-center gap-2 border-b border-border/70 px-3 text-[12px] sm:px-4",
+          "feed-day-head sticky z-20 flex h-9 items-center gap-2 border-b border-border/70 px-4 text-[12px] sm:px-0",
           index > 0 && "border-t border-t-border"
         )}
       >
-        <span className="font-semibold text-foreground">{day.label}</span>
+        <span className="font-serif text-[15px] font-semibold text-foreground">{day.label}</span>
         {day.date ? <span className="tabular text-muted-foreground">{day.date}</span> : null}
         {day.future ? (
           <span
@@ -167,7 +168,7 @@ function FilingBlockView({ block, today }: { block: FilingBlock<TransactionRow>;
   const filed = r0.filing_date ? monthDay(r0.filing_date, today) : null;
   return (
     <li className="feed-block lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]">
-      <div className="px-3 pt-2.5 sm:px-4 lg:py-1.5 lg:pr-3">
+      <div className="px-4 pt-2.5 sm:px-0 lg:py-1.5 lg:pr-3">
         <div className="feed-member flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 lg:flex-col lg:flex-nowrap lg:items-start lg:gap-0">
           <div className="flex min-w-0 max-w-full items-center gap-2 lg:w-full lg:items-start">
             <span className="flex shrink-0 items-center lg:h-9">
@@ -209,7 +210,7 @@ function FilingBlockView({ block, today }: { block: FilingBlock<TransactionRow>;
           </div>
         </div>
       </div>
-      <ul className="px-1.5 pb-2 pt-1 sm:px-2 lg:py-1.5 lg:pl-0">
+      <ul className="px-2.5 pb-2 pt-1 sm:-mx-1.5 sm:px-0 lg:mx-0 lg:py-1.5">
         {block.rows.map((r) => (
           <FeedRow key={r.id} r={r} />
         ))}
@@ -220,7 +221,7 @@ function FilingBlockView({ block, today }: { block: FilingBlock<TransactionRow>;
 
 function FeedRow({ r }: { r: TransactionRow }) {
   return (
-    <li className="feed-row rounded-md px-1.5 py-1 transition-colors duration-(--dur-fast) hover:bg-raised focus-within:bg-raised sm:min-h-9 sm:px-2">
+    <li className="feed-row rounded-md px-1.5 py-1 transition-colors duration-(--dur-fast) hover:bg-raised focus-within:bg-raised sm:min-h-9">
       <span className="[grid-area:act]">
         <ActionBadge action={r.action} />
       </span>

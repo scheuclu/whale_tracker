@@ -10,7 +10,7 @@ import {
 /** Feed: four tiles, "where members agree", then the filters and the day-grouped feed. */
 export default function Loading() {
   return (
-    <SkeletonPage label="the feed">
+    <SkeletonPage label="the feed" head>
       <TilesSkeleton tall trend />
       <section>
         <SectionTitleSkeleton width="w-40" right />

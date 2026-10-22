@@ -3,7 +3,7 @@ import { Bone, ListSkeleton, SectionTitleSkeleton, SkeletonPage, TilesSkeleton }
 /** Pipeline: four tiles, the coverage card, status and read-method lists. */
 export default function Loading() {
   return (
-    <SkeletonPage label="pipeline status">
+    <SkeletonPage label="pipeline status" head>
       <TilesSkeleton wrap={false} />
       <section>
         <SectionTitleSkeleton width="w-20" />

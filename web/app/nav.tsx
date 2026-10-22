@@ -4,108 +4,75 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
-import {
-  Activity,
-  Bell,
-  Briefcase,
-  Landmark,
-  LineChart,
-  Moon,
-  Receipt,
-  ScanLine,
-  Search,
-  Sun,
-  TrendingUp,
-} from "lucide-react";
+import { Moon, Search, Sun } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { revealOffset } from "@/lib/scroll-edges";
-import { ScrollX } from "./scroll-area";
-import { LiveRelativeTime } from "./live-relative-time";
 
+/**
+ * The five reader sections. Operator pages (Scans, Pipeline, Alerts) and
+ * the reference pages (Methodology, Privacy, Terms) live in the footer's
+ * "About the data". Words only — an icon per tab was decoration the label
+ * already said. "Members" keeps the /politicians URL.
+ */
 const TABS = [
-  { href: "/", label: "Feed", icon: Receipt },
-  { href: "/tickers", label: "Tickers", icon: LineChart },
-  { href: "/politicians", label: "Politicians", icon: Landmark },
-  { href: "/insiders", label: "Insiders", icon: Briefcase },
-  { href: "/scans", label: "Scans", icon: ScanLine },
-  { href: "/pipeline", label: "Pipeline", icon: Activity },
-  { href: "/alerts", label: "Alerts", icon: Bell },
-  { href: "/trends", label: "Trends", icon: TrendingUp },
+  { href: "/", label: "Feed" },
+  { href: "/politicians", label: "Members" },
+  { href: "/tickers", label: "Tickers" },
+  { href: "/insiders", label: "Insiders" },
+  { href: "/trends", label: "Trends" },
 ];
 
 /**
- * Six labelled tabs are ~610px: wider than a phone. The strip scrolls
- * sideways behind an edge fade rather than wrapping or shedding its labels
- * (the icons alone do not say "Scans" or "Pipeline"), and the active tab is
- * scrolled into view on arrival so the reader can see where they are.
+ * Five short words fit a 320px phone on one line, so the strip never
+ * scrolls: spread edge to edge on a phone, set left from 640px, inline with
+ * the brand from 1024px. The active section is marked three ways — ink
+ * text, a gold bar standing on the masthead's rule, and `aria-current`.
  */
-export function Tabs() {
+export function Tabs({ className }: { className?: string }) {
   const pathname = usePathname();
-  const viewport = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const vp = viewport.current;
-    const active = vp?.querySelector<HTMLElement>('[aria-current="page"]');
-    if (!vp || !active) return;
-    vp.scrollLeft = revealOffset({
-      scrollLeft: vp.scrollLeft,
-      clientWidth: vp.clientWidth,
-      itemLeft: active.offsetLeft,
-      itemWidth: active.offsetWidth,
-    });
-  }, [pathname]);
-
   return (
-    <nav aria-label="Sections" className="min-w-0 max-w-full">
-      <ScrollX viewportRef={viewport} viewportClassName="scrollbar-none flex gap-0.5 px-0.5 pt-0.5">
-        {TABS.map(({ href, label, icon: Icon }) => {
-          // A member's page lives at /members/<slug> but belongs to Politicians.
+    <nav aria-label="Sections" className={cn("min-w-0", className)}>
+      <ul className="-mx-1 flex items-stretch justify-between sm:-mx-2 sm:justify-start sm:gap-1">
+        {TABS.map(({ href, label }) => {
+          // A member's page lives at /members/<slug> but belongs to Members.
           const active =
             href === "/"
               ? pathname === "/"
               : pathname.startsWith(href) || (href === "/politicians" && pathname.startsWith("/members/"));
           return (
-            <Link
-              key={href}
-              href={href}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "group/tab relative flex h-10 shrink-0 items-center whitespace-nowrap px-1 pb-0.5 text-[13px] font-medium outline-none",
-                active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {/* The hover/focus/pressed surface is an inner box, so the active
-                  underline can run the tab's full width along the header's edge. */}
-              <span
+            <li key={href} className="flex">
+              <Link
+                href={href}
+                aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-control px-2.5 py-1.5 transition-[background-color,color] duration-(--dur) ease-(--ease-out)",
-                  "group-hover/tab:bg-secondary group-active/tab:bg-foreground/[0.08]",
-                  "group-focus-visible/tab:outline-solid group-focus-visible/tab:outline-2 group-focus-visible/tab:outline-ring"
+                  "group/tab relative flex h-10 items-center whitespace-nowrap px-0.5 text-[14px] font-medium outline-none sm:h-11 sm:px-1 lg:h-[60px]",
+                  active ? "text-foreground" : "text-ink-2 hover:text-foreground"
                 )}
               >
-                <Icon
-                  className={cn(
-                    "size-3.5 transition-colors duration-150",
-                    active ? "text-primary" : "text-muted-foreground group-hover/tab:text-foreground"
-                  )}
+                <span className="rounded-control px-1 py-1 group-focus-visible/tab:outline-solid group-focus-visible/tab:outline-2 group-focus-visible/tab:outline-ring">
+                  {label}
+                </span>
+                {/* Stands on the masthead's ink rule (the header's border). */}
+                <span
                   aria-hidden
+                  className={cn(
+                    "absolute inset-x-1 -bottom-px h-[3px] transition-opacity duration-150 sm:inset-x-2",
+                    active ? "bg-gold opacity-100" : "bg-foreground/25 opacity-0 group-hover/tab:opacity-100"
+                  )}
                 />
-                {label}
-              </span>
-              <span
-                aria-hidden
-                className={cn(
-                  "absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-primary transition-opacity duration-150",
-                  active ? "opacity-100" : "opacity-0"
-                )}
-              />
-            </Link>
+              </Link>
+            </li>
           );
         })}
-      </ScrollX>
+      </ul>
     </nav>
   );
 }
+
+const ICON_BUTTON = cn(
+  "group flex size-8 shrink-0 items-center justify-center rounded-control text-ink-2",
+  "transition-[background-color,color] duration-(--dur) ease-(--ease-out) hover:bg-secondary hover:text-foreground active:bg-foreground/[0.1]",
+  "outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+);
 
 export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
@@ -115,11 +82,7 @@ export function ThemeToggle() {
   return (
     <button
       type="button"
-      className={cn(
-        "group flex size-8 shrink-0 items-center justify-center rounded-control text-muted-foreground",
-        "transition-[background-color,color] duration-(--dur) ease-(--ease-out) hover:bg-secondary hover:text-foreground active:bg-foreground/[0.1]",
-        "outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-      )}
+      className={ICON_BUTTON}
       aria-label={mounted ? `Switch to ${resolvedTheme === "dark" ? "light" : "dark"} theme` : "Toggle theme"}
       onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
     >
@@ -128,6 +91,15 @@ export function ThemeToggle() {
       <Sun className="hidden size-4 transition-transform duration-300 motion-safe:group-hover:rotate-45 dark:block" aria-hidden />
       <Moon className="size-4 transition-transform duration-300 motion-safe:group-hover:-rotate-12 dark:hidden" aria-hidden />
     </button>
+  );
+}
+
+/** On a phone the masthead has no room for a field: a link to /search, which has its own. */
+export function SearchLink({ className }: { className?: string }) {
+  return (
+    <Link href="/search" className={cn(ICON_BUTTON, className)} aria-label="Search members, tickers and insider issuers">
+      <Search className="size-4" aria-hidden />
+    </Link>
   );
 }
 
@@ -145,7 +117,8 @@ export function SearchForm({ className }: { className?: string }) {
     setHint(/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? "⌘K" : "Ctrl K");
     const onKey = (e: KeyboardEvent) => {
       const el = input.current;
-      if (!el) return;
+      // Hidden (a phone, where the masthead shows a link instead): nothing to focus.
+      if (!el || !el.offsetParent) return;
       const target = e.target as HTMLElement | null;
       const typing = !!target?.closest("input, textarea, select, [contenteditable='true']");
       if ((e.key === "k" || e.key === "K") && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey) {
@@ -162,7 +135,7 @@ export function SearchForm({ className }: { className?: string }) {
   }, []);
 
   return (
-    <form method="get" action="/search" role="search" className={cn("relative flex items-center", className)}>
+    <form method="get" action="/search" role="search" className={cn("relative flex items-center rounded-control", className)}>
       <Search className="pointer-events-none absolute left-2.5 size-3.5 text-muted-foreground" aria-hidden />
       <input
         ref={input}
@@ -173,8 +146,8 @@ export function SearchForm({ className }: { className?: string }) {
         aria-label="Search members, tickers and insider issuers"
         aria-keyshortcuts={hint ? "Meta+K Control+K /" : undefined}
         className={cn(
-          "peer h-8 w-full rounded-control border border-border bg-card pl-8 pr-14 text-[13px] text-foreground",
-          "transition-[border-color,background-color,box-shadow] duration-(--dur) ease-(--ease-out) [&::-webkit-search-cancel-button]:hidden",
+          "peer h-8 w-full rounded-control border border-input bg-[var(--field)] pl-8 pr-14 text-[13px] text-foreground",
+          "transition-[border-color,background-color] duration-(--dur) ease-(--ease-out) [&::-webkit-search-cancel-button]:hidden",
           "placeholder:text-muted-foreground hover:border-border-strong focus:border-ring"
         )}
       />
@@ -182,7 +155,7 @@ export function SearchForm({ className }: { className?: string }) {
         <kbd
           aria-hidden
           className={cn(
-            "pointer-events-none absolute right-2 hidden h-5 items-center rounded-[5px] border border-border bg-[var(--card-solid)] px-1.5",
+            "pointer-events-none absolute right-2 hidden h-5 items-center rounded-chip border border-border px-1.5",
             "font-sans text-[10.5px] font-medium text-muted-foreground sm:inline-flex",
             "peer-focus:opacity-0 peer-[:not(:placeholder-shown)]:opacity-0"
           )}
@@ -191,47 +164,5 @@ export function SearchForm({ className }: { className?: string }) {
         </kbd>
       ) : null}
     </form>
-  );
-}
-
-/**
- * When the pipeline last wrote, as a quiet dot and a relative time; links to
- * /pipeline. Past STALE_AFTER_HOURS the dot takes the attention colour and a screen reader
- * hears "stale" — the colour is never the only signal.
- */
-export function SyncStatus({
-  synced,
-  syncedAt,
-  tone,
-}: {
-  synced: string;
-  syncedAt: string | null;
-  tone: "fresh" | "stale" | "unknown";
-}) {
-  return (
-    <Link
-      href="/pipeline"
-      title={syncedAt ? `Last pipeline write: ${syncedAt} — open Pipeline` : "Open Pipeline"}
-      className={cn(
-        "inline-flex h-8 shrink-0 items-center gap-2 rounded-control px-2.5 text-xs text-muted-foreground",
-        "transition-[background-color,color] duration-(--dur) ease-(--ease-out) hover:bg-secondary hover:text-foreground active:bg-foreground/[0.08]",
-        "outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-      )}
-    >
-      <span
-        aria-hidden
-        className={cn(
-          "size-1.5 shrink-0 rounded-full ring-[3px]",
-          tone === "fresh" && "bg-ok ring-ok-soft",
-          tone === "stale" && "bg-attention ring-attention-soft",
-          tone === "unknown" && "bg-muted-foreground ring-muted"
-        )}
-      />
-      <span className="tabular">
-        <span className="sr-only sm:not-sr-only">synced </span>
-        <LiveRelativeTime iso={syncedAt} initial={synced} />
-        {tone === "stale" ? <span className="text-attention"> · stale</span> : null}
-      </span>
-    </Link>
   );
 }

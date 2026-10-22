@@ -28,29 +28,19 @@ export function MemberHero({
   const sameDay = detail.first_tx_date === detail.last_tx_date;
 
   return (
-    <section className="glass relative overflow-hidden rounded-xl border border-border bg-card p-5 sm:p-6">
-      {/* A soft wash behind the portrait; neutral, so it never reads as a party. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -left-24 -top-28 size-80 rounded-full opacity-60 blur-3xl"
-        style={{ background: "radial-gradient(closest-side, color-mix(in oklab, var(--primary) 16%, transparent), transparent)" }}
-      />
+    // Open on the paper like every page head (DESIGN.md): no box, no glow.
+    <section className="relative">
       <div className="relative flex items-start gap-4 sm:gap-6">
-        <MemberAvatar
-          name={detail.member_name}
-          bioguideId={detail.bioguide_id}
-          size="xl"
-          className="shadow-[0_12px_32px_-16px_rgba(12,12,17,0.55)]"
-        />
+        <MemberAvatar name={detail.member_name} bioguideId={detail.bioguide_id} size="xl" />
         <div className="min-w-0 flex-1">
-          <div className="text-[12px] font-medium text-muted-foreground">
+          <div className="kicker">
             {seat ?? (
               <span title="The filer's name as printed on the filing; it did not match the congressional roster">
                 Not matched to the roster
               </span>
             )}
           </div>
-          <h1 className="mt-1 text-[28px] font-semibold leading-tight tracking-tight sm:text-[36px]">
+          <h1 className="display mt-1.5 text-[34px] leading-[1.06] sm:text-[46px] sm:leading-[1.04]">
             {detail.member_name}
           </h1>
           <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[13px] text-muted-foreground">
@@ -61,7 +51,7 @@ export function MemberHero({
                 : `trades dated ${longDate(detail.first_tx_date)} – ${longDate(detail.last_tx_date)}`}
             </span>
           </div>
-          <p className="mt-3 text-[15px] leading-snug text-ink-2 sm:text-base">
+          <p className="dek mt-3 text-[17px] leading-snug sm:text-[19px]">
             {tradeSummary(detail)}
             <span className="text-muted-foreground">
               {" "}

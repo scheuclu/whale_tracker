@@ -27,7 +27,7 @@ function Columns({ months }: { months: MonthlyTrades[] }) {
             <div style={{ display: "flex", height: HALF, alignItems: "flex-end" }}>
               <div style={{ display: "flex", width: 46, height: h(m.buys), backgroundColor: BUY, borderRadius: "5px 5px 0 0" }} />
             </div>
-            <div style={{ display: "flex", width: 74, height: 2, backgroundColor: "rgba(255,255,255,0.22)" }} />
+            <div style={{ display: "flex", width: 74, height: 2, backgroundColor: "rgba(26,25,21,0.35)" }} />
             <div style={{ display: "flex", height: HALF, alignItems: "flex-start" }}>
               <div style={{ display: "flex", width: 46, height: h(m.sells), backgroundColor: SELL, borderRadius: "0 0 5px 5px" }} />
             </div>

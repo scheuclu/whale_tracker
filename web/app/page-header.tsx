@@ -17,8 +17,11 @@ import { publicErrorMessage } from "@/lib/public-error";
 export const PAGE_STACK = "space-y-8";
 
 /**
- * A page's hero: an optional back link, an eyebrow, the title, one line of
- * subtitle, and a slot for the key facts (usually a row of stat tiles).
+ * A page's hero, in the editorial order: kicker (`eyebrow`, small caps in
+ * the accent ink) → headline (the serif, 46px) → dek (`subtitle`, one
+ * sentence in the serif, secondary ink) → the key facts (usually a row of
+ * StatTiles, which render as a fact strip under hairlines). An optional
+ * back link and share control sit above.
  * `aside` sits to the right of the title on a wide screen and under it on a
  * phone — a split bar, a window picker.
  */
@@ -48,8 +51,8 @@ export function PageHeader({
   children?: React.ReactNode;
 }) {
   return (
-    <header className="space-y-5">
-      <div className="space-y-2">
+    <header className="space-y-6 sm:space-y-7">
+      <div className="space-y-3">
         {back || share ? (
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
             {back ? <BackLink href={back.href} label={back.label} /> : <span />}
@@ -58,13 +61,11 @@ export function PageHeader({
         ) : null}
         <div className="flex flex-wrap items-end justify-between gap-x-10 gap-y-4">
           <div className="min-w-0 max-w-full">
-            {eyebrow ? (
-              <div className="mb-1 text-[12px] font-medium text-muted-foreground">{eyebrow}</div>
-            ) : null}
+            {eyebrow ? <div className="kicker mb-2">{eyebrow}</div> : null}
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
               <h1
                 className={cn(
-                  "min-w-0 break-words text-[28px] font-semibold leading-tight tracking-tight sm:text-[36px]",
+                  "display min-w-0 break-words text-[34px] leading-[1.06] text-foreground sm:text-[46px] sm:leading-[1.04]",
                   titleClassName
                 )}
               >
@@ -73,9 +74,7 @@ export function PageHeader({
               {badges}
             </div>
             {subtitle ? (
-              <p className="mt-1.5 max-w-[68ch] text-[14px] leading-relaxed text-muted-foreground sm:text-[15px]">
-                {subtitle}
-              </p>
+              <p className="dek mt-2.5 max-w-[60ch] text-[17px] leading-[1.45] sm:text-[19px]">{subtitle}</p>
             ) : null}
           </div>
           {aside ? <div className="w-full min-w-0 sm:w-auto">{aside}</div> : null}
@@ -91,7 +90,7 @@ export function BackLink({ href, label }: { href: string; label: string }) {
   return (
     <a
       href={href}
-      className="inline-flex rounded-md text-xs text-muted-foreground transition-colors duration-150 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      className="inline-flex rounded-sm text-[12.5px] font-medium text-ink-2 underline decoration-transparent underline-offset-[3px] transition-colors duration-150 hover:text-foreground hover:decoration-gold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
     >
       ← {label}
     </a>

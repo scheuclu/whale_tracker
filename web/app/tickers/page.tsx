@@ -147,6 +147,7 @@ export default async function TickersPage({
   return (
     <div className={PAGE_STACK}>
       <PageHeader
+        eyebrow="Congress · by security"
         title="Tickers"
         subtitle="What members of Congress trade, ranked over a window measured on trade date. Volumes are estimates from disclosed brackets."
         aside={

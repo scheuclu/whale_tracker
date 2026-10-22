@@ -31,7 +31,7 @@ export default function Loading() {
 /** The list: window pills, volume and members charts side by side, the table. */
 function TickersLoading() {
   return (
-    <SkeletonPage label="tickers">
+    <SkeletonPage label="tickers" head>
       <PillsSkeleton />
       <section className="grid gap-6 lg:grid-cols-2">
         <div>

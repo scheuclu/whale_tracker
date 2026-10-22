@@ -2,7 +2,7 @@ import { resolveMemberSlug } from "@/lib/entities";
 import { initials, portraitUrl } from "@/lib/members";
 import { getPoliticianDetail } from "@/lib/queries";
 import { chamberTitle } from "@/lib/site";
-import { BUY, CARD_SIZE, SELL, count, renderCard, renderPlainCard } from "../../share-card";
+import { BUY, CARD_SIZE, SELL, count, renderCard, renderPlainCard, HAIRLINE, INK, SERIF } from "../../share-card";
 
 export const alt = "A member of Congress's disclosed stock trades on FatCat Watch: trade, ticker and buy/sell counts";
 export const size = CARD_SIZE;
@@ -59,14 +59,14 @@ export default async function Image({ params }: { params: Promise<{ slug: string
             display: "flex",
             width: 176,
             height: 176,
-            borderRadius: 52,
+            borderRadius: 88,
             overflow: "hidden",
             alignItems: "center",
             justifyContent: "center",
-            backgroundColor: "rgba(255,255,255,0.08)",
-            border: "1px solid rgba(255,255,255,0.12)",
+            backgroundColor: "#e7e2d6",
+            border: `1px solid ${HAIRLINE}`,
             fontSize: 64,
-            color: "#c9c9d6",
+            color: "#5c574b",
           }}
         >
           {photo ? (
@@ -77,10 +77,10 @@ export default async function Image({ params }: { params: Promise<{ slug: string
           )}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 820 }}>
-          <div style={{ display: "flex", fontSize: ref.name.length > 26 ? 56 : 68, lineHeight: 1.05, letterSpacing: "-0.035em" }}>
+          <div style={{ display: "flex", fontFamily: SERIF, fontSize: ref.name.length > 26 ? 62 : 76, lineHeight: 1.04, letterSpacing: "-0.015em" }}>
             {ref.name}
           </div>
-          <div style={{ display: "flex", fontSize: 28, color: "#a3a3b8" }}>
+          <div style={{ display: "flex", fontSize: 28, color: INK[2] }}>
             {[job, seat].filter(Boolean).join(" · ") || "Filer not matched to the congressional roster"}
           </div>
         </div>

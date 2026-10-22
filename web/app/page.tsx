@@ -141,6 +141,7 @@ export default async function FeedPage({
       <SiteStructuredData />
       <AgentAlternates markdown="/api/v1/feed.md" json="/api/v1/trades" />
       <PageHeader
+        eyebrow="The feed · House and Senate"
         title="Congressional trades"
         subtitle="Stock trades members of the House and Senate disclose under the STOCK Act, reproduced as filed. Amounts are the disclosed bracket, never one exact figure."
       >

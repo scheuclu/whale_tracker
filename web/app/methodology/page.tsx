@@ -94,6 +94,7 @@ export default async function MethodologyPage() {
     <article className={`mx-auto max-w-3xl ${PAGE_STACK}`}>
       <AgentAlternates text="/llms-full.txt" />
       <PageHeader
+        eyebrow="About the data"
         title="Methodology"
         subtitle={
           <>

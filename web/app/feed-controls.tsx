@@ -79,7 +79,7 @@ function Select({
 export function FilterBar({ filters, ignored }: { filters: TransactionFilters; ignored: string[] }) {
   const active = Object.keys(filters).filter((k) => k !== "action").length > 0;
   return (
-    <Card className="mb-4 px-4 py-4 sm:px-5">
+    <Card variant="panel" className="mb-5 px-4 py-4 sm:px-5">
       <form
         method="get"
         action="/"

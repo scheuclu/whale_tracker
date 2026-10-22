@@ -108,11 +108,11 @@ function FilingLink({ href }: { href: string }) {
 
 /* ----------------------------------------------------------------- list */
 
-/** The card the rows sit in. */
+/** The rows, open on the paper: flush with the column from 640px, edge to edge on a phone. */
 export function TradeList({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <Card className={cn("p-0 sm:p-0", className)}>
-      <ul className="divide-y divide-border/60 px-1.5 py-1 sm:px-2">{children}</ul>
+    <Card className={cn("-mx-4 border-y border-border sm:mx-0", className)}>
+      <ul className="divide-y divide-border/60 px-2.5 py-1 sm:px-0">{children}</ul>
     </Card>
   );
 }
@@ -128,7 +128,7 @@ export function TradeRow({ r, subject }: { r: TransactionRow; subject: "asset" |
   return (
     <li
       className={cn(
-        "grid items-center gap-x-3 gap-y-1 rounded-md px-1.5 py-2 transition-colors duration-(--dur-fast) hover:bg-raised focus-within:bg-raised sm:min-h-10 sm:px-2 sm:py-1.5",
+        "grid items-center gap-x-3 gap-y-1 rounded-md px-1.5 py-2 transition-colors duration-(--dur-fast) hover:bg-raised focus-within:bg-raised sm:min-h-10 sm:py-1.5",
         "grid-cols-[auto_minmax(0,1fr)_auto] [grid-template-areas:'act_subj_amt'_'detail_detail_meta']",
         subject === "asset"
           ? "sm:grid-cols-[5.75rem_6.5rem_5.5rem_11rem_minmax(0,1fr)_auto]"

@@ -3,22 +3,27 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ============================================================
-   FatCat Watch — design tokens (values and rationale: web/DESIGN.md).
+   FatCat Watch — design tokens, v2 (values and rationale: web/DESIGN.md).
 
-   Calm and precise: a faintly tinted page, solid card surfaces drawn by
-   hairlines rather than shadows, three ink levels, indigo only for accent
-   roles (active nav, links, focus, selection). Dark mode is its own
-   palette — three surface steps, not an inversion.
+   An editorial data publication, not a dashboard: warm paper and ink,
+   hairline rules and whitespace instead of boxes, a serif voice for
+   headlines and hero figures, and one accent — the gold of the cat's bow
+   tie — used sparingly (the active section, kickers, focus, selection).
+   Blue and red are not accents: they are buy and sell. Dark mode is a deep
+   warm ink with its own steps, not an inversion.
    ============================================================ */
 
 @theme inline {
-  --font-heading: var(--font-sans);
   --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+  --font-mono: var(--font-mono);
+  --font-heading: var(--font-serif);
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-panel: var(--card);
   --color-raised: var(--raised);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
@@ -31,9 +36,11 @@
   --color-ink-2: var(--ink-2);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-gold: var(--gold);
   --color-destructive: var(--destructive);
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
+  --color-rule: var(--rule);
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-ok: var(--ok);
@@ -43,77 +50,87 @@
   --color-error: var(--error);
   --color-error-soft: var(--error-soft);
 
-  /* Radius scale. Nothing above 12px except fully round pills/avatars:
-     the stock rounded-2xl/3xl utilities resolve to the card radius too. */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 12px;
-  --radius-2xl: 12px;
-  --radius-3xl: 12px;
-  --radius-4xl: 12px;
-  --radius-chip: 6px;
-  --radius-control: 8px;
-  --radius-card: 12px;
+  /* Radius scale: nearly square. Nothing above 4px except fully round
+     pills and avatars; the stock rounded-xl…4xl utilities resolve to the
+     panel radius so an old class cannot bring back a bubbly card. */
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-xl: 4px;
+  --radius-2xl: 4px;
+  --radius-3xl: 4px;
+  --radius-4xl: 4px;
+  --radius-chip: 3px;
+  --radius-control: 4px;
+  --radius-card: 4px;
 
-  /* Elevation: shadow-card / shadow-popover utilities. */
+  /* Elevation: shadow-card is none (panels are drawn by a hairline);
+     shadow-popover is the one shadow on the site. */
   --shadow-card: var(--elev-card);
   --shadow-popover: var(--elev-popover);
 }
 
 :root {
-  --radius: 12px;
+  --radius: 4px;
 
-  /* Surfaces: page < card < raised; popover floats. */
-  --background: #f6f7f9;
-  --card: #ffffff;
-  --raised: #f9fafb;
-  --popover: #ffffff;
-  /* Kept for the sticky table column / scroll fades: the card, solid. */
-  --card-solid: #ffffff;
+  /* Surfaces. The page is paper; content sits on it directly. --card is
+     the panel (a form, a popover-like box) a step lighter than the paper;
+     --field is a text input; --card-solid is whatever an opaque overlay
+     (a sticky table column, a scroll fade, a mark's surface ring) must
+     match — the paper, since tables and charts now sit on it. */
+  --background: #f7f4ed;
+  --card: #fcfbf7;
+  --raised: #efebe2;
+  --popover: #fffefa;
+  --field: #fffefa;
+  --card-solid: #f7f4ed;
 
   /* Ink: foreground (primary), ink-2 (secondary), muted-foreground (tertiary). */
-  --foreground: #0f1117;
-  --card-foreground: #0f1117;
-  --popover-foreground: #0f1117;
-  --ink-2: #3f4451;
-  --muted-foreground: #646a78;
+  --foreground: #1a1915;
+  --card-foreground: #1a1915;
+  --popover-foreground: #1a1915;
+  --ink-2: #45423a;
+  --muted-foreground: #6a6558;
 
-  /* Hairlines. */
-  --border: rgba(15, 17, 23, 0.085);
-  --border-strong: rgba(15, 17, 23, 0.14);
-  --input: rgba(15, 17, 23, 0.12);
+  /* Lines: hairline, emphasised hairline, and the ink rule over a section. */
+  --border: rgba(26, 25, 21, 0.13);
+  --border-strong: rgba(26, 25, 21, 0.24);
+  --rule: #1a1915;
+  --input: rgba(26, 25, 21, 0.22);
 
-  /* Accent (indigo) — active nav, links, focus ring, selection only. */
-  --primary: #5b5bd6;
-  --primary-foreground: #ffffff;
-  --accent: rgba(91, 91, 214, 0.09);
-  --accent-foreground: #3d3db5;
-  --ring: #6e6ee0;
+  /* The accent: bow-tie gold. --gold is the mark colour (bars, the active
+     section, the tie) and is never text on paper — it is 1.9:1 there.
+     --primary is the gold's text-safe ink (kickers, link hover). */
+  --gold: #e9a913;
+  --primary: #8a5d00;
+  --primary-foreground: #fffefa;
+  --accent: rgba(233, 169, 19, 0.16);
+  --accent-foreground: #5f4000;
+  --ring: #8a5d00;
 
   /* Neutral fills (chips, hovers). */
-  --secondary: rgba(15, 17, 23, 0.05);
-  --secondary-foreground: #262a34;
-  --muted: rgba(15, 17, 23, 0.04);
+  --secondary: rgba(26, 25, 21, 0.055);
+  --secondary-foreground: #2a2822;
+  --muted: rgba(26, 25, 21, 0.045);
 
-  /* Status — muted, AA as text on every surface. Not for buy/sell. */
-  --ok: #2b7d55;
-  --ok-soft: rgba(43, 125, 85, 0.1);
-  --attention: #9a6412;
-  --attention-soft: rgba(196, 132, 29, 0.12);
-  --error: #c13d3d;
-  --error-soft: rgba(193, 61, 61, 0.09);
+  /* Status — pipeline and filing state, never buy/sell, never the accent.
+     Attention is a burnt orange so it does not read as the brand gold. */
+  --ok: #2a7049;
+  --ok-soft: rgba(42, 112, 73, 0.1);
+  --attention: #a34f0b;
+  --attention-soft: rgba(163, 79, 11, 0.1);
+  --error: #b8322f;
+  --error-soft: rgba(184, 50, 47, 0.09);
   --destructive: var(--error);
 
   /* Elevation. */
-  --elev-card: 0 1px 2px rgba(15, 17, 23, 0.04);
-  --elev-card-hover: 0 1px 2px rgba(15, 17, 23, 0.05), 0 4px 12px -6px rgba(15, 17, 23, 0.1);
-  --elev-popover: 0 0 0 1px rgba(15, 17, 23, 0.06), 0 12px 32px -8px rgba(15, 17, 23, 0.18),
-    0 2px 6px rgba(15, 17, 23, 0.06);
+  --elev-card: 0 0 #0000;
+  --elev-card-hover: 0 0 #0000;
+  --elev-popover: 0 0 0 1px rgba(26, 25, 21, 0.1), 0 10px 28px -10px rgba(26, 25, 21, 0.22);
 
-  --scrollbar: rgba(15, 17, 23, 0.18);
-  --scrollbar-hover: rgba(15, 17, 23, 0.3);
-  --selection: rgba(91, 91, 214, 0.2);
+  --scrollbar: rgba(26, 25, 21, 0.2);
+  --scrollbar-hover: rgba(26, 25, 21, 0.34);
+  --selection: rgba(251, 191, 36, 0.4);
 
   /* Motion. */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
@@ -122,47 +139,49 @@
 }
 
 .dark {
-  --background: #0b0c0f;
-  --card: #131419;
-  --raised: #1a1b21;
-  --popover: #1f2027;
-  --card-solid: #131419;
+  --background: #131311;
+  --card: #1b1a17;
+  --raised: #24231f;
+  --popover: #22211d;
+  --field: #1b1a17;
+  --card-solid: #131311;
 
-  --foreground: #ededf0;
-  --card-foreground: #ededf0;
-  --popover-foreground: #ededf0;
-  --ink-2: #b9bcc6;
-  --muted-foreground: #8d919d;
+  --foreground: #ede9df;
+  --card-foreground: #ede9df;
+  --popover-foreground: #ede9df;
+  --ink-2: #c5c0b4;
+  --muted-foreground: #9a9486;
 
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.13);
-  --input: rgba(255, 255, 255, 0.11);
+  --border: rgba(237, 233, 223, 0.12);
+  --border-strong: rgba(237, 233, 223, 0.22);
+  --rule: #ede9df;
+  --input: rgba(237, 233, 223, 0.2);
 
-  --primary: #8b8bf2;
-  --primary-foreground: #0b0c14;
-  --accent: rgba(139, 139, 242, 0.14);
-  --accent-foreground: #c9c9ff;
-  --ring: #8b8bf2;
+  --gold: #f3c04f;
+  --primary: #f3c04f;
+  --primary-foreground: #1a1915;
+  --accent: rgba(243, 192, 79, 0.14);
+  --accent-foreground: #f6d58a;
+  --ring: #f3c04f;
 
-  --secondary: rgba(255, 255, 255, 0.06);
-  --secondary-foreground: #e4e5ea;
-  --muted: rgba(255, 255, 255, 0.05);
+  --secondary: rgba(237, 233, 223, 0.07);
+  --secondary-foreground: #e4e0d6;
+  --muted: rgba(237, 233, 223, 0.055);
 
-  --ok: #55b685;
-  --ok-soft: rgba(85, 182, 133, 0.13);
-  --attention: #d6a24a;
-  --attention-soft: rgba(214, 162, 74, 0.13);
-  --error: #ec7a76;
-  --error-soft: rgba(236, 122, 118, 0.12);
+  --ok: #5bb585;
+  --ok-soft: rgba(91, 181, 133, 0.13);
+  --attention: #f0954a;
+  --attention-soft: rgba(240, 149, 74, 0.13);
+  --error: #ef7d74;
+  --error-soft: rgba(239, 125, 116, 0.12);
 
-  --elev-card: 0 1px 2px rgba(0, 0, 0, 0.35);
-  --elev-card-hover: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 16px -8px rgba(0, 0, 0, 0.6);
-  --elev-popover: 0 0 0 1px rgba(255, 255, 255, 0.09), 0 16px 40px -10px rgba(0, 0, 0, 0.7),
-    0 2px 8px rgba(0, 0, 0, 0.4);
+  --elev-card: 0 0 #0000;
+  --elev-card-hover: 0 0 #0000;
+  --elev-popover: 0 0 0 1px rgba(237, 233, 223, 0.12), 0 14px 36px -12px rgba(0, 0, 0, 0.7);
 
-  --scrollbar: rgba(255, 255, 255, 0.16);
-  --scrollbar-hover: rgba(255, 255, 255, 0.28);
-  --selection: rgba(139, 139, 242, 0.32);
+  --scrollbar: rgba(237, 233, 223, 0.18);
+  --scrollbar-hover: rgba(237, 233, 223, 0.3);
+  --selection: rgba(243, 192, 79, 0.3);
 }
 
 @layer base {
@@ -181,14 +200,22 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "cv11", "ss01";
+    /* Inter's disambiguation set: a tailed l and a slashed-free, open 1 —
+       an "Il1" in a ticker or a name must not be a guess. */
+    font-feature-settings: "cv05", "cv08";
+  }
+  /* Serif faces take lining figures: oldstyle numerals in a $ figure read
+     as a typo. Optical size follows the font size (Newsreader's opsz). */
+  .font-serif {
+    font-variant-numeric: lining-nums;
+    font-optical-sizing: auto;
   }
 
   ::selection {
     background: var(--selection);
   }
 
-  /* One focus ring everywhere: 2px indigo, offset from the element.
+  /* One focus ring everywhere: 2px ochre (the accent's text-safe ink), offset from the element.
      Components may restyle it; nothing may remove it. */
   :focus-visible {
     outline: 2px solid var(--ring);
@@ -226,49 +253,85 @@
 }
 
 @layer components {
-  /* Card surface (the name predates the flat theme). Solid --card, the
-     card elevation: a hairline is the edge, the shadow only a hint. */
+  /* The panel surface (the class name predates the flat theme): the one
+     contained box — a form, a list of links that is genuinely a set of
+     cards. A hairline, no shadow. Most content needs none of this: it
+     sits on the paper under a section rule (DESIGN.md, "Fewer boxes"). */
   .glass {
-    box-shadow: var(--elev-card);
+    box-shadow: none;
   }
 
-  /* Interactive card: the hairline firms up and a soft shadow arrives.
-     No travel — a 1px nudge at most, and none under reduced motion. */
+  /* Interactive item: a quiet wash and a firmer hairline. No travel, no
+     shadow — the page is paper, not a stack of cards. */
   .lift {
     transition:
       border-color var(--dur) ease-out,
-      box-shadow var(--dur) ease-out,
-      background-color var(--dur) ease-out,
-      transform var(--dur) var(--ease-out);
+      background-color var(--dur) ease-out;
   }
   .lift:hover {
     border-color: var(--border-strong);
-    box-shadow: var(--elev-card-hover);
-  }
-  .lift:active {
-    box-shadow: var(--elev-card);
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .lift:hover {
-      transform: translateY(-1px);
-    }
-    .lift:active {
-      transform: none;
-    }
+    background-color: color-mix(in oklab, var(--foreground) 3.5%, var(--card));
   }
 
-  /* Gradient brand mark. */
+  /* The brand mark's colours: the cat in ink on the paper (paper on ink in
+     dark mode), the tie in gold. No tile. app/brand.tsx. */
   .brand-mark {
-    background-image: linear-gradient(145deg, #7c7cf0 0%, #5b5bd6 45%, #a855f7 100%);
-    box-shadow:
-      inset 0 1px 0 0 rgba(255, 255, 255, 0.35),
-      0 6px 18px -6px rgba(124, 124, 240, 0.65);
+    color: var(--foreground);
   }
 
   /* Hairline divider that fades at both ends. */
   .rule-fade {
     height: 1px;
     background: linear-gradient(90deg, transparent, var(--border) 12%, var(--border) 88%, transparent);
+  }
+
+  /* ------------------------------------------------------------------
+     Editorial type roles (DESIGN.md, "Type"). Utilities rather than
+     components so a page can set a kicker or a dek without importing
+     anything; PageHeader and SectionTitle use these.
+     ------------------------------------------------------------------ */
+  .kicker {
+    font-family: var(--font-sans);
+    font-size: 11.5px;
+    line-height: 16px;
+    font-weight: 600;
+    letter-spacing: 0.085em;
+    text-transform: uppercase;
+    color: var(--primary);
+  }
+  .display {
+    font-family: var(--font-serif);
+    font-weight: 500;
+    font-variant-numeric: lining-nums;
+    font-optical-sizing: auto;
+    letter-spacing: -0.012em;
+  }
+  .dek {
+    font-family: var(--font-serif);
+    font-variant-numeric: lining-nums;
+    font-optical-sizing: auto;
+    color: var(--ink-2);
+  }
+  /* A serif figure: hero numbers and fact-strip values. */
+  .figure {
+    font-family: var(--font-serif);
+    font-weight: 500;
+    font-variant-numeric: lining-nums tabular-nums;
+    font-optical-sizing: auto;
+    letter-spacing: -0.01em;
+  }
+  /* Text links in running copy: ink with a hairline underline that turns
+     gold on hover. */
+  .ink-link {
+    text-decoration-line: underline;
+    text-decoration-color: var(--border-strong);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+    transition: text-decoration-color var(--dur) ease-out, color var(--dur) ease-out;
+  }
+  .ink-link:hover {
+    text-decoration-color: var(--gold);
+    color: var(--foreground);
   }
 
   /* Scrollbar hidden but the box still scrolls (the nav strip; its fade is the affordance). */
@@ -356,23 +419,35 @@
    could not tell a buy bar from a sell bar. Blue/red measures 23.8
    (light surface) and 19.2 (dark). Direction is also always spelled out
    in text, so colour never carries the meaning alone.
+
+   v2 surfaces (paper #f7f4ed, ink #131311), validated with the dataviz
+   validator, --pairs all over buy · sell · seq:
+     light  CVD ΔE 14.6 (seq/sell, deutan), normal-vision 21.6, seq 2.31:1
+            (WARN: relief by direct labels), buy/sell ≥ 3:1
+     dark   CVD ΔE 10.2, normal-vision 16.8, all ≥ 3:1; seq sits above the
+            categorical dark L band (0.752 > 0.67) — accepted: it is a
+            single-hue magnitude role, never a categorical slot.
    ------------------------------------------------------------------ */
 :root {
   --viz-buy: #2a78d6;
   --viz-sell: #d03b3b;
-  --viz-seq: #2a78d6;       /* sequential magnitude — single hue */
-  --viz-track: rgba(12, 12, 17, 0.06);
-  --viz-grid: #e1e0d9;
-  --viz-axis: #898781;
+  /* Sequential magnitude, one hue: the bow-tie gold, stepped so it stays
+     clear of the sell red under deuteranopia (CVD ΔE 14.6). Below 3:1 on
+     the paper (2.31), so every gold mark carries its value in text — the
+     relief rule — which MagnitudeBars, VolumeRange and ColumnSeries do. */
+  --viz-seq: #cf9a1c;
+  --viz-track: rgba(26, 25, 21, 0.07);
+  --viz-grid: #e4dfd3;
+  --viz-axis: #8a8578;
 }
 
 .dark {
   --viz-buy: #3987e5;
   --viz-sell: #e66767;
-  --viz-seq: #3987e5;
-  --viz-track: rgba(255, 255, 255, 0.07);
-  --viz-grid: #2c2c2a;
-  --viz-axis: #898781;
+  --viz-seq: #d9a53a;
+  --viz-track: rgba(237, 233, 223, 0.08);
+  --viz-grid: #2b2a26;
+  --viz-axis: #8a8578;
 }
 
 /* ------------------------------------------------------------------
@@ -479,55 +554,23 @@
    show, they just do not animate.
    ------------------------------------------------------------------ */
 
-/* Sticky header: once scrolled, the brand row tightens and the subtitle
-   folds away so the tab strip costs less of a phone screen. */
-.site-header[data-condensed] {
-  background-color: color-mix(in oklab, var(--background) 82%, transparent);
-  box-shadow: 0 10px 30px -22px rgba(12, 12, 17, 0.45);
+/* Sticky masthead (app/layout.tsx). Solid paper, an ink rule beneath — no
+   glass, no shadow. On a phone the masthead is two rows and only the
+   sections row stays: the header sticks at minus the brand row's height
+   (h-12), so the brand scrolls away with the page and the five sections
+   park at the top. No script, no layout jump. app/sticky-offset.tsx
+   reads the part that stays. */
+.site-header {
+  position: sticky;
+  top: 0;
+  background-color: var(--background);
 }
-.dark .site-header[data-condensed] {
-  box-shadow: 0 12px 32px -20px rgba(0, 0, 0, 0.9);
-}
-.site-header-sub {
-  max-height: 2.5rem; /* two lines: the counts wrap on a phone */
-}
-.site-header[data-condensed] .site-header-top {
-  padding-top: 0.5rem;
-}
-.site-header[data-condensed] .site-header-top + div {
-  padding-top: 0.5rem;
-  padding-bottom: 0.5rem;
-}
-.site-header[data-condensed] .site-header-mark {
-  width: 1.75rem;
-  height: 1.75rem;
-}
-.site-header[data-condensed] .site-header-sub {
-  max-height: 0;
-  opacity: 0;
+@media (max-width: 639px) {
+  .site-header {
+    top: -3rem;
+  }
 }
 @media (prefers-reduced-motion: no-preference) {
-  .site-header {
-    transition:
-      background-color 200ms ease,
-      box-shadow 200ms ease;
-  }
-  .site-header-top,
-  .site-header-top + div {
-    transition: padding 200ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-  .site-header-mark {
-    transition:
-      width 200ms cubic-bezier(0.22, 1, 0.36, 1),
-      height 200ms cubic-bezier(0.22, 1, 0.36, 1),
-      transform 200ms ease;
-  }
-  .site-header-sub {
-    transition:
-      max-height 200ms ease,
-      opacity 150ms ease;
-  }
-
   /* New page content (or its skeleton) eases in when it replaces the old.
      `backwards` so no transform is left on the page once it has played. */
   .site-header + main > * {
@@ -649,6 +692,20 @@
   padding-right: 1rem;
 }
 
+/* An open table (ResponsiveTable, app/ui.tsx) is flush with the column from
+   640px: the outer cells drop their inset so the first column meets the
+   section title's edge and the last the column's right edge. */
+@media (min-width: 640px) {
+  .table-open table > :is(thead, tbody, tfoot) > tr > :is(th, td):first-child,
+  .table-open .data-table > thead > tr > th:first-child > a {
+    padding-left: 0;
+  }
+  .table-open table > :is(thead, tbody, tfoot) > tr > :is(th, td):last-child,
+  .table-open .data-table > thead > tr > th:last-child > a {
+    padding-right: 0;
+  }
+}
+
 /* Whole-row target: the row is the click area, the name link stays the real link. */
 .data-table .data-row[data-href] {
   cursor: pointer;
@@ -667,10 +724,10 @@
 }
 
 /* ------------------------------------------------------------------
-   Table chrome surfaces. --card is translucent glass over a gradient, so no
-   solid colour matches it — in dark mode a solid pinned column read as a
-   darker stripe. The pinned first column and the header row therefore stay
-   transparent (the card's own glass) and take the solid surface only while
+   Table chrome surfaces. A table sits on the paper (or, rarely, inside a
+   panel), so the pinned first column and the header row stay transparent
+   — whatever is behind the table shows through — and take the solid
+   surface (--card-solid, the paper) only while
    something actually passes beneath them: the pinned column once the table
    is scrolled sideways (data-at-start="false" from ScrollX), the header
    while it is stuck over rows (data-stuck from StickyThead).
@@ -750,28 +807,26 @@
    Home feed timeline (app/feed-list.tsx, app/bracket-glyph.tsx).
 
    --viz-rung-*: the bracket ladder. Neutral ink, because blue<->red is
-   reserved for buy/sell; amber for a transcribed row, matching ScanTag.
-   below/on and scan-below/scan each validated as a two-step ordinal ramp
-   (dataviz validate_palette.js --ordinal: monotone L, dL >= 0.06, light end
-   >= 2:1 on --card-solid) in both modes; neutral vs amber separates by
-   CVD dE >= 16. --viz-rung-off is a track, not a data mark.
+   reserved for buy/sell and gold is the magnitude/accent hue. below/on
+   validated as a two-step ordinal ramp (dataviz validate_palette.js
+   --ordinal: monotone L, dL >= 0.06, light end >= 2:1 on the paper) in both
+   modes. A transcribed row is not a colour any more: its rungs are drawn
+   hollow and dashed in the same inks (the timeline's convention for a
+   transcribed mark), and the row says "transcribed from scan" in words.
+   --viz-rung-off is a track, not a data mark.
    ------------------------------------------------------------------ */
 :root {
-  --viz-rung-off: #e6e6ec;
-  --viz-rung-below: #a3a3b4;
-  --viz-rung-on: #3a3a48;
-  --viz-rung-scan-below: #d4a453;
-  --viz-rung-scan: #9a6512;
-  --feed-hover: color-mix(in oklab, var(--primary) 7%, transparent);
+  --viz-rung-off: #e4dfd3;
+  --viz-rung-below: #a29c8d;
+  --viz-rung-on: #3b3830;
+  --feed-hover: color-mix(in oklab, var(--foreground) 4%, transparent);
 }
 
 .dark {
-  --viz-rung-off: #24242c;
-  --viz-rung-below: #5f5f72;
-  --viz-rung-on: #ececf2;
-  --viz-rung-scan-below: #7a5a26;
-  --viz-rung-scan: #e3a33b;
-  --feed-hover: color-mix(in oklab, var(--primary) 12%, transparent);
+  --viz-rung-off: #2a2925;
+  --viz-rung-below: #6a655b;
+  --viz-rung-on: #ece8df;
+  --feed-hover: color-mix(in oklab, var(--foreground) 6%, transparent);
 }
 
 /* Day headers park under the site header (--sticky-top is measured by
@@ -816,28 +871,28 @@
 /* ------------------------------------------------------------------
    Member portraits (app/avatar.tsx).
 
-   The monogram surface is a neutral grey-violet, never a party colour:
+   The monogram surface is a neutral warm grey, never a party colour:
    blue <-> red is the buy/sell encoding above. The hairline ring is an
    overlay (::after) so it stays crisp on top of the photo too.
    ------------------------------------------------------------------ */
 .member-avatar {
-  background: linear-gradient(150deg, #f1f1f5, #e2e2ea);
-  color: #5a5a6e;
+  background: #e7e2d6;
+  color: #5c574b;
 }
 .dark .member-avatar {
-  background: linear-gradient(150deg, #23232d, #18181f);
-  color: #a9a9bb;
+  background: #2a2925;
+  color: #b3ad9f;
 }
 .member-avatar::after {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  box-shadow: inset 0 0 0 1px rgba(12, 12, 17, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(26, 25, 21, 0.1);
   pointer-events: none;
 }
 .dark .member-avatar::after {
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(237, 233, 223, 0.1);
 }
 
 /* ------------------------------------------------------------------
@@ -933,21 +988,21 @@
 /* ------------------------------------------------------------------
    Price overlay (app/price-overlay-chart.tsx). The close is a neutral
    ink line — blue<->red is reserved for buy/sell — and the "vs SPY"
-   benchmark a recessive gray: the emphasis form (one ink, one gray), so
-   the categorical lightness/chroma bands do not apply. Measured with the
-   dataviz validator against the card surface, all pairs with the buy/sell
-   pair: light ink/bench ΔE 29.1, bench vs buy 15.9 normal / sell 12.8
-   deutan, contrast >= 3:1; dark ink/bench ΔE 36.0, bench vs buy 15.8
-   normal / sell 8.0 protan, contrast >= 3:1. Cluster washes are the
-   buy/sell hues at ~10%, the area-fill spec.
+   benchmark a recessive warm gray: the emphasis form (one ink, one gray),
+   so the categorical lightness/chroma bands do not apply. Measured with
+   the dataviz validator against the v2 paper, all pairs with the buy/sell
+   pair: light worst CVD ΔE 8.3 (bench/sell, deutan), normal-vision 18.5,
+   contrast >= 3:1; dark worst CVD ΔE 8.8 (bench/sell, protan),
+   normal-vision 20.8, contrast >= 3:1. Cluster washes are the buy/sell
+   hues at ~10%, the area-fill spec.
    ------------------------------------------------------------------ */
 :root {
-  --viz-price: #3a3a48;
-  --viz-bench: #8c8c9c;
+  --viz-price: #3b3830;
+  --viz-bench: #8e887b;
 }
 .dark {
-  --viz-price: #ececf2;
-  --viz-bench: #6e6e80;
+  --viz-price: #ece8df;
+  --viz-bench: #6a665d;
 }
 .po-wash-buy {
   fill: var(--viz-buy);

@@ -77,7 +77,7 @@ export function TradeTimeline({
   const hasOther = wide.counts.other > 0;
 
   return (
-    <Card className="px-3 pb-3 pt-4 sm:px-5">
+    <Card>
       <TimelineLegend
         layout={wide}
         hasOption={hasOption}

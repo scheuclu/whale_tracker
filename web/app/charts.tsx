@@ -51,25 +51,23 @@ export function StatTile({
   delta?: StatDelta;
 }) {
   const zero = isZeroFigure(value);
+  // Not a card: a figure under a hairline, the way a newspaper sets its
+  // numbers. A row of these is a fact strip; nothing has a box to compete
+  // with the section that follows. A zero figure is set in muted ink, so
+  // the facts that report something lead.
   return (
-    <div
-      className={cn(
-        "viz-rise flex h-full flex-col rounded-xl border border-border p-4 sm:px-5",
-        // A zero tile drops its surface: same outline, no fill, so the tiles that report something lead.
-        zero ? "bg-transparent" : "glass bg-card"
-      )}
-    >
+    <div data-stat-tile className="viz-rise flex h-full min-w-0 flex-col border-t border-border pt-3">
       <div className="flex items-baseline justify-between gap-2">
-        <div className="truncate text-[13px] font-medium leading-5 text-muted-foreground">{label}</div>
+        <div className="truncate text-[12.5px] font-medium leading-5 text-ink-2">{label}</div>
         {trend?.length && trendCaption ? (
-          <div className="shrink-0 truncate text-xs leading-5 text-muted-foreground">{trendCaption}</div>
+          <div className="shrink-0 truncate text-[12px] leading-5 text-muted-foreground">{trendCaption}</div>
         ) : null}
       </div>
-      <div className={cn("mt-2 flex items-end justify-between gap-3", zero && "[&>svg]:opacity-60")}>
+      <div className={cn("mt-1.5 flex items-end justify-between gap-3", zero && "[&>svg]:opacity-60")}>
         <div
           className={cn(
-            "tabular text-2xl font-semibold leading-none tracking-[-0.025em] sm:text-[28px]",
-            zero ? "font-medium text-muted-foreground" : "text-foreground"
+            "figure text-[28px] leading-none sm:text-[34px]",
+            zero ? "text-muted-foreground" : "text-foreground"
           )}
         >
           <Figure value={value} />
@@ -78,9 +76,9 @@ export function StatTile({
           <Sparkbars values={trend} label={trendLabel ?? label} names={trendLabels} />
         ) : null}
       </div>
-      {hint ? <div className="mt-2.5 text-xs leading-snug text-muted-foreground">{hint}</div> : null}
+      {hint ? <div className="mt-2 text-[12.5px] leading-snug text-muted-foreground">{hint}</div> : null}
       {delta ? (
-        <div className="tabular mt-1 text-xs leading-snug text-ink-2" title={delta.title}>
+        <div className="tabular mt-1 text-[12.5px] leading-snug text-ink-2" title={delta.title}>
           <span aria-hidden className="mr-1 text-[9px] text-muted-foreground">
             {delta.direction === "up" ? "▲" : delta.direction === "down" ? "▼" : "■"}
           </span>
@@ -108,7 +106,7 @@ function Figure({ value }: { value: string }) {
     <>
       {parts.map((p, i) =>
         i % 2 ? (
-          <span key={i} className="ml-[0.04em] text-[0.72em] font-medium tracking-normal text-muted-foreground">
+          <span key={i} className="ml-[0.04em] text-[0.7em] tracking-normal text-muted-foreground">
             {p}
           </span>
         ) : (
@@ -724,30 +722,95 @@ export function Empty({ children }: { children?: React.ReactNode }) {
   );
 }
 
-/** Sentence-case section heading; `right` is muted 12px meta (or a control). */
+/**
+ * A section head, the way a paper sets one: a 1px ink rule across the
+ * column, then the heading in the serif, sentence case. The rule — not a
+ * box round the content — is what separates one section from the next.
+ * `right` is muted meta (a window, a count) or a small control; `kicker`
+ * is an optional eyebrow above the heading.
+ */
 export function SectionTitle({
   children,
   right,
+  kicker,
 }: {
   children: React.ReactNode;
   right?: React.ReactNode;
+  kicker?: React.ReactNode;
 }) {
   return (
-    <div className="mb-3 flex min-h-7 flex-wrap items-center justify-between gap-x-4 gap-y-1">
-      <h2 className="text-sm font-semibold leading-5 tracking-[-0.006em] text-foreground">{children}</h2>
-      {right ? (
-        <div className="flex min-w-0 items-center text-xs text-muted-foreground [&>span]:text-xs">{right}</div>
-      ) : null}
+    <div className="mb-4 border-t border-rule pt-2.5">
+      {kicker ? <div className="kicker mb-1">{kicker}</div> : null}
+      <div className="flex min-h-7 flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h2 className="font-serif text-[19px] font-semibold leading-snug tracking-[-0.008em] text-foreground sm:text-[21px]">
+          {children}
+        </h2>
+        {right ? (
+          <div className="flex min-w-0 items-center text-[12.5px] text-muted-foreground [&>span]:text-[12.5px]">
+            {right}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
 
-/** The one card surface: hairline edge, faint shadow, 12px radius, 16/20px inset. */
-export function Card({ className, children }: { className?: string; children: React.ReactNode }) {
+/**
+ * Where a section's content sits.
+ *
+ * - `open` (the default): no box. The content stands on the paper under its
+ *   SectionTitle rule, aligned to the column — charts, lists and tables
+ *   alike. This is most of the site.
+ * - `panel`: the one contained surface — a hairline, a step lighter than
+ *   the paper, 4px corners, no shadow. Reserve it for things that are
+ *   genuinely a panel: a form, a self-contained figure that must read as
+ *   one object, a grid of link cards.
+ */
+export function Card({
+  className,
+  children,
+  variant = "open",
+}: {
+  className?: string;
+  children: React.ReactNode;
+  variant?: "open" | "panel";
+}) {
   return (
-    <div className={cn("glass rounded-xl border border-border bg-card p-4 sm:p-5", className)}>
+    <div
+      className={cn(
+        variant === "panel" ? "rounded-card border border-border bg-card p-4 sm:p-5" : "min-w-0",
+        className
+      )}
+    >
       {children}
     </div>
+  );
+}
+
+/**
+ * The quiet alternative to a row of StatTiles: figures inline, label after
+ * value, one line on a wide screen — "6,208 trades · 135 members · …". Use
+ * it where the counts are context for what follows rather than the news.
+ */
+export function FactStrip({
+  items,
+  className,
+}: {
+  items: { label: string; value: string; title?: string }[];
+  className?: string;
+}) {
+  return (
+    <dl className={cn("flex flex-wrap items-baseline gap-x-6 gap-y-2 border-y border-border py-2.5", className)}>
+      {items.map((it) => (
+        <div key={it.label} className="flex items-baseline gap-1.5" title={it.title}>
+          {/* dt first, as <dl> requires; the value is drawn first. */}
+          <dt className="order-2 text-[12.5px] text-muted-foreground">{it.label}</dt>
+          <dd className="figure order-1 text-[20px] leading-none text-foreground">
+            <Figure value={it.value} />
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 

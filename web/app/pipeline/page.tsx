@@ -37,6 +37,7 @@ export default async function PipelinePage() {
   return (
     <div className={PAGE_STACK}>
       <PageHeader
+        eyebrow="About the data"
         title="Pipeline"
         subtitle="Where the data comes from, how much of it could be read, and what each run did."
       >

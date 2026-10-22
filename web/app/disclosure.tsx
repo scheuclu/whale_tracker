@@ -33,25 +33,30 @@ export function Disclosure({
   size?: "md" | "sm";
   className?: string;
 }) {
+  // `md` is a reader's note: a gold rule down the left (the one place the
+  // accent marks content rather than navigation), the lead in the serif.
+  // `sm` is a chart footnote: muted sans, no rule — present, never loud.
   return (
     <div
       data-disclosure
       className={cn(
-        "max-w-[68ch] text-muted-foreground",
-        size === "sm" ? "text-[12px] leading-relaxed" : "text-[14px] leading-relaxed",
+        "max-w-[68ch]",
+        size === "sm"
+          ? "text-[12.5px] leading-relaxed text-muted-foreground"
+          : "border-l-2 border-gold py-0.5 pl-4 text-[14px] leading-relaxed text-ink-2",
         className
       )}
     >
-      {lead ? <p>{lead}</p> : null}
+      {lead ? <p className={size === "md" ? "font-serif text-[16px] leading-normal text-ink-2" : undefined}>{lead}</p> : null}
       {children ? (
-        <details className={cn("group/disclosure", lead ? "mt-1" : undefined)}>
+        <details className={cn("group/disclosure", lead ? (size === "md" ? "mt-1.5" : "mt-1") : undefined)}>
           <summary
             className={cn(
-              "inline-flex cursor-pointer select-none list-none items-center gap-1 rounded-md py-0.5 pr-1 font-medium text-ink-2",
-              "transition-colors duration-150 ease-out hover:text-foreground motion-reduce:transition-none",
+              "inline-flex cursor-pointer select-none list-none items-center gap-1 rounded-sm py-0.5 pr-1 font-medium text-ink-2",
+              "underline decoration-transparent underline-offset-[3px] transition-colors duration-150 ease-out hover:text-foreground hover:decoration-gold motion-reduce:transition-none",
               "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
               "[&::-webkit-details-marker]:hidden",
-              size === "sm" ? "text-[12px]" : "text-[13px]"
+              size === "sm" ? "text-[12.5px]" : "text-[13px]"
             )}
           >
             <ChevronRight
@@ -60,7 +65,14 @@ export function Disclosure({
             />
             {summary}
           </summary>
-          <div className="mt-2 space-y-2 border-l border-border pl-3">{children}</div>
+          <div
+            className={cn(
+              "mt-2 space-y-2",
+              size === "sm" ? "border-l border-border pl-3" : "text-muted-foreground"
+            )}
+          >
+            {children}
+          </div>
         </details>
       ) : null}
     </div>

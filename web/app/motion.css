@@ -86,13 +86,12 @@
    take the surface scale and the sheen is quieter and slower — a skeleton
    should read as "waiting", not as a control asking for attention.
 
-   Dark: bones are the raised surface, one step above the card. Light: the
-   raised step (#f9fafb) is lighter than the page tint (#f6f7f9), so a bone
-   in a section title would vanish; a 6% ink wash reads on both.
+   Bones sit on the paper now, not on cards: a 7% ink wash in light mode
+   (it reads on the paper and on a panel alike), the raised step in dark.
    ------------------------------------------------------------------ */
 :root {
-  --skeleton: color-mix(in oklab, var(--foreground) 6%, transparent);
-  --skeleton-sheen: rgba(255, 255, 255, 0.6);
+  --skeleton: color-mix(in oklab, var(--foreground) 7%, transparent);
+  --skeleton-sheen: rgba(255, 254, 250, 0.55);
 }
 .dark {
   --skeleton: var(--raised);
@@ -151,7 +150,7 @@ main[tabindex="-1"]:focus {
   top: 0.75rem;
   z-index: 100;
   padding: 0.5rem 0.875rem;
-  border-radius: 8px;
+  border-radius: 4px;
   border: 1px solid var(--border-strong);
   background: var(--popover);
   color: var(--popover-foreground);
@@ -186,20 +185,20 @@ main[tabindex="-1"]:focus {
    ------------------------------------------------------------------ */
 @media (prefers-contrast: more) {
   :root {
-    --border: rgba(15, 17, 23, 0.3);
-    --input: rgba(15, 17, 23, 0.4);
-    --border-strong: rgba(15, 17, 23, 0.45);
-    --muted-foreground: #3f4451;
-    --skeleton: rgba(15, 17, 23, 0.14);
-    --ring: #3b3bb0;
+    --border: rgba(26, 25, 21, 0.32);
+    --input: rgba(26, 25, 21, 0.45);
+    --border-strong: rgba(26, 25, 21, 0.5);
+    --muted-foreground: #45423a;
+    --skeleton: rgba(26, 25, 21, 0.14);
+    --ring: #5f4000;
   }
   .dark {
-    --border: rgba(255, 255, 255, 0.32);
-    --input: rgba(255, 255, 255, 0.4);
-    --border-strong: rgba(255, 255, 255, 0.45);
-    --muted-foreground: #c4c7d0;
-    --skeleton: rgba(255, 255, 255, 0.16);
-    --ring: #a8a8ff;
+    --border: rgba(237, 233, 223, 0.34);
+    --input: rgba(237, 233, 223, 0.45);
+    --border-strong: rgba(237, 233, 223, 0.5);
+    --muted-foreground: #d6d1c5;
+    --skeleton: rgba(237, 233, 223, 0.16);
+    --ring: #f6d58a;
   }
   :focus-visible,
   .site-header form[role="search"]:has(input:focus-visible) {
