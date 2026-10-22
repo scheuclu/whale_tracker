@@ -6,6 +6,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { BrandMark, Wordmark } from "./brand";
 import { HeaderShell } from "./header-shell";
 import { SiteFooter } from "./site-footer";
+import { NoScriptStyles } from "./no-script";
 import { AgentAlternates } from "./agent-alternates";
 import { getPipeline } from "@/lib/queries";
 // Past this the sync pill turns amber; /api/health shares the threshold.
@@ -77,6 +78,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     >
       <body className="min-h-screen bg-background font-sans text-foreground antialiased">
         <AgentAlternates site />
+        <NoScriptStyles />
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <HeaderShell>
             <div className="site-header-top mx-auto flex max-w-6xl items-center gap-2 px-4 pt-3.5 sm:px-6">
