@@ -51,9 +51,11 @@ const LEGAL_LINKS = [
   { href: "/terms", label: "Terms" },
 ];
 
-const HEAD = "mb-3 text-[11.5px] font-semibold uppercase tracking-[0.085em] text-foreground";
+// apple.com's footer: 12px grey text, the column heads semibold in ink,
+// hairline separators, links that underline on hover.
+const HEAD = "mb-2.5 text-[12px] font-semibold text-foreground";
 const LINK =
-  "rounded-sm text-ink-2 underline decoration-transparent underline-offset-[3px] transition-colors duration-150 hover:text-foreground hover:decoration-gold";
+  "rounded-sm text-muted-foreground underline decoration-transparent underline-offset-[3px] transition-colors duration-150 hover:text-foreground hover:decoration-current";
 
 /**
  * Masthead, sections, "About the data", sources, and the caveats that govern
@@ -81,13 +83,13 @@ export function SiteFooter({
   stale: boolean;
 }) {
   return (
-    <footer className="border-t border-rule">
-      <div className="mx-auto max-w-6xl px-4 pb-10 pt-10 sm:px-6 sm:pb-12 sm:pt-12">
-        <div className="grid gap-x-10 gap-y-10 text-[13px] leading-relaxed text-muted-foreground sm:grid-cols-2 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.7fr)_minmax(0,1.1fr)_minmax(0,1.25fr)]">
+    <footer className="border-t border-border">
+      <div className="mx-auto max-w-[1080px] px-4 pb-10 pt-8 sm:px-6 sm:pb-12 sm:pt-10">
+        <div className="grid gap-x-10 gap-y-8 text-[12px] leading-relaxed text-muted-foreground sm:grid-cols-2 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.7fr)_minmax(0,1.1fr)_minmax(0,1.25fr)]">
           <div className="space-y-3">
             <Link href="/" className="inline-flex items-center gap-2 rounded-control" aria-label="FatCat Watch — feed">
-              <BrandMark className="size-7" />
-              <Wordmark />
+              <BrandMark className="size-[22px]" />
+              <Wordmark className="text-[15px]" />
             </Link>
             <p className="max-w-[44ch]">
               {transactions ? (
@@ -106,7 +108,7 @@ export function SiteFooter({
               )}{" "}
               Dates that contradict each other are flagged, not corrected.
             </p>
-            <p className="tabular text-[12.5px]">
+            <p className="tabular text-[12px]">
               <Link
                 href="/pipeline"
                 className={cn(LINK, "text-muted-foreground")}
@@ -142,7 +144,7 @@ export function SiteFooter({
                   <Link href={a.href} className={cn(LINK, "font-medium")}>
                     {a.label}
                   </Link>
-                  <span className="block text-[12.5px]">{a.note}</span>
+                  <span className="block">{a.note}</span>
                 </li>
               ))}
             </ul>
@@ -157,20 +159,20 @@ export function SiteFooter({
                     {s.name}
                     <ArrowUpRight className="size-3 opacity-60" aria-hidden />
                   </a>
-                  <span className="block text-[12.5px]">{s.what}</span>
+                  <span className="block">{s.what}</span>
                 </li>
               ))}
             </ul>
           </div>
         </div>
 
-        <section aria-labelledby="footer-numbers" className="mt-10 border-t border-border pt-6">
+        <section aria-labelledby="footer-numbers" className="mt-8 border-t border-border pt-6">
           <h2 id="footer-numbers" className={HEAD}>
             Reading the numbers
           </h2>
-          <dl className="grid gap-x-10 gap-y-4 text-[13px] leading-relaxed text-muted-foreground md:grid-cols-3">
+          <dl className="grid gap-x-10 gap-y-4 text-[12px] leading-relaxed text-muted-foreground md:grid-cols-3">
             <div>
-              <dt className="font-serif text-[16px] font-semibold text-foreground">Congressional amounts are ranges</dt>
+              <dt className="text-[13px] font-semibold text-foreground">Congressional amounts are ranges</dt>
               <dd className="mt-1">
                 Members disclose an <strong className="font-semibold text-ink-2">amount bracket</strong>, not an exact
                 figure — every congressional total here is a range, and any midpoint is an estimate. The open-ended top
@@ -178,14 +180,14 @@ export function SiteFooter({
               </dd>
             </div>
             <div>
-              <dt className="font-serif text-[16px] font-semibold text-foreground">Insider values are computed</dt>
+              <dt className="text-[13px] font-semibold text-foreground">Insider values are computed</dt>
               <dd className="mt-1">
                 <strong className="font-semibold text-ink-2">Shares × the reported price</strong>, which the filer may
                 state as a weighted average. Congressional and insider figures are never added together.
               </dd>
             </div>
             <div>
-              <dt className="font-serif text-[16px] font-semibold text-foreground">Paper filings stay out of totals</dt>
+              <dt className="text-[13px] font-semibold text-foreground">Paper filings stay out of totals</dt>
               <dd className="mt-1">
                 Scanned paper filings in either chamber never enter a volume figure: House scans are transcribed and
                 labelled wherever they appear, Senate paper filings are not read. See{" "}
@@ -202,7 +204,7 @@ export function SiteFooter({
           </dl>
         </section>
 
-        <div className="mt-10 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 border-t border-border pt-5 text-[12.5px] text-muted-foreground">
+        <div className="mt-8 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 border-t border-border pt-5 text-[12px] text-muted-foreground">
           <p>Public disclosures, shown for information — not investment advice.</p>
           <nav aria-label="Legal" className="flex flex-wrap gap-x-4 gap-y-1">
             {LEGAL_LINKS.map((l) => (

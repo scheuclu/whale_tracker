@@ -2,7 +2,9 @@
  * Trade rows outside the home feed: the "Every disclosed trade" lists on a
  * member page (one member, many assets) and a ticker page (one asset, many
  * members). One card, hairline rows, the same columns as the feed so a trade
- * reads the same wherever it appears:
+ * reads the same wherever it appears. An iOS grouped list: one tile, rows
+ * separated by hairlines inset from the tile's edge.
+ *
  *
  *   ≥640px   date | action | ticker or member | bracket + range | asset, tags | delay · filing
  *   <640px   action | ticker or member | bracket + range
@@ -98,7 +100,7 @@ function FilingLink({ href }: { href: string }) {
       href={href}
       target="_blank"
       rel="noreferrer"
-      className="rounded-sm text-[12px] text-muted-foreground underline decoration-border underline-offset-[3px] transition-colors duration-(--dur-fast) hover:text-primary hover:decoration-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      className="rounded-sm text-[12px] text-muted-foreground underline decoration-border-strong underline-offset-[3px] transition-colors duration-(--dur-fast) hover:text-foreground hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
     >
       filing<span aria-hidden>&nbsp;↗</span>
       <span className="sr-only"> (opens the original filing)</span>
@@ -108,11 +110,11 @@ function FilingLink({ href }: { href: string }) {
 
 /* ----------------------------------------------------------------- list */
 
-/** The rows, open on the paper: flush with the column from 640px, edge to edge on a phone. */
+/** The rows in one tile, hairlines inset 16px from its edge (iOS inset-grouped). */
 export function TradeList({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <Card className={cn("-mx-4 border-y border-border sm:mx-0", className)}>
-      <ul className="divide-y divide-border/60 px-2.5 py-1 sm:px-0">{children}</ul>
+    <Card className={cn("p-0 sm:p-0", className)}>
+      <ul className="inset-rows px-2 py-1.5 [--sep-inset:0.5rem] sm:px-3 sm:[--sep-inset:0.5rem]">{children}</ul>
     </Card>
   );
 }
@@ -128,7 +130,7 @@ export function TradeRow({ r, subject }: { r: TransactionRow; subject: "asset" |
   return (
     <li
       className={cn(
-        "grid items-center gap-x-3 gap-y-1 rounded-md px-1.5 py-2 transition-colors duration-(--dur-fast) hover:bg-raised focus-within:bg-raised sm:min-h-10 sm:py-1.5",
+        "grid items-center gap-x-3 gap-y-1 rounded-[10px] px-2 py-2.5 transition-colors duration-(--dur-fast) hover:bg-foreground/[0.04] focus-within:bg-foreground/[0.04] sm:min-h-11 sm:py-2",
         "grid-cols-[auto_minmax(0,1fr)_auto] [grid-template-areas:'act_subj_amt'_'detail_detail_meta']",
         subject === "asset"
           ? "sm:grid-cols-[5.75rem_6.5rem_5.5rem_11rem_minmax(0,1fr)_auto]"
@@ -154,7 +156,7 @@ export function TradeRow({ r, subject }: { r: TransactionRow; subject: "asset" |
             <MemberAvatar name={r.member_name} bioguideId={r.bioguide_id} size="sm" />
             <a
               href={memberHref(r.member_name, r.bioguide_id)}
-              className="min-w-0 truncate rounded-sm text-[13px] font-medium transition-colors duration-(--dur-fast) hover:text-primary focus-visible:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="min-w-0 truncate rounded-sm text-[14px] font-semibold decoration-border-strong underline-offset-[3px] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
               title={memberLabel(r.member_name, r.party, r.state, r.district, r.chamber)}
             >
               {memberLabel(r.member_name, null, r.state, r.district, r.chamber)}
@@ -172,7 +174,7 @@ export function TradeRow({ r, subject }: { r: TransactionRow; subject: "asset" |
         exact={r.amount_exact_cents}
         transcribed={r.transcribed}
       />
-      <span className="flex min-w-0 flex-wrap items-center gap-1.5 text-[13px] [grid-area:detail] sm:flex-nowrap">
+      <span className="flex min-w-0 flex-wrap items-center gap-1.5 text-[14px] [grid-area:detail] sm:flex-nowrap">
         {subject === "asset" ? <AssetName name={r.asset_name} ticker={r.ticker} /> : null}
         <span className="flex min-w-0 flex-wrap items-center gap-1.5 empty:hidden sm:shrink-0 sm:flex-nowrap sm:whitespace-nowrap">
           <OptionBadge kind={r.option_kind} strikeCents={r.strike_cents} expiry={r.expiry} />

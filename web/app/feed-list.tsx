@@ -10,6 +10,10 @@
  * many headers. The filing date and the disclosure delay stay on every
  * block/row.
  *
+ * Each day is an iOS inset-grouped list: a bold day header on the canvas
+ * (sticky under the nav), then one white tile holding that day's filings,
+ * separated by hairlines inset to the member's name.
+ *
  * Layout (one grid, see `.feed-row` in globals.css):
  *   ≥1024px   member column | one line per trade
  *   ≥640px    member line above | one line per trade
@@ -23,10 +27,9 @@ import { memberHref, memberLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { MemberAvatar } from "./avatar";
 import { BracketAmount, BracketLegend } from "./bracket-glyph";
-import { Card } from "./charts";
 import { StickyOffset } from "./sticky-offset";
 import { AssetName, TickerCell, TradeDelay } from "./trade-row";
-import { ActionBadge, OptionBadge, OwnerTag, PartyBadge, ScanTag } from "./ui";
+import { ActionBadge, OptionBadge, OwnerTag, PartyBadge, ScanTag, Segmented } from "./ui";
 
 /* ------------------------------------------------------------- header */
 
@@ -45,30 +48,16 @@ export function DirectionFilter({
 }) {
   const options: { k: Direction; label: string; dot?: string }[] = [
     { k: undefined, label: "All" },
-    { k: "buy", label: "Buys", dot: "bg-[var(--viz-buy)]" },
-    { k: "sell", label: "Sells", dot: "bg-[var(--viz-sell)]" },
+    { k: "buy", label: "Buys", dot: "var(--viz-buy)" },
+    { k: "sell", label: "Sells", dot: "var(--viz-sell)" },
   ];
   const active = current === "buy" || current === "sell" ? current : undefined;
+  // The shared iOS segmented control (ui.tsx); the dots repeat the words.
   return (
-    <nav aria-label="Trade direction" className="inline-flex rounded-control p-0.5 text-xs ring-1 ring-inset ring-border">
-      {options.map((o) => {
-        const on = active === o.k;
-        return (
-          <a
-            key={o.label}
-            href={hrefFor(o.k)}
-            aria-current={on ? "page" : undefined}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-chip px-2.5 py-1 font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring",
-              on ? "bg-foreground text-background" : "text-ink-2 hover:bg-secondary hover:text-foreground"
-            )}
-          >
-            {o.dot ? <span className={cn("size-1.5 rounded-full", o.dot)} aria-hidden /> : null}
-            {o.label}
-          </a>
-        );
-      })}
-    </nav>
+    <Segmented
+      label="Trade direction"
+      items={options.map((o) => ({ key: o.label, label: o.label, href: hrefFor(o.k), active: active === o.k, dot: o.dot }))}
+    />
   );
 }
 
@@ -78,6 +67,7 @@ export function FeedList({
   rows,
   toolbar,
   summary,
+  actions,
   empty = "No trades match this filter.",
 }: {
   rows: TransactionRow[];
@@ -85,68 +75,70 @@ export function FeedList({
   toolbar?: React.ReactNode;
   /** The count/total line beside the controls (feed-controls' ShownLine). */
   summary?: React.ReactNode;
+  /** Controls at the right end of the list header (the CSV export). */
+  actions?: React.ReactNode;
   empty?: React.ReactNode;
 }) {
   const today = todayIso();
   const days = groupFeed(rows, today);
   return (
-    // Open on the paper. From 640px the list is flush with the column: its
-    // rules meet the section rule's ends and its text the title's edge; only
-    // a row's hover wash reaches 6px past. On a phone it runs edge to edge
-    // with the gutter as its inset.
-    <Card className="-mx-4 border-b border-border sm:mx-0">
+    <div className="min-w-0">
       <StickyOffset />
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border px-4 py-3 sm:px-0">
+      {/* The controls on the canvas: segmented direction, the Filter pill
+          (its panel is positioned against this row), the count line, CSV. */}
+      <div className="relative mb-2 flex flex-wrap items-center gap-x-2.5 gap-y-2.5">
         {toolbar}
         {/* ShownLine brings a bottom margin for a standalone line; in the bar it has none. */}
-        <div className="order-last min-w-0 basis-full sm:order-none sm:basis-0 sm:flex-1 [&>p]:mb-0">
+        <div className="order-last min-w-0 basis-full pl-1 pt-0.5 [&>p]:mb-0">
           {rows.length ? summary : null}
         </div>
-        <BracketLegend className="hidden md:inline-flex" />
+        <div className="ml-auto flex items-center gap-4">
+          <BracketLegend className="hidden md:inline-flex" />
+          {actions}
+        </div>
       </div>
       {rows.length ? (
         days.map((day, i) => <DaySection key={`${day.key}-${i}`} day={day} today={today} index={i} />)
       ) : (
-        <div className="px-4 py-10 text-center text-[13px] text-muted-foreground">{empty}</div>
+        <div className="tile px-4 py-10 text-center text-[14px] text-muted-foreground">{empty}</div>
       )}
-    </Card>
+    </div>
   );
 }
 
 function DaySection({ day, today, index }: { day: DayGroup<TransactionRow>; today: string; index: number }) {
   const id = `feed-day-${index}`;
   return (
-    <section aria-labelledby={id} className="feed-day relative last:rounded-b-[inherit]">
-      {/* One hairline above each day (none above the first: the toolbar's
-          rule is already there) and one below; the label carries the day. */}
+    <section aria-labelledby={id} className="feed-day relative">
+      {/* The group header, on the canvas: the day bold, its date and counts
+          grey. Opaque (the canvas), so rows passing under it never show. */}
       <h3
         id={id}
-        className={cn(
-          "feed-day-head sticky z-20 flex h-9 items-center gap-2 border-b border-border/70 px-4 text-[12px] sm:px-0",
-          index > 0 && "border-t border-t-border"
-        )}
+        className="feed-day-head sticky z-20 -mx-1 flex h-12 items-end gap-2 px-1 pb-2 text-[13px] sm:-mx-2 sm:px-2"
       >
-        <span className="font-serif text-[15px] font-semibold text-foreground">{day.label}</span>
-        {day.date ? <span className="tabular text-muted-foreground">{day.date}</span> : null}
+        <span className="font-display text-[17px] font-semibold leading-tight tracking-[-0.018em] text-foreground">{day.label}</span>
+        {day.date ? <span className="tabular leading-tight text-muted-foreground">{day.date}</span> : null}
         {day.future ? (
           <span
-            className="rounded-md border bg-attention-soft px-1.5 py-px text-[11px] font-medium text-attention"
+            className="rounded-full bg-attention-soft px-2 py-px text-[12px] font-medium leading-tight text-attention"
             title="This trade date is later than today: the filing's own date, reproduced as filed rather than corrected"
           >
             future date as filed
           </span>
         ) : null}
         {day.key === null ? null : (
-          <span className="hidden text-muted-foreground sm:inline">traded</span>
+          <span className="hidden leading-tight text-muted-foreground sm:inline">traded</span>
         )}
         <span className="flex-1" />
-        <span className="tabular text-muted-foreground">
+        <span className="tabular leading-tight text-muted-foreground">
           {day.trades} {day.trades === 1 ? "trade" : "trades"}
-          <span aria-hidden className="text-muted-foreground"> · </span>
+          <span aria-hidden> · </span>
           {day.filings} {day.filings === 1 ? "filing" : "filings"}
         </span>
       </h3>
-      <ol className="divide-y divide-border/60">
+      {/* One grouped tile per day; filings separated by hairlines that start
+          at the member's name, not the tile's edge (.inset-rows). */}
+      <ol className="tile inset-rows mb-2 [--sep-inset:3.25rem] sm:[--sep-inset:3.25rem]">
         {day.blocks.map((b, i) => (
           <FilingBlockView key={`${b.key}-${i}`} block={b} today={today} />
         ))}
@@ -167,8 +159,8 @@ function FilingBlockView({ block, today }: { block: FilingBlock<TransactionRow>;
   const label = memberLabel(r0.member_name, null, r0.state, r0.district, r0.chamber);
   const filed = r0.filing_date ? monthDay(r0.filing_date, today) : null;
   return (
-    <li className="feed-block lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]">
-      <div className="px-4 pt-2.5 sm:px-0 lg:py-1.5 lg:pr-3">
+    <li className="feed-block px-3.5 sm:px-5 lg:grid lg:grid-cols-[15.5rem_minmax(0,1fr)]">
+      <div className="pt-3 lg:py-2 lg:pr-3">
         <div className="feed-member flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 lg:flex-col lg:flex-nowrap lg:items-start lg:gap-0">
           <div className="flex min-w-0 max-w-full items-center gap-2 lg:w-full lg:items-start">
             <span className="flex shrink-0 items-center lg:h-9">
@@ -176,7 +168,7 @@ function FilingBlockView({ block, today }: { block: FilingBlock<TransactionRow>;
             </span>
             <a
               href={memberHref(r0.member_name, r0.bioguide_id)}
-              className="min-w-0 truncate rounded-sm text-[13px] font-medium transition-colors duration-(--dur-fast) hover:text-primary focus-visible:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring lg:line-clamp-2 lg:whitespace-normal lg:py-[9px] lg:leading-[18px]"
+              className="min-w-0 truncate rounded-sm text-[14px] font-semibold tracking-[-0.01em] decoration-border-strong underline-offset-[3px] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring lg:line-clamp-2 lg:whitespace-normal lg:py-[9px] lg:leading-[18px]"
               title={label}
             >
               {label}
@@ -185,7 +177,7 @@ function FilingBlockView({ block, today }: { block: FilingBlock<TransactionRow>;
               <PartyBadge party={r0.party} />
             </span>
           </div>
-          <div className="tabular ml-auto flex shrink-0 items-center gap-1 text-[12px] text-muted-foreground lg:-mt-1.5 lg:ml-8">
+          <div className="tabular flex shrink-0 items-center gap-1 pl-8 text-[12px] text-muted-foreground max-sm:basis-full sm:ml-auto sm:pl-0 lg:-mt-1.5 lg:ml-8">
             {n > 1 ? (
               <span>
                 {n} trades
@@ -202,7 +194,7 @@ function FilingBlockView({ block, today }: { block: FilingBlock<TransactionRow>;
               href={r0.pdf_url}
               target="_blank"
               rel="noreferrer"
-              className="rounded-sm underline decoration-border underline-offset-[3px] transition-colors duration-(--dur-fast) hover:text-primary hover:decoration-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="rounded-sm underline decoration-border-strong underline-offset-[3px] transition-colors duration-(--dur-fast) hover:text-foreground hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
               filing<span aria-hidden>&nbsp;↗</span>
               <span className="sr-only"> (opens the original filing)</span>
@@ -210,7 +202,7 @@ function FilingBlockView({ block, today }: { block: FilingBlock<TransactionRow>;
           </div>
         </div>
       </div>
-      <ul className="px-2.5 pb-2 pt-1 sm:-mx-1.5 sm:px-0 lg:mx-0 lg:py-1.5">
+      <ul className="-mx-1.5 pb-2.5 pt-1.5 lg:mx-0 lg:py-2">
         {block.rows.map((r) => (
           <FeedRow key={r.id} r={r} />
         ))}
@@ -221,7 +213,7 @@ function FilingBlockView({ block, today }: { block: FilingBlock<TransactionRow>;
 
 function FeedRow({ r }: { r: TransactionRow }) {
   return (
-    <li className="feed-row rounded-md px-1.5 py-1 transition-colors duration-(--dur-fast) hover:bg-raised focus-within:bg-raised sm:min-h-9">
+    <li className="feed-row rounded-[10px] px-1.5 py-1 transition-colors duration-(--dur-fast) hover:bg-foreground/[0.04] focus-within:bg-foreground/[0.04] sm:min-h-9">
       <span className="[grid-area:act]">
         <ActionBadge action={r.action} />
       </span>
@@ -235,7 +227,7 @@ function FeedRow({ r }: { r: TransactionRow }) {
         exact={r.amount_exact_cents}
         transcribed={r.transcribed}
       />
-      <span className="flex min-w-0 items-center gap-1.5 text-[13px] [grid-area:asset]">
+      <span className="flex min-w-0 items-center gap-1.5 text-[14px] [grid-area:asset]">
         <AssetName name={r.asset_name} ticker={r.ticker} />
         <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap empty:hidden">
           <OptionBadge kind={r.option_kind} strikeCents={r.strike_cents} expiry={r.expiry} />

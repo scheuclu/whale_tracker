@@ -7,8 +7,8 @@ import { CARD_CDN_CACHE_CONTROL } from "@/lib/cache-policy";
 /**
  * The share cards for every page but the home page (members, tickers, the
  * section pages, and the query-string views under app/cards/), in the
- * site's v2 identity: warm paper, ink, the Newsreader headline over an ink
- * rule, the cat on its ink tile, one gold accent. Counts only. A
+ * site's v3 identity: the #f5f5f7 canvas, the app icon (graphite squircle,
+ * gold tie), a bold tight headline, counts in a white tile. Counts only. A
  * congressional total is a range, and a card has no room to say so; a
  * count needs no caveat. Insider cards count too: a value would need
  * "shares × reported price" beside it, and the page says it. Buy and sell
@@ -22,19 +22,24 @@ export const CARD_SIZE = { width: 1200, height: 630 };
 /** Every card response: the CDN holds it (lib/cache-policy.ts). */
 export const CARD_HEADERS = { "CDN-Cache-Control": CARD_CDN_CACHE_CONTROL };
 
-/** The paper and its ink, brightest-contrast first (globals.css, light). */
-export const PAPER = "#f7f4ed";
-export const INK = { 1: "#1a1915", 2: "#45423a", 3: "#6a6558" };
-/** The accent's text-safe ink (`--primary`) and the mark gold (`--gold`). */
-export const KICKER = "#8a5d00";
-export const GOLD = "#e9a913";
-export const HAIRLINE = "rgba(26,25,21,0.16)";
+/** The canvas, the tile and the text greys, brightest-contrast first (globals.css, light). */
+export const PAPER = "#f5f5f7";
+export const TILE = "#ffffff";
+export const INK = { 1: "#1d1d1f", 2: "#424245", 3: "#6e6e73" };
+/** The eyebrow's grey (`.kicker`) and the bow tie's gold (lib/brand.ts). */
+export const KICKER = "#6e6e73";
+export const GOLD = "#fbbf24";
+export const HAIRLINE = "rgba(60,60,67,0.16)";
 
 export const BUY = "#2a78d6";
 export const SELL = "#d03b3b";
 
-/** The serif for headlines and figures; the default family is Inter. */
-export const SERIF = "Newsreader";
+/**
+ * The display face for headlines and figures: Inter SemiBold registered
+ * under its own family name, so `fontFamily: DISPLAY` is the bold voice and
+ * the default family stays Inter at 400. (SF Pro cannot be embedded.)
+ */
+export const DISPLAY = "Inter Display";
 
 /**
  * The card fonts, read once per server instance. Static TTF instances
@@ -49,11 +54,10 @@ export function cardFonts() {
     fonts = Promise.all([
       readFile(join(dir, "Inter-Regular.ttf")),
       readFile(join(dir, "Inter-SemiBold.ttf")),
-      readFile(join(dir, "Newsreader-Medium.ttf")),
-    ]).then(([regular, semibold, serif]) => [
+    ]).then(([regular, semibold]) => [
       { name: "Inter", data: regular, weight: 400 as const, style: "normal" as const },
       { name: "Inter", data: semibold, weight: 600 as const, style: "normal" as const },
-      { name: SERIF, data: serif, weight: 500 as const, style: "normal" as const },
+      { name: DISPLAY, data: semibold, weight: 600 as const, style: "normal" as const },
     ]);
     // A missing file must not poison every later render: try again next time.
     fonts.catch(() => {
@@ -80,21 +84,21 @@ export function Stat({ value, label, dot, first }: CardStat & { first?: boolean 
       style={{
         display: "flex",
         flexDirection: "column",
-        paddingLeft: first ? 0 : 32,
-        paddingRight: 32,
+        paddingLeft: first ? 0 : 36,
+        paddingRight: 36,
         borderLeft: first ? "none" : `1px solid ${HAIRLINE}`,
       }}
     >
-      <div style={{ display: "flex", fontFamily: SERIF, fontSize: 52, lineHeight: 1, color: INK[1] }}>{value}</div>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, fontSize: 21, color: INK[3] }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 21, color: INK[3] }}>
         {dot ? <div style={{ display: "flex", width: 12, height: 12, borderRadius: 6, backgroundColor: dot }} /> : null}
         {label}
       </div>
+      <div style={{ display: "flex", marginTop: 8, fontFamily: DISPLAY, fontSize: 54, lineHeight: 1, letterSpacing: "-0.03em", color: INK[1] }}>{value}</div>
     </div>
   );
 }
 
-/** The card's masthead: the tiled mark and the name, over an ink rule. */
+/** The card's masthead: the app icon and the name. */
 export function CardMasthead({ right }: { right?: React.ReactNode }) {
   return (
     <div
@@ -102,14 +106,12 @@ export function CardMasthead({ right }: { right?: React.ReactNode }) {
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        paddingBottom: 22,
-        borderBottom: `2px solid ${INK[1]}`,
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={markDataUri({ size: 52 })} width={52} height={52} alt="" />
-        <div style={{ display: "flex", fontFamily: SERIF, fontSize: 36, letterSpacing: "-0.01em", color: INK[1] }}>
+        <img src={markDataUri({ size: 56 })} width={56} height={56} alt="" />
+        <div style={{ display: "flex", fontFamily: DISPLAY, fontSize: 34, letterSpacing: "-0.025em", color: INK[1] }}>
           FatCat Watch
         </div>
       </div>
@@ -149,7 +151,7 @@ export async function renderCard({
 
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
           {stats.length ? (
-            <div style={{ display: "flex", paddingTop: 22, borderTop: `1px solid ${HAIRLINE}` }}>
+            <div style={{ display: "flex", padding: "26px 32px", borderRadius: 28, backgroundColor: TILE }}>
               {stats.map((s, i) => (
                 <Stat key={s.label} {...s} first={i === 0} />
               ))}
@@ -208,8 +210,6 @@ export function renderPageCard({
               display: "flex",
               fontSize: 21,
               fontWeight: 600,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
               color: KICKER,
             }}
           >
@@ -219,10 +219,10 @@ export function renderPageCard({
         <div
           style={{
             display: "flex",
-            fontFamily: SERIF,
+            fontFamily: DISPLAY,
             fontSize: size,
             lineHeight: mono ? 1 : 1.06,
-            letterSpacing: mono ? "-0.02em" : "-0.015em",
+            letterSpacing: "-0.03em",
           }}
         >
           {t}
@@ -248,11 +248,11 @@ export function Chips({ items }: { items: string[] }) {
           style={{
             display: "flex",
             padding: "5px 14px",
-            borderRadius: 4,
+            borderRadius: 999,
             fontSize: 24,
-            color: INK[2],
-            border: `1px solid ${HAIRLINE}`,
-            backgroundColor: "rgba(255,254,250,0.7)",
+            fontWeight: 600,
+            color: INK[1],
+            backgroundColor: "rgba(118,118,128,0.12)",
           }}
         >
           {s}

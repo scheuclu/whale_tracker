@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
  * and list rows) · md 32 (cards, search results) · lg 40 (roster tiles) ·
  * xl 88/112 (the member hero).
  */
-const PX = { xs: 20, sm: 24, md: 32, lg: 40, xl: 112 } as const;
+const PX = { xs: 20, sm: 24, md: 32, lg: 40, xl: 120 } as const;
 
 /**
  * Monogram type per size: small sizes get a touch more weight and less
@@ -78,7 +78,7 @@ export function MemberAvatar({
         "bg-[color-mix(in_oklab,var(--foreground)_6%,var(--card-solid))] text-[color-mix(in_oklab,var(--foreground)_58%,var(--card-solid))]",
         "dark:bg-[color-mix(in_oklab,var(--foreground)_9%,var(--card-solid))] dark:text-[color-mix(in_oklab,var(--foreground)_66%,var(--card-solid))]",
         // The hero portrait steps down on a phone so the name keeps its line.
-        xl ? "size-[88px] rounded-[30%] text-[28px] sm:size-[112px] sm:text-[34px]" : cn("rounded-full", MONO_TYPE[size]),
+        xl ? "size-[96px] rounded-full text-[32px] sm:size-[120px] sm:text-[40px]" : cn("rounded-full", MONO_TYPE[size]),
         className
       )}
       style={xl ? undefined : { width: px, height: px }}

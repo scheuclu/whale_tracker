@@ -100,7 +100,7 @@ export function StatusScreen({
                 className="group flex items-center gap-3 px-3 py-3 outline-offset-[-2px] transition-colors hover:bg-raised"
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block font-serif text-[17px] font-semibold">{label}</span>
+                  <span className="block font-display text-[17px] font-semibold">{label}</span>
                   <span className="block truncate text-xs text-muted-foreground">{hint}</span>
                 </span>
                 <ArrowRight

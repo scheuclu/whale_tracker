@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 import { getPipeline } from "@/lib/queries";
 import { getInsiderTotals } from "@/lib/insider-queries";
-import { CARD_HEADERS, CardMasthead, HAIRLINE, INK, KICKER, PAPER, SERIF, cardFontsOrDefault } from "./share-card";
+import { CARD_HEADERS, CardMasthead, HAIRLINE, INK, KICKER, PAPER, DISPLAY, TILE, cardFontsOrDefault } from "./share-card";
 
 export const alt =
   "FatCat Watch — US congressional and corporate-insider stock trades, from STOCK Act and SEC Form 4 filings";
@@ -49,8 +49,8 @@ async function headlines(): Promise<{ stats: Headline[]; synced: string | null }
 
 export async function renderShareCard() {
   const { stats, synced } = await headlines();
-  // The site's v2 paper (globals.css): ink, an ink rule under the masthead,
-  // the serif headline, hairline-separated counts. No gradient, no glow.
+  // The site's v3 canvas (globals.css): the app icon, a bold tight
+  // headline, the counts in a white tile. No glow.
   return new ImageResponse(
     (
       <div
@@ -78,8 +78,6 @@ export async function renderShareCard() {
               display: "flex",
               fontSize: 21,
               fontWeight: 600,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
               color: KICKER,
             }}
           >
@@ -88,10 +86,10 @@ export async function renderShareCard() {
           <div
             style={{
               display: "flex",
-              fontFamily: SERIF,
-              fontSize: 70,
-              lineHeight: 1.05,
-              letterSpacing: "-0.015em",
+              fontFamily: DISPLAY,
+              fontSize: 68,
+              lineHeight: 1.06,
+              letterSpacing: "-0.03em",
               maxWidth: 1040,
             }}
           >
@@ -108,8 +106,9 @@ export async function renderShareCard() {
             display: "flex",
             alignItems: "flex-end",
             marginTop: 36,
-            paddingTop: 24,
-            borderTop: `1px solid ${HAIRLINE}`,
+            padding: "26px 32px",
+            borderRadius: 28,
+            backgroundColor: TILE,
           }}
         >
           {stats.length ? (
@@ -124,8 +123,8 @@ export async function renderShareCard() {
                   borderLeft: i ? `1px solid ${HAIRLINE}` : "none",
                 }}
               >
-                <div style={{ display: "flex", fontFamily: SERIF, fontSize: 54, lineHeight: 1 }}>{s.value}</div>
-                <div style={{ display: "flex", marginTop: 10, fontSize: 21, color: INK[3] }}>{s.label}</div>
+                <div style={{ display: "flex", fontSize: 21, color: INK[3] }}>{s.label}</div>
+                <div style={{ display: "flex", marginTop: 8, fontFamily: DISPLAY, fontSize: 54, lineHeight: 1, letterSpacing: "-0.03em" }}>{s.value}</div>
               </div>
             ))
           ) : (

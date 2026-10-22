@@ -32,8 +32,8 @@ const GLYPH: Record<ShareNetwork, string> = {
 
 /** The header's icon-button treatment (ThemeToggle in nav.tsx), at a 32px touch target on a phone. */
 const ITEM = cn(
-  "flex size-8 shrink-0 items-center justify-center rounded-control text-muted-foreground sm:size-7",
-  "transition-[background-color,color] duration-(--dur) ease-(--ease-out) hover:bg-secondary hover:text-foreground active:bg-foreground/[0.1]",
+  "flex size-8 shrink-0 items-center justify-center rounded-full bg-fill text-foreground",
+  "transition-[background-color,color] duration-(--dur) ease-(--ease-out) hover:bg-foreground/[0.1] active:bg-foreground/[0.16]",
   "outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
 );
 
@@ -102,8 +102,8 @@ export function ShareControl({ url, text, className }: { url: string; text: stri
   }
 
   return (
-    <div role="group" aria-label="Share this page" className={cn("relative flex items-center gap-0.5", className)}>
-      <span aria-hidden className="mr-1 text-xs text-muted-foreground">
+    <div role="group" aria-label="Share this page" className={cn("relative flex items-center gap-1.5", className)}>
+      <span aria-hidden className="mr-0.5 text-[13px] font-medium text-muted-foreground">
         Share
       </span>
       {canShare ? (
@@ -135,7 +135,7 @@ export function ShareControl({ url, text, className }: { url: string; text: stri
         role="status"
         aria-live="polite"
         className={cn(
-          "pointer-events-none absolute right-0 top-full z-20 mt-1.5 whitespace-nowrap rounded-control border border-border bg-popover px-2 py-1 text-[12px] font-medium text-ok shadow-popover",
+          "pointer-events-none absolute right-0 top-full z-20 mt-1.5 whitespace-nowrap rounded-full bg-popover px-3 py-1 text-[12px] font-medium text-ok shadow-popover",
           status ? "opacity-100" : "opacity-0"
         )}
       >

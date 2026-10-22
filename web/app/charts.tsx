@@ -51,22 +51,21 @@ export function StatTile({
   delta?: StatDelta;
 }) {
   const zero = isZeroFigure(value);
-  // Not a card: a figure under a hairline, the way a newspaper sets its
-  // numbers. A row of these is a fact strip; nothing has a box to compete
-  // with the section that follows. A zero figure is set in muted ink, so
-  // the facts that report something lead.
+  // A tile, the way Apple Health and Stocks set a number: a small grey
+  // label, a big confident figure, one grey line of context. A zero figure
+  // is set in muted ink, so the tiles that report something lead.
   return (
-    <div data-stat-tile className="viz-rise flex h-full min-w-0 flex-col border-t border-border pt-3">
+    <div data-stat-tile className="viz-rise flex h-full min-w-0 flex-col rounded-tile bg-card p-4 shadow-card sm:px-5 sm:pb-5 sm:pt-4">
       <div className="flex items-baseline justify-between gap-2">
-        <div className="truncate text-[12.5px] font-medium leading-5 text-ink-2">{label}</div>
+        <div className="truncate text-[13px] font-semibold leading-5 text-muted-foreground">{label}</div>
         {trend?.length && trendCaption ? (
           <div className="shrink-0 truncate text-[12px] leading-5 text-muted-foreground">{trendCaption}</div>
         ) : null}
       </div>
-      <div className={cn("mt-1.5 flex items-end justify-between gap-3", zero && "[&>svg]:opacity-60")}>
+      <div className={cn("mt-2.5 flex flex-wrap items-end justify-between gap-x-3 gap-y-2.5", zero && "[&>svg]:opacity-60")}>
         <div
           className={cn(
-            "figure text-[28px] leading-none sm:text-[34px]",
+            "figure text-[30px] leading-none sm:text-[36px]",
             zero ? "text-muted-foreground" : "text-foreground"
           )}
         >
@@ -76,9 +75,9 @@ export function StatTile({
           <Sparkbars values={trend} label={trendLabel ?? label} names={trendLabels} />
         ) : null}
       </div>
-      {hint ? <div className="mt-2 text-[12.5px] leading-snug text-muted-foreground">{hint}</div> : null}
+      {hint ? <div className="mt-auto pt-2.5 text-[13px] leading-snug text-muted-foreground">{hint}</div> : null}
       {delta ? (
-        <div className="tabular mt-1 text-[12.5px] leading-snug text-ink-2" title={delta.title}>
+        <div className="tabular mt-1 text-[13px] leading-snug text-ink-2" title={delta.title}>
           <span aria-hidden className="mr-1 text-[9px] text-muted-foreground">
             {delta.direction === "up" ? "▲" : delta.direction === "down" ? "▼" : "■"}
           </span>
@@ -106,7 +105,7 @@ function Figure({ value }: { value: string }) {
     <>
       {parts.map((p, i) =>
         i % 2 ? (
-          <span key={i} className="ml-[0.04em] text-[0.7em] tracking-normal text-muted-foreground">
+          <span key={i} className="ml-[0.05em] text-[0.62em] font-medium tracking-normal text-muted-foreground">
             {p}
           </span>
         ) : (
@@ -128,9 +127,9 @@ function Figure({ value }: { value: string }) {
  */
 function Sparkbars({ values, label, names }: { values: number[]; label: string; names?: string[] }) {
   const max = Math.max(...values, 1);
-  const w = 5;
-  const gap = 2;
-  const h = 26;
+  const w = 4;
+  const gap = 3;
+  const h = 28;
   const width = values.length * (w + gap) - gap;
   return (
     <svg
@@ -139,7 +138,7 @@ function Sparkbars({ values, label, names }: { values: number[]; label: string; 
       height={h}
       role="img"
       aria-label={`${label}: ${values.join(", ")}`}
-      className="mb-0.5 h-[26px] w-auto max-w-[45%] shrink-0 overflow-visible"
+      className="mb-1 h-[28px] w-auto shrink-0 overflow-visible sm:max-w-[45%]"
       preserveAspectRatio="none"
     >
       {values.map((v, i) => {
@@ -154,9 +153,9 @@ function Sparkbars({ values, label, names }: { values: number[]; label: string; 
               y={h - bh}
               width={w}
               height={bh}
-              rx={1}
+              rx={2}
               fill={current ? "var(--viz-seq)" : "var(--viz-axis)"}
-              opacity={current ? 1 : v > 0 ? 0.5 : 0.25}
+              opacity={current ? 1 : v > 0 ? 0.45 : 0.25}
               // The column under the pointer lifts to full ink; its count is in the title.
               className="viz-grow-y transition-opacity duration-(--dur) group-hover/spark:opacity-100 motion-reduce:transition-none"
               style={{ "--viz-i": i } as React.CSSProperties}
@@ -235,8 +234,8 @@ export function MagnitudeBars({
               <div
                 title={d.label}
                 className={cn(
-                  "truncate text-[13px] font-semibold leading-5 tracking-tight",
-                  !isName && "font-mono"
+                  "truncate text-[14px] leading-5 tracking-[-0.01em]",
+                  isName ? "font-medium" : "font-semibold"
                 )}
               >
                 {d.label}
@@ -248,7 +247,7 @@ export function MagnitudeBars({
               ) : null}
             </div>
             <div
-              className="relative h-2 rounded-[2px]"
+              className="relative h-2 rounded-full"
               style={{ background: "var(--viz-track)" }}
               role="img"
               aria-label={`${d.label}: ${d.valueLabel}`}
@@ -259,7 +258,7 @@ export function MagnitudeBars({
                 style={{
                   width: `${pct}%`,
                   background: "var(--viz-seq)",
-                  borderRadius: "1px 3px 3px 1px",
+                  borderRadius: "999px",
                   "--viz-i": i,
                 } as React.CSSProperties}
               />
@@ -271,7 +270,7 @@ export function MagnitudeBars({
                 lines={[d.detail, note]}
               />
             </div>
-            <div className="tabular whitespace-nowrap text-right text-[13px] font-medium text-foreground">
+            <div className="tabular whitespace-nowrap text-right text-[14px] font-semibold text-foreground">
               <Figure value={d.valueLabel} />
             </div>
           </div>
@@ -309,11 +308,11 @@ export const VIZ_FOCUS =
  * the 12px meta size.
  */
 export const TIP_SURFACE =
-  "rounded-control border border-border bg-popover px-2.5 py-1.5 text-left text-[12px] leading-snug text-popover-foreground shadow-popover";
+  "rounded-xl bg-popover px-3 py-2 text-left text-[12px] leading-snug text-popover-foreground shadow-popover";
 
 /** A bar row: the hit target is the whole row, washed on hover, with a visible focus ring. */
 export const BAR_ROW = cn(
-  "block rounded-control px-1.5 py-1 transition-colors duration-(--dur) ease-(--ease-out) motion-reduce:transition-none hover:bg-raised",
+  "block rounded-[10px] px-2 py-1.5 transition-colors duration-(--dur) ease-(--ease-out) motion-reduce:transition-none hover:bg-foreground/[0.04]",
   VIZ_FOCUS
 );
 
@@ -426,7 +425,7 @@ export function DivergingSplit({ data, unit }: { data: SplitDatum[]; unit: strin
       />
       <div className="relative mt-3">
         {/* Direction captions either side of the baseline, in words. */}
-        <div aria-hidden className={cn(rowCols, "px-1.5 pb-0.5")}>
+        <div aria-hidden className={cn(rowCols, "px-2 pb-0.5")}>
           <div />
           <div
             className="grid text-[12px] leading-5 text-muted-foreground"
@@ -452,7 +451,7 @@ export function DivergingSplit({ data, unit }: { data: SplitDatum[]; unit: strin
                   title={name}
                   className="flex min-w-0 flex-col @md:flex-row @md:items-baseline @md:gap-2"
                 >
-                  <span className="truncate font-mono text-[13px] font-semibold leading-5 tracking-tight @md:w-[3.75rem] @md:shrink-0">
+                  <span className="truncate text-[14px] font-semibold leading-5 tracking-[-0.01em] @md:w-[3.75rem] @md:shrink-0">
                     {d.label}
                   </span>
                   {d.sublabel ? (
@@ -510,7 +509,7 @@ export function DivergingSplit({ data, unit }: { data: SplitDatum[]; unit: strin
         {/* One continuous hairline baseline through every row. Drawn last so
             a row's hover wash never hides it; it sits in the axis track,
             clear of every bar. */}
-        <div aria-hidden className={cn(rowCols, "pointer-events-none absolute inset-0 px-1.5")}>
+        <div aria-hidden className={cn(rowCols, "pointer-events-none absolute inset-0 px-2")}>
           <div />
           <div className="grid" style={{ gridTemplateColumns: plotCols }}>
             <div />
@@ -539,7 +538,7 @@ function SplitBar({ value, pct, side, i }: { value: number; pct: number; side: "
         style={{
           background: buy ? "var(--viz-buy)" : "var(--viz-sell)",
           // Rounded data-end, square at the baseline.
-          borderRadius: buy ? "4px 1px 1px 4px" : "1px 4px 4px 1px",
+          borderRadius: buy ? "999px 2px 2px 999px" : "2px 999px 999px 2px",
           "--viz-i": i,
         } as React.CSSProperties}
       />
@@ -609,7 +608,7 @@ export function VolumeRange({
           {openEnded ? "open brackets at floor" : "midpoint"}
         </span>
       </AxisLabel>
-      <div className="relative h-3 rounded-[3px]" style={{ background: "var(--viz-track)" }}>
+      <div className="relative h-3 rounded-full" style={{ background: "var(--viz-track)" }}>
         {/* The disclosed band, floor to ceiling. An open-ended ceiling fades
             out to the edge instead of stopping at an invented bound. */}
         <div
@@ -700,11 +699,11 @@ export function Legend({
   note?: string;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs leading-4 text-muted-foreground">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] leading-4 text-muted-foreground">
       {items.map((i) => (
-        <span key={i.label} className="inline-flex items-center gap-1.5 text-ink-2">
-          {/* The key mirrors the mark: a short bar, not a dot. */}
-          <span aria-hidden className="h-2 w-3 shrink-0 rounded-[2px]" style={{ background: i.color }} />
+        <span key={i.label} className="inline-flex items-center gap-1.5 font-medium text-ink-2">
+          {/* The key mirrors the mark: a short rounded bar. */}
+          <span aria-hidden className="h-2 w-3.5 shrink-0 rounded-full" style={{ background: i.color }} />
           {i.label}
         </span>
       ))}
@@ -713,21 +712,20 @@ export function Legend({
   );
 }
 
-/** A quiet one-line state: muted text on a hairline, no box. */
+/** A quiet one-line state: muted text, no box of its own. */
 export function Empty({ children }: { children?: React.ReactNode }) {
   return (
-    <div className="max-w-[68ch] border-l-2 border-border py-1 pl-3 text-[13px] leading-relaxed text-muted-foreground">
+    <div className="max-w-[68ch] py-1 text-[14px] leading-relaxed text-muted-foreground">
       {children ?? "No data yet."}
     </div>
   );
 }
 
 /**
- * A section head, the way a paper sets one: a 1px ink rule across the
- * column, then the heading in the serif, sentence case. The rule — not a
- * box round the content — is what separates one section from the next.
- * `right` is muted meta (a window, a count) or a small control; `kicker`
- * is an optional eyebrow above the heading.
+ * A section head, the way Apple sets one over a group of tiles: a bold
+ * display-face heading on the canvas, sentence case, no rule — the tile
+ * under it is the container. `right` is muted meta (a window, a count) or
+ * a small control; `kicker` an optional grey line above the heading.
  */
 export function SectionTitle({
   children,
@@ -739,14 +737,14 @@ export function SectionTitle({
   kicker?: React.ReactNode;
 }) {
   return (
-    <div className="mb-4 border-t border-rule pt-2.5">
-      {kicker ? <div className="kicker mb-1">{kicker}</div> : null}
-      <div className="flex min-h-7 flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h2 className="font-serif text-[19px] font-semibold leading-snug tracking-[-0.008em] text-foreground sm:text-[21px]">
+    <div className="mb-3 sm:mb-4">
+      {kicker ? <div className="kicker mb-0.5">{kicker}</div> : null}
+      <div className="flex min-h-8 flex-wrap items-end justify-between gap-x-4 gap-y-2">
+        <h2 className="font-display text-[22px] font-bold leading-tight tracking-[-0.022em] text-foreground sm:text-[24px]">
           {children}
         </h2>
         {right ? (
-          <div className="flex min-w-0 items-center text-[12.5px] text-muted-foreground [&>span]:text-[12.5px]">
+          <div className="flex min-w-0 items-center text-[13px] text-muted-foreground [&>span]:text-[13px]">
             {right}
           </div>
         ) : null}
@@ -758,27 +756,25 @@ export function SectionTitle({
 /**
  * Where a section's content sits.
  *
- * - `open` (the default): no box. The content stands on the paper under its
- *   SectionTitle rule, aligned to the column — charts, lists and tables
- *   alike. This is most of the site.
- * - `panel`: the one contained surface — a hairline, a step lighter than
- *   the paper, 4px corners, no shadow. Reserve it for things that are
- *   genuinely a panel: a form, a self-contained figure that must read as
- *   one object, a grid of link cards.
+ * - `tile` (the default): the white (dark: iOS grey) rounded surface on the
+ *   canvas, 20px corners, a shadow you only notice when it is missing.
+ *   Charts, lists, tables and forms all sit in one.
+ * - `panel`: the same tile (kept as a name for forms and link cards).
+ * - `open`: no surface at all, for content that sits on the canvas.
  */
 export function Card({
   className,
   children,
-  variant = "open",
+  variant = "tile",
 }: {
   className?: string;
   children: React.ReactNode;
-  variant?: "open" | "panel";
+  variant?: "tile" | "open" | "panel";
 }) {
   return (
     <div
       className={cn(
-        variant === "panel" ? "rounded-card border border-border bg-card p-4 sm:p-5" : "min-w-0",
+        variant === "open" ? "min-w-0" : "min-w-0 rounded-tile bg-card p-4 shadow-card sm:p-6",
         className
       )}
     >
@@ -800,12 +796,12 @@ export function FactStrip({
   className?: string;
 }) {
   return (
-    <dl className={cn("flex flex-wrap items-baseline gap-x-6 gap-y-2 border-y border-border py-2.5", className)}>
+    <dl className={cn("flex flex-wrap items-baseline gap-x-7 gap-y-2", className)}>
       {items.map((it) => (
         <div key={it.label} className="flex items-baseline gap-1.5" title={it.title}>
           {/* dt first, as <dl> requires; the value is drawn first. */}
-          <dt className="order-2 text-[12.5px] text-muted-foreground">{it.label}</dt>
-          <dd className="figure order-1 text-[20px] leading-none text-foreground">
+          <dt className="order-2 text-[13px] text-muted-foreground">{it.label}</dt>
+          <dd className="figure order-1 text-[22px] leading-none text-foreground">
             <Figure value={it.value} />
           </dd>
         </div>

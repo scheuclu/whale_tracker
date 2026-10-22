@@ -3,21 +3,27 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ============================================================
-   FatCat Watch — design tokens, v2 (values and rationale: web/DESIGN.md).
+   FatCat Watch — design tokens, v3 (values and rationale: web/DESIGN.md).
 
-   An editorial data publication, not a dashboard: warm paper and ink,
-   hairline rules and whitespace instead of boxes, a serif voice for
-   headlines and hero figures, and one accent — the gold of the cat's bow
-   tie — used sparingly (the active section, kickers, focus, selection).
-   Blue and red are not accents: they are buy and sell. Dark mode is a deep
-   warm ink with its own steps, not an inversion.
+   Apple-like: a light-grey canvas with white content tiles (true black
+   with iOS system-grey tiles in dark mode), the system UI type stack so
+   Apple devices get SF Pro (Inter is the fallback elsewhere), big
+   confident numbers with small grey labels, grouped lists, a frosted
+   sticky nav. The interface is monochrome — graphite in light mode, white
+   in dark. Blue and red are not accents: they are buy and sell, and they
+   are the only saturated colours on the page.
    ============================================================ */
 
 @theme inline {
-  --font-sans: var(--font-sans);
-  --font-serif: var(--font-serif);
-  --font-mono: var(--font-mono);
-  --font-heading: var(--font-serif);
+  /* The system stack first, so macOS / iOS render SF Pro (its licence
+     forbids embedding it); Inter, self-hosted by next/font, everywhere
+     else. "SF Pro Display" for headlines and hero figures, "SF Pro Text"
+     for everything at reading size — BlinkMacSystemFont picks the optical
+     size by itself in Chrome on a Mac. */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", var(--font-inter), "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", var(--font-inter), "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
+  --font-heading: var(--font-display);
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -34,6 +40,8 @@
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-fill: var(--fill);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-gold: var(--gold);
@@ -50,143 +58,154 @@
   --color-error: var(--error);
   --color-error-soft: var(--error-soft);
 
-  /* Radius scale: nearly square. Nothing above 4px except fully round
-     pills and avatars; the stock rounded-xl…4xl utilities resolve to the
-     panel radius so an old class cannot bring back a bubbly card. */
-  --radius-sm: 2px;
-  --radius-md: 3px;
-  --radius-lg: 4px;
-  --radius-xl: 4px;
-  --radius-2xl: 4px;
-  --radius-3xl: 4px;
-  --radius-4xl: 4px;
-  --radius-chip: 3px;
-  --radius-control: 4px;
-  --radius-card: 4px;
+  /* Radius scale. Tiles are generous (20px), controls 12px, chips 6px;
+     pills, segmented tracks, avatars and buttons are fully round. */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-2xl: 18px;
+  --radius-3xl: 20px;
+  --radius-4xl: 24px;
+  --radius-chip: 6px;
+  --radius-control: 12px;
+  --radius-card: 20px;
+  --radius-tile: 20px;
 
-  /* Elevation: shadow-card is none (panels are drawn by a hairline);
-     shadow-popover is the one shadow on the site. */
+  /* Elevation: tiles are separated from the canvas by tone, with a shadow
+     you only notice when it is missing; the popover is the one real lift. */
   --shadow-card: var(--elev-card);
   --shadow-popover: var(--elev-popover);
+  --shadow-segment: var(--elev-segment);
 }
 
 :root {
-  --radius: 4px;
+  --radius: 12px;
 
-  /* Surfaces. The page is paper; content sits on it directly. --card is
-     the panel (a form, a popover-like box) a step lighter than the paper;
-     --field is a text input; --card-solid is whatever an opaque overlay
-     (a sticky table column, a scroll fade, a mark's surface ring) must
-     match — the paper, since tables and charts now sit on it. */
-  --background: #f7f4ed;
-  --card: #fcfbf7;
-  --raised: #efebe2;
-  --popover: #fffefa;
-  --field: #fffefa;
-  --card-solid: #f7f4ed;
+  /* Surfaces. The canvas is Apple's #f5f5f7; content sits on white tiles.
+     --card is the tile; --raised a pressed / hovered row inside a tile;
+     --fill the iOS tertiary system fill (search field, segmented track,
+     grey buttons); --card-solid what an opaque overlay must match — the
+     tile, since tables, lists and charts sit in one. */
+  --background: #f5f5f7;
+  --card: #ffffff;
+  --raised: #f2f2f4;
+  --popover: #ffffff;
+  --fill: rgba(118, 118, 128, 0.12);
+  --field: rgba(118, 118, 128, 0.12);
+  --card-solid: #ffffff;
 
-  /* Ink: foreground (primary), ink-2 (secondary), muted-foreground (tertiary). */
-  --foreground: #1a1915;
-  --card-foreground: #1a1915;
-  --popover-foreground: #1a1915;
-  --ink-2: #45423a;
-  --muted-foreground: #6a6558;
+  /* Text: label, secondary label, tertiary. --ink-3 (#86868b) is 3.6:1 on
+     white: large text and non-text marks only, never a sentence. */
+  --foreground: #1d1d1f;
+  --card-foreground: #1d1d1f;
+  --popover-foreground: #1d1d1f;
+  --ink-2: #424245;
+  --muted-foreground: #6e6e73;
+  --ink-3: #86868b;
 
-  /* Lines: hairline, emphasised hairline, and the ink rule over a section. */
-  --border: rgba(26, 25, 21, 0.13);
-  --border-strong: rgba(26, 25, 21, 0.24);
-  --rule: #1a1915;
-  --input: rgba(26, 25, 21, 0.22);
+  /* Separators: the inset row separator, a firmer edge, and the hairline
+     under the nav and over the footer (no ink rules in v3). */
+  --border: rgba(60, 60, 67, 0.16);
+  --border-strong: rgba(60, 60, 67, 0.3);
+  --rule: rgba(60, 60, 67, 0.16);
+  --input: rgba(60, 60, 67, 0.2);
 
-  /* The accent: bow-tie gold. --gold is the mark colour (bars, the active
-     section, the tie) and is never text on paper — it is 1.9:1 there.
-     --primary is the gold's text-safe ink (kickers, link hover). */
-  --gold: #e9a913;
-  --primary: #8a5d00;
-  --primary-foreground: #fffefa;
-  --accent: rgba(233, 169, 19, 0.16);
-  --accent-foreground: #5f4000;
-  --ring: #8a5d00;
+  /* The interactive accent is graphite — Apple's blue is taken: it means
+     "bought". --primary is the filled button, the selected state, a link's
+     hover ink. --gold survives only as the bow tie on the app icon. */
+  --primary: #1d1d1f;
+  --primary-foreground: #ffffff;
+  --accent: rgba(118, 118, 128, 0.16);
+  --accent-foreground: #1d1d1f;
+  --ring: #1d1d1f;
+  --gold: #f5b41b;
 
-  /* Neutral fills (chips, hovers). */
-  --secondary: rgba(26, 25, 21, 0.055);
-  --secondary-foreground: #2a2822;
-  --muted: rgba(26, 25, 21, 0.045);
+  --secondary: rgba(118, 118, 128, 0.12);
+  --secondary-foreground: #1d1d1f;
+  --muted: rgba(118, 118, 128, 0.1);
 
-  /* Status — pipeline and filing state, never buy/sell, never the accent.
-     Attention is a burnt orange so it does not read as the brand gold. */
-  --ok: #2a7049;
-  --ok-soft: rgba(42, 112, 73, 0.1);
+  /* Status — pipeline and filing state, never buy/sell, never the accent. */
+  --ok: #24744a;
+  --ok-soft: rgba(36, 116, 74, 0.1);
   --attention: #a34f0b;
   --attention-soft: rgba(163, 79, 11, 0.1);
-  /* Error is plum, not red: red is "sold". Validated against --viz-sell
-     (CVD ΔE 14.5 protan, normal-vision 17.5) and --viz-buy (15.1 / 22.5);
-     6.7:1 on the paper. Error marks also change shape (a diamond, an
-     outline), so the word is never the only thing apart from "Sell". */
+  /* Error is plum, not red: red is "sold". Re-validated on white (DESIGN.md). */
   --error: #8a3478;
   --error-soft: rgba(138, 52, 120, 0.09);
   --destructive: var(--error);
 
   /* Elevation. */
-  --elev-card: 0 0 #0000;
-  --elev-card-hover: 0 0 #0000;
-  --elev-popover: 0 0 0 1px rgba(26, 25, 21, 0.1), 0 10px 28px -10px rgba(26, 25, 21, 0.22);
+  --elev-card: 0 1px 2px rgba(0, 0, 0, 0.03), 0 4px 16px -8px rgba(0, 0, 0, 0.06);
+  --elev-card-hover: 0 2px 4px rgba(0, 0, 0, 0.04), 0 12px 28px -12px rgba(0, 0, 0, 0.14);
+  --elev-popover: 0 0 0 0.5px rgba(0, 0, 0, 0.08), 0 12px 32px -8px rgba(0, 0, 0, 0.18);
+  --elev-segment: 0 0 0 0.5px rgba(0, 0, 0, 0.04), 0 3px 8px rgba(0, 0, 0, 0.12), 0 3px 1px rgba(0, 0, 0, 0.04);
 
-  --scrollbar: rgba(26, 25, 21, 0.2);
-  --scrollbar-hover: rgba(26, 25, 21, 0.34);
-  --selection: rgba(251, 191, 36, 0.4);
+  /* The frosted nav: a translucent canvas, saturated and blurred. */
+  --nav-bg: rgba(250, 250, 252, 0.78);
+  --nav-bg-solid: #fafafc;
 
-  /* Motion. */
-  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-  --dur-fast: 120ms;
-  --dur: 160ms;
+  --scrollbar: rgba(0, 0, 0, 0.2);
+  --scrollbar-hover: rgba(0, 0, 0, 0.34);
+  --selection: rgba(0, 0, 0, 0.14);
+
+  /* Motion: quick and plain. */
+  --ease-out: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --dur-fast: 150ms;
+  --dur: 200ms;
 }
 
 .dark {
-  --background: #131311;
-  --card: #1b1a17;
-  --raised: #24231f;
-  --popover: #22211d;
-  --field: #1b1a17;
-  --card-solid: #131311;
+  /* True black, with the iOS elevated system greys for tiles. */
+  --background: #000000;
+  --card: #1c1c1e;
+  --raised: #2c2c2e;
+  --popover: #2c2c2e;
+  --fill: rgba(118, 118, 128, 0.24);
+  --field: rgba(118, 118, 128, 0.24);
+  --card-solid: #1c1c1e;
 
-  --foreground: #ede9df;
-  --card-foreground: #ede9df;
-  --popover-foreground: #ede9df;
-  --ink-2: #c5c0b4;
-  --muted-foreground: #9a9486;
+  --foreground: #f5f5f7;
+  --card-foreground: #f5f5f7;
+  --popover-foreground: #f5f5f7;
+  --ink-2: #d1d1d6;
+  --muted-foreground: #98989d;
+  --ink-3: #8e8e93;
 
-  --border: rgba(237, 233, 223, 0.12);
-  --border-strong: rgba(237, 233, 223, 0.22);
-  --rule: #ede9df;
-  --input: rgba(237, 233, 223, 0.2);
+  --border: rgba(84, 84, 88, 0.6);
+  --border-strong: rgba(120, 120, 128, 0.7);
+  --rule: rgba(84, 84, 88, 0.6);
+  --input: rgba(120, 120, 128, 0.5);
 
-  --gold: #f3c04f;
-  --primary: #f3c04f;
-  --primary-foreground: #1a1915;
-  --accent: rgba(243, 192, 79, 0.14);
-  --accent-foreground: #f6d58a;
-  --ring: #f3c04f;
+  --primary: #f5f5f7;
+  --primary-foreground: #000000;
+  --accent: rgba(118, 118, 128, 0.3);
+  --accent-foreground: #f5f5f7;
+  --ring: #f5f5f7;
+  --gold: #f7c544;
 
-  --secondary: rgba(237, 233, 223, 0.07);
-  --secondary-foreground: #e4e0d6;
-  --muted: rgba(237, 233, 223, 0.055);
+  --secondary: rgba(118, 118, 128, 0.24);
+  --secondary-foreground: #f5f5f7;
+  --muted: rgba(118, 118, 128, 0.2);
 
   --ok: #5bb585;
-  --ok-soft: rgba(91, 181, 133, 0.13);
+  --ok-soft: rgba(91, 181, 133, 0.14);
   --attention: #f0954a;
-  --attention-soft: rgba(240, 149, 74, 0.13);
-  /* vs sell: CVD ΔE 17.8 deutan, normal 19.1; vs buy 15.3 / 25.5; 9.9:1. */
+  --attention-soft: rgba(240, 149, 74, 0.14);
   --error: #eaa8e4;
-  --error-soft: rgba(234, 168, 228, 0.12);
+  --error-soft: rgba(234, 168, 228, 0.13);
 
   --elev-card: 0 0 #0000;
   --elev-card-hover: 0 0 #0000;
-  --elev-popover: 0 0 0 1px rgba(237, 233, 223, 0.12), 0 14px 36px -12px rgba(0, 0, 0, 0.7);
+  --elev-popover: 0 0 0 0.5px rgba(255, 255, 255, 0.1), 0 16px 40px -10px rgba(0, 0, 0, 0.8);
+  --elev-segment: 0 0 0 0.5px rgba(0, 0, 0, 0.04), 0 3px 8px rgba(0, 0, 0, 0.12), 0 3px 1px rgba(0, 0, 0, 0.04);
 
-  --scrollbar: rgba(237, 233, 223, 0.18);
-  --scrollbar-hover: rgba(237, 233, 223, 0.3);
-  --selection: rgba(243, 192, 79, 0.3);
+  --nav-bg: rgba(22, 22, 23, 0.74);
+  --nav-bg-solid: #161617;
+
+  --scrollbar: rgba(255, 255, 255, 0.2);
+  --scrollbar-hover: rgba(255, 255, 255, 0.32);
+  --selection: rgba(255, 255, 255, 0.24);
 }
 
 @layer base {
@@ -205,23 +224,18 @@
   }
   body {
     @apply bg-background text-foreground;
-    /* Inter's disambiguation set: a tailed l and a slashed-free, open 1 —
-       an "Il1" in a ticker or a name must not be a guess. */
-    font-feature-settings: "cv05", "cv08";
-  }
-  /* Serif faces take lining figures: oldstyle numerals in a $ figure read
-     as a typo. Optical size follows the font size (Newsreader's opsz). */
-  .font-serif {
-    font-variant-numeric: lining-nums;
-    font-optical-sizing: auto;
+    /* SF Pro Text tracks itself at reading sizes; Inter wants a hair less
+       space to sit as close to it. Harmless on SF (-0.08pt at 13pt). */
+    letter-spacing: -0.006em;
+    font-kerning: normal;
   }
 
   ::selection {
     background: var(--selection);
   }
 
-  /* One focus ring everywhere: 2px ochre (the accent's text-safe ink), offset from the element.
-     Components may restyle it; nothing may remove it. */
+  /* One focus ring everywhere: 2px graphite (white in dark mode), offset
+     off the element. Components may restyle it; nothing may remove it. */
   :focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
@@ -246,96 +260,96 @@
 }
 
 /* Page rhythm: the layout's <main> spaces each page's top-level sections
-   28px apart on a phone, 40px from 640px. Pages wrap their sections in a
+   32px apart on a phone, 48px from 640px. Pages wrap their sections in a
    `space-y-8` stack; this overrides its gap without touching the pages. */
 .page-flow > .space-y-8 > :not(:last-child) {
-  margin-block-end: 28px;
+  margin-block-end: 32px;
 }
 @media (min-width: 640px) {
   .page-flow > .space-y-8 > :not(:last-child) {
-    margin-block-end: 40px;
+    margin-block-end: 48px;
   }
 }
 
 @layer components {
-  /* The panel surface (the class name predates the flat theme): the one
-     contained box — a form, a list of links that is genuinely a set of
-     cards. A hairline, no shadow. Most content needs none of this: it
-     sits on the paper under a section rule (DESIGN.md, "Fewer boxes"). */
+  /* The tile: a white (iOS grey in dark) rounded surface on the canvas.
+     `Card` in charts.tsx renders it; this class is for markup that is not
+     a Card (a <details> panel, a link tile). */
+  .tile {
+    background: var(--card);
+    border-radius: var(--radius-tile);
+    box-shadow: var(--elev-card);
+  }
   .glass {
-    box-shadow: none;
+    box-shadow: var(--elev-card);
   }
 
-  /* Interactive item: a quiet wash and a firmer hairline. No travel, no
-     shadow — the page is paper, not a stack of cards. */
+  /* Interactive tile: lifts on hover — a deeper shadow, no travel. */
   .lift {
     transition:
-      border-color var(--dur) ease-out,
-      background-color var(--dur) ease-out;
+      box-shadow var(--dur) var(--ease-out),
+      background-color var(--dur) var(--ease-out);
   }
   .lift:hover {
-    border-color: var(--border-strong);
-    background-color: color-mix(in oklab, var(--foreground) 3.5%, var(--card));
+    box-shadow: var(--elev-card-hover);
   }
 
-  /* The brand mark's colours: the cat in ink on the paper (paper on ink in
-     dark mode), the tie in gold. No tile. app/brand.tsx. */
+  /* The brand glyph on the site: monochrome, the ink of the page. */
   .brand-mark {
     color: var(--foreground);
   }
 
-  /* Hairline divider that fades at both ends. */
   .rule-fade {
     height: 1px;
-    background: linear-gradient(90deg, transparent, var(--border) 12%, var(--border) 88%, transparent);
+    background: var(--border);
   }
 
   /* ------------------------------------------------------------------
-     Editorial type roles (DESIGN.md, "Type"). Utilities rather than
-     components so a page can set a kicker or a dek without importing
-     anything; PageHeader and SectionTitle use these.
+     Type roles (DESIGN.md, "Type"). Utilities rather than components so a
+     page can set an eyebrow or a subtitle without importing anything;
+     PageHeader and SectionTitle use these.
      ------------------------------------------------------------------ */
+  /* The eyebrow: a small semibold grey line above a large title. */
   .kicker {
     font-family: var(--font-sans);
-    font-size: 11.5px;
-    line-height: 16px;
+    font-size: 13px;
+    line-height: 18px;
     font-weight: 600;
-    letter-spacing: 0.085em;
-    text-transform: uppercase;
-    color: var(--primary);
+    letter-spacing: -0.003em;
+    color: var(--muted-foreground);
   }
+  /* Large title: SF Pro Display, bold, tight. */
   .display {
-    font-family: var(--font-serif);
-    font-weight: 500;
-    font-variant-numeric: lining-nums;
-    font-optical-sizing: auto;
-    letter-spacing: -0.012em;
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    font-variant-numeric: tabular-nums;
   }
+  /* Subtitle under a large title. */
   .dek {
-    font-family: var(--font-serif);
-    font-variant-numeric: lining-nums;
-    font-optical-sizing: auto;
-    color: var(--ink-2);
+    font-family: var(--font-sans);
+    font-weight: 400;
+    letter-spacing: -0.012em;
+    color: var(--muted-foreground);
   }
-  /* A serif figure: hero numbers and fact-strip values. */
+  /* A hero figure: display face, semibold, tabular, tight. */
   .figure {
-    font-family: var(--font-serif);
-    font-weight: 500;
-    font-variant-numeric: lining-nums tabular-nums;
-    font-optical-sizing: auto;
-    letter-spacing: -0.01em;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.022em;
   }
-  /* Text links in running copy: ink with a hairline underline that turns
-     gold on hover. */
+  /* Text links in running copy: ink with a hairline underline that firms
+     on hover. */
   .ink-link {
     text-decoration-line: underline;
     text-decoration-color: var(--border-strong);
     text-decoration-thickness: 1px;
     text-underline-offset: 3px;
-    transition: text-decoration-color var(--dur) ease-out, color var(--dur) ease-out;
+    transition: text-decoration-color var(--dur) var(--ease-out), color var(--dur) var(--ease-out);
   }
   .ink-link:hover {
-    text-decoration-color: var(--gold);
+    text-decoration-color: currentColor;
     color: var(--foreground);
   }
 
@@ -345,6 +359,33 @@
   }
   .scrollbar-none::-webkit-scrollbar {
     display: none;
+  }
+
+  /* ------------------------------------------------------------------
+     Grouped lists (iOS inset-grouped tables). Rows inside a tile are
+     separated by a hairline that starts at the row's text, not the tile's
+     edge: `.inset-rows` on the list, `--sep-inset` to move the start.
+     ------------------------------------------------------------------ */
+  .inset-rows > * {
+    position: relative;
+  }
+  .inset-rows > * + *::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: var(--sep-inset, 16px);
+    right: 0;
+    height: 1px;
+    transform: scaleY(0.5);
+    transform-origin: 0 0;
+    background: var(--border-strong);
+    pointer-events: none;
+  }
+  @media (max-resolution: 1dppx) {
+    .inset-rows > * + *::before {
+      transform: none;
+      background: var(--border);
+    }
   }
 
   /* ------------------------------------------------------------------
@@ -421,38 +462,36 @@
    Buy/sell is a POLARITY encoding, so it uses the validated diverging
    pair (blue <-> red) rather than the finance-convention green/red:
    green/red measures CVD ΔE 4.1 under deuteranopia — roughly 8% of men
-   could not tell a buy bar from a sell bar. Blue/red measures 23.8
-   (light surface) and 19.2 (dark). Direction is also always spelled out
-   in text, so colour never carries the meaning alone.
+   could not tell a buy bar from a sell bar. Direction is also always
+   spelled out in text, so colour never carries the meaning alone.
 
-   v2 surfaces (paper #f7f4ed, ink #131311), validated with the dataviz
+   v3 surfaces (white tile #ffffff, iOS grey tile #1c1c1e), dataviz
    validator, --pairs all over buy · sell · seq:
-     light  CVD ΔE 14.6 (seq/sell, deutan), normal-vision 21.6, seq 2.31:1
-            (WARN: relief by direct labels), buy/sell ≥ 3:1
-     dark   CVD ΔE 10.2, normal-vision 16.8, all ≥ 3:1; seq sits above the
-            categorical dark L band (0.752 > 0.67) — accepted: it is a
-            single-hue magnitude role, never a categorical slot.
+     light  CVD ΔE 14.2 (seq/sell, protan), normal-vision 27.7, all ≥ 3:1
+     dark   CVD ΔE 10.5 (seq/sell, deutan), normal-vision 17.9, all ≥ 3:1
+   buy/sell alone: 23.8 / 31.6 light, 19.2 / 29.0 dark — on the tiles and
+   on the canvases (#f5f5f7, #000) alike. The validator's lightness-band
+   and chroma-floor checks fail for seq by design: it is a neutral
+   single-series magnitude role, never a categorical slot.
    ------------------------------------------------------------------ */
 :root {
   --viz-buy: #2a78d6;
   --viz-sell: #d03b3b;
-  /* Sequential magnitude, one hue: the bow-tie gold, stepped so it stays
-     clear of the sell red under deuteranopia (CVD ΔE 14.6). Below 3:1 on
-     the paper (2.31), so every gold mark carries its value in text — the
-     relief rule — which MagnitudeBars, VolumeRange and ColumnSeries do. */
-  --viz-seq: #cf9a1c;
-  --viz-track: rgba(26, 25, 21, 0.07);
-  --viz-grid: #e4dfd3;
-  --viz-axis: #8a8578;
+  /* Single-series magnitude: graphite, like the rest of the interface.
+     11:1 on white, so a bar needs no relief label (they still carry one). */
+  --viz-seq: #3a3a3c;
+  --viz-track: rgba(118, 118, 128, 0.12);
+  --viz-grid: #e8e8ed;
+  --viz-axis: #8e8e93;
 }
 
 .dark {
   --viz-buy: #3987e5;
   --viz-sell: #e66767;
-  --viz-seq: #d9a53a;
-  --viz-track: rgba(237, 233, 223, 0.08);
-  --viz-grid: #2b2a26;
-  --viz-axis: #8a8578;
+  --viz-seq: #aeaeb2;
+  --viz-track: rgba(118, 118, 128, 0.24);
+  --viz-grid: #2c2c2e;
+  --viz-axis: #8e8e93;
 }
 
 /* ------------------------------------------------------------------
@@ -466,8 +505,8 @@
    prefers-reduced-motion — the chart is simply there.
    ------------------------------------------------------------------ */
 :root {
-  --viz-ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --viz-dur: 640ms;
+  --viz-ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --viz-dur: 480ms;
 }
 
 @keyframes viz-grow-x {
@@ -559,16 +598,32 @@
    show, they just do not animate.
    ------------------------------------------------------------------ */
 
-/* Sticky masthead (app/layout.tsx). Solid paper, an ink rule beneath — no
-   glass, no shadow. On a phone the masthead is two rows and only the
-   sections row stays: the header sticks at minus the brand row's height
-   (h-12), so the brand scrolls away with the page and the five sections
-   park at the top. No script, no layout jump. app/sticky-offset.tsx
-   reads the part that stays. */
+/* The nav bar (app/layout.tsx): frosted, translucent and sticky, a
+   hairline beneath — apple.com's local nav. Content scrolling under it
+   shows through, blurred and saturated. Opaque where backdrop-filter is
+   missing, or when the reader asks for less transparency. On a phone the
+   bar is two rows and only the sections row stays: the header sticks at
+   minus the brand row's height (h-12), so the brand scrolls away with the
+   page. app/sticky-offset.tsx reads the part that stays. */
 .site-header {
   position: sticky;
   top: 0;
-  background-color: var(--background);
+  background-color: var(--nav-bg-solid);
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .site-header {
+    background-color: var(--nav-bg);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    backdrop-filter: saturate(180%) blur(20px);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .site-header {
+    background-color: var(--nav-bg-solid);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
 }
 @media (max-width: 639px) {
   .site-header {
@@ -579,7 +634,7 @@
   /* New page content (or its skeleton) eases in when it replaces the old.
      `backwards` so no transform is left on the page once it has played. */
   .site-header + main > * {
-    animation: page-in 260ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+    animation: page-in 200ms cubic-bezier(0.25, 0.1, 0.25, 1) backwards;
   }
   /* Not on the document's first paint (header-shell.tsx). Zero duration
      rather than no animation: the name stays the same, so lifting this
@@ -725,7 +780,9 @@
   background: color-mix(in srgb, var(--card-solid) 95.5%, var(--foreground));
 }
 .data-table .data-row:hover .row-name {
-  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--border-strong);
 }
 
 /* ------------------------------------------------------------------
@@ -812,7 +869,7 @@
    Home feed timeline (app/feed-list.tsx, app/bracket-glyph.tsx).
 
    --viz-rung-*: the bracket ladder. Neutral ink, because blue<->red is
-   reserved for buy/sell and gold is the magnitude/accent hue. below/on
+   reserved for buy/sell. below/on
    validated as a two-step ordinal ramp (dataviz validate_palette.js
    --ordinal: monotone L, dL >= 0.06, light end >= 2:1 on the paper) in both
    modes. A transcribed row is not a colour any more: its rungs are drawn
@@ -821,16 +878,16 @@
    --viz-rung-off is a track, not a data mark.
    ------------------------------------------------------------------ */
 :root {
-  --viz-rung-off: #e4dfd3;
-  --viz-rung-below: #a29c8d;
-  --viz-rung-on: #3b3830;
+  --viz-rung-off: #e8e8ed;
+  --viz-rung-below: #aeaeb2;
+  --viz-rung-on: #1d1d1f;
   --feed-hover: color-mix(in oklab, var(--foreground) 4%, transparent);
 }
 
 .dark {
-  --viz-rung-off: #2a2925;
-  --viz-rung-below: #6a655b;
-  --viz-rung-on: #ece8df;
+  --viz-rung-off: #3a3a3c;
+  --viz-rung-below: #636366;
+  --viz-rung-on: #f5f5f7;
   --feed-hover: color-mix(in oklab, var(--foreground) 6%, transparent);
 }
 
@@ -839,7 +896,7 @@
    scrolling underneath must not read through the label. */
 .feed-day-head {
   top: var(--sticky-top, 7rem);
-  background: var(--card-solid);
+  background: var(--background);
 }
 
 /* One trade: two lines on a phone, one line from 640px. On a phone the
@@ -869,7 +926,7 @@
 @media (min-width: 1024px) {
   .feed-member {
     position: sticky;
-    top: calc(var(--sticky-top, 7rem) + 2.5rem);
+    top: calc(var(--sticky-top, 7rem) + 3rem);
   }
 }
 
@@ -881,23 +938,23 @@
    overlay (::after) so it stays crisp on top of the photo too.
    ------------------------------------------------------------------ */
 .member-avatar {
-  background: #e7e2d6;
-  color: #5c574b;
+  background: #e8e8ed;
+  color: #6e6e73;
 }
 .dark .member-avatar {
-  background: #2a2925;
-  color: #b3ad9f;
+  background: #3a3a3c;
+  color: #aeaeb2;
 }
 .member-avatar::after {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  box-shadow: inset 0 0 0 1px rgba(26, 25, 21, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
   pointer-events: none;
 }
 .dark .member-avatar::after {
-  box-shadow: inset 0 0 0 1px rgba(237, 233, 223, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
 /* ------------------------------------------------------------------
@@ -993,21 +1050,21 @@
 /* ------------------------------------------------------------------
    Price overlay (app/price-overlay-chart.tsx). The close is a neutral
    ink line — blue<->red is reserved for buy/sell — and the "vs SPY"
-   benchmark a recessive warm gray: the emphasis form (one ink, one gray),
+   benchmark a recessive gray: the emphasis form (one ink, one gray),
    so the categorical lightness/chroma bands do not apply. Measured with
-   the dataviz validator against the v2 paper, all pairs with the buy/sell
-   pair: light worst CVD ΔE 8.3 (bench/sell, deutan), normal-vision 18.5,
-   contrast >= 3:1; dark worst CVD ΔE 8.8 (bench/sell, protan),
-   normal-vision 20.8, contrast >= 3:1. Cluster washes are the buy/sell
+   the dataviz validator against the v3 tiles, all pairs with the buy/sell
+   pair: light worst CVD ΔE 11.6 (bench/sell, deutan), normal-vision 17.3,
+   contrast >= 3:1; dark worst CVD ΔE 10.5 (bench/sell, deutan),
+   normal-vision 17.9, contrast >= 3:1. Cluster washes are the buy/sell
    hues at ~10%, the area-fill spec.
    ------------------------------------------------------------------ */
 :root {
-  --viz-price: #3b3830;
-  --viz-bench: #8e887b;
+  --viz-price: #1d1d1f;
+  --viz-bench: #8e8e93;
 }
 .dark {
-  --viz-price: #ece8df;
-  --viz-bench: #6a665d;
+  --viz-price: #f5f5f7;
+  --viz-bench: #aeaeb2;
 }
 .po-wash-buy {
   fill: var(--viz-buy);
@@ -1047,5 +1104,5 @@
 }
 .po-plot:focus-visible {
   box-shadow: 0 0 0 2px var(--card-solid), 0 0 0 4px var(--ring);
-  border-radius: 8px;
+  border-radius: 12px;
 }

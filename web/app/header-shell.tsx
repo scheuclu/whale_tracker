@@ -29,7 +29,7 @@ export function HeaderShell({ children }: { children: React.ReactNode }) {
   }, [firstLoad]);
 
   return (
-    <header data-first-load={firstLoad ? "" : undefined} className="site-header z-30 border-b border-rule">
+    <header data-first-load={firstLoad ? "" : undefined} className="site-header z-30">
       {children}
     </header>
   );

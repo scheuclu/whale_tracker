@@ -24,16 +24,17 @@ const TABS = [
 /**
  * Five short words fit a 320px phone on one line, so the strip never
  * scrolls: spread edge to edge on a phone, set left from 640px, inline with
- * the brand from 1024px. The active section is marked three ways — ink
- * text, a gold bar standing on the masthead's rule, and `aria-current`.
+ * the brand from 1024px. Small medium-weight words, apple.com's nav; the
+ * active section sits in a grey capsule (the Apple TV / Music top-tab
+ * pattern) and carries `aria-current`. No colour: blue means "bought".
  */
 export function Tabs({ className }: { className?: string }) {
   const pathname = usePathname();
   return (
-    // Below 360px the words drop to 13px and lose a little padding, so all five
-    // fit a 320px phone (e2e checks 320 and 390 for sideways scroll).
+    // Below 360px the capsules lose a little padding, so all five fit a
+    // 320px phone (e2e checks 320 and 390 for sideways scroll).
     <nav aria-label="Sections" className={cn("min-w-0", className)}>
-      <ul className="-mx-1 flex items-stretch justify-between sm:-mx-2 sm:justify-start sm:gap-1">
+      <ul className="-mx-1.5 flex items-stretch justify-between sm:-mx-2.5 sm:justify-start sm:gap-0.5 lg:mx-0">
         {TABS.map(({ href, label }) => {
           // A member's page lives at /members/<slug> but belongs to Members.
           const active =
@@ -46,21 +47,19 @@ export function Tabs({ className }: { className?: string }) {
                 href={href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "group/tab relative flex h-10 items-center whitespace-nowrap px-0.5 text-[13px] font-medium outline-none min-[360px]:text-[14px] sm:h-11 sm:px-1 lg:h-[60px]",
+                  "group/tab flex h-11 items-center whitespace-nowrap text-[13px] font-medium tracking-[-0.01em] outline-none lg:h-[52px]",
                   active ? "text-foreground" : "text-ink-2 hover:text-foreground"
                 )}
               >
-                <span className="rounded-control px-0.5 py-1 min-[360px]:px-1 group-focus-visible/tab:outline-solid group-focus-visible/tab:outline-2 group-focus-visible/tab:outline-ring">
+                <span
+                  className={cn(
+                    "rounded-full px-[7px] py-[5px] transition-colors duration-(--dur) ease-(--ease-out) min-[360px]:px-2.5",
+                    "group-focus-visible/tab:outline-solid group-focus-visible/tab:outline-2 group-focus-visible/tab:outline-ring",
+                    active ? "bg-fill" : "group-hover/tab:bg-foreground/[0.04]"
+                  )}
+                >
                   {label}
                 </span>
-                {/* Stands on the masthead's ink rule (the header's border). */}
-                <span
-                  aria-hidden
-                  className={cn(
-                    "absolute inset-x-1 -bottom-px h-[3px] transition-opacity duration-150 sm:inset-x-2",
-                    active ? "bg-gold opacity-100" : "bg-foreground/25 opacity-0 group-hover/tab:opacity-100"
-                  )}
-                />
               </Link>
             </li>
           );
@@ -71,8 +70,8 @@ export function Tabs({ className }: { className?: string }) {
 }
 
 const ICON_BUTTON = cn(
-  "group flex size-8 shrink-0 items-center justify-center rounded-control text-ink-2",
-  "transition-[background-color,color] duration-(--dur) ease-(--ease-out) hover:bg-secondary hover:text-foreground active:bg-foreground/[0.1]",
+  "group flex size-8 shrink-0 items-center justify-center rounded-full text-ink-2",
+  "transition-[background-color,color] duration-(--dur) ease-(--ease-out) hover:bg-fill hover:text-foreground active:bg-foreground/[0.12]",
   "outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
 );
 
@@ -137,27 +136,29 @@ export function SearchForm({ className }: { className?: string }) {
   }, []);
 
   return (
-    <form method="get" action="/search" role="search" className={cn("relative flex items-center rounded-control", className)}>
-      <Search className="pointer-events-none absolute left-2.5 size-3.5 text-muted-foreground" aria-hidden />
+    // The iOS search field: a grey filled capsule-rect, magnifier, no border.
+    <form method="get" action="/search" role="search" className={cn("relative flex items-center rounded-[10px]", className)}>
+      <Search className="pointer-events-none absolute left-2.5 size-[15px] text-muted-foreground" strokeWidth={2.25} aria-hidden />
       <input
         ref={input}
         type="search"
         name="q"
         maxLength={80}
-        placeholder="Search members, tickers, issuers"
+        placeholder="Search"
         aria-label="Search members, tickers and insider issuers"
+        title="Search members, tickers and insider issuers"
         aria-keyshortcuts={hint ? "Meta+K Control+K /" : undefined}
         className={cn(
-          "peer h-8 w-full rounded-control border border-input bg-[var(--field)] pl-8 pr-14 text-[13px] text-foreground",
-          "transition-[border-color,background-color] duration-(--dur) ease-(--ease-out) [&::-webkit-search-cancel-button]:hidden",
-          "placeholder:text-muted-foreground hover:border-border-strong focus:border-ring"
+          "peer h-8 w-full rounded-[10px] border-0 bg-fill pl-8 pr-12 text-[13px] text-foreground outline-none",
+          "transition-[background-color] duration-(--dur) ease-(--ease-out) [&::-webkit-search-cancel-button]:hidden",
+          "placeholder:text-muted-foreground hover:bg-foreground/[0.09] focus:bg-foreground/[0.09]"
         )}
       />
       {hint ? (
         <kbd
           aria-hidden
           className={cn(
-            "pointer-events-none absolute right-2 hidden h-5 items-center rounded-chip border border-border px-1.5",
+            "pointer-events-none absolute right-2 hidden h-5 items-center rounded-md bg-card/70 px-1.5 shadow-[0_0_0_0.5px_var(--border)]",
             "font-sans text-[10.5px] font-medium text-muted-foreground sm:inline-flex",
             "peer-focus:opacity-0 peer-[:not(:placeholder-shown)]:opacity-0"
           )}

@@ -86,7 +86,7 @@ export function TileSkeleton({
   wrap?: boolean;
 }) {
   return (
-    <div className="flex h-full flex-col border-t border-border pt-3">
+    <div className="flex h-full flex-col rounded-tile bg-card p-4 shadow-card sm:px-5 sm:pb-5 sm:pt-4">
       <Line h="h-5" bone="h-3 w-16" />
       <div className="mt-1.5 flex items-end justify-between gap-3">
         <Bone className="h-7 w-16 sm:h-[34px] sm:w-24" />
@@ -117,7 +117,7 @@ export function TilesSkeleton({
   wrap?: boolean;
 }) {
   return (
-    <section className={cn("grid grid-cols-2 gap-3", cols)}>
+    <section className={cn("grid grid-cols-2 gap-3 sm:gap-4", cols)}>
       {Array.from({ length: count }, (_, i) => (
         <TileSkeleton key={i} tall={tall && i === 0} trend={trend && (i === 0 || i === count - 1)} wrap={wrap} />
       ))}
@@ -125,10 +125,10 @@ export function TilesSkeleton({
   );
 }
 
-/** `SectionTitle` (charts.tsx): the ink rule, the serif heading, its meta on the right. */
+/** `SectionTitle` (charts.tsx): the bold heading on the canvas, its meta on the right. */
 export function SectionTitleSkeleton({ width = "w-32", right = false }: { width?: string; right?: boolean }) {
   return (
-    <div className="mb-4 border-t border-rule pt-2.5">
+    <div className="mb-3 sm:mb-4">
       <div className="flex min-h-7 items-center justify-between gap-x-4">
         <Bone className={cn("h-4", width)} />
         {right ? <Bone className="h-2.5 w-24" /> : null}
@@ -241,10 +241,10 @@ export function TableSkeleton({ rows = 8, cols = 6 }: { rows?: number; cols?: nu
       />
     ));
   return (
-    <Card className="-mx-4 border-b border-border sm:mx-0">
-      <div className="flex h-10 items-center gap-6 border-b border-border px-4 sm:px-0">{cells(-1)}</div>
+    <Card className="p-0 sm:p-0">
+      <div className="flex h-10 items-center gap-6 border-b border-border px-4">{cells(-1)}</div>
       {Array.from({ length: rows }, (_, r) => (
-        <div key={r} className="flex h-11 items-center gap-6 border-b border-border/60 px-4 last:border-0 sm:px-0">
+        <div key={r} className="flex h-11 items-center gap-6 border-b border-border/60 px-4 last:border-0">
           {cells(r)}
         </div>
       ))}
@@ -258,8 +258,8 @@ export function TableSkeleton({ rows = 8, cols = 6 }: { rows?: number; cols?: nu
  */
 export function FeedSkeleton({ days = 4 }: { days?: number }) {
   return (
-    <div className="-mx-4 border-b border-border sm:mx-0">
-      <div className="flex h-[55px] items-center gap-3 border-b border-border px-3 sm:px-4">
+    <div>
+      <div className="flex h-[55px] items-center gap-3">
         <Bone className="h-7 w-44 rounded-lg" />
         <Bone className="hidden h-7 w-16 rounded-full sm:block" />
         <Bone className="hidden h-2.5 w-96 max-w-[40%] md:block" />
@@ -267,15 +267,16 @@ export function FeedSkeleton({ days = 4 }: { days?: number }) {
         <Bone className="hidden h-3 w-28 md:block" />
       </div>
       {Array.from({ length: days }, (_, d) => (
-        <div key={d} className="border-b border-border last:border-0">
-          <div className="flex h-[42px] items-center gap-3 border-b border-border px-3 sm:px-4">
+        <div key={d}>
+          <div className="flex h-12 items-end gap-3 px-1 pb-2.5">
             <Bone className="h-3 w-24" />
             <Bone className="h-2.5 w-10" />
             <div className="flex-1" />
             <Bone className="h-2.5 w-24" />
           </div>
+          <div className="tile inset-rows mb-2 [--sep-inset:3.25rem]">
           {Array.from({ length: d % 2 ? 2 : 1 }, (_, b) => (
-            <div key={b} className="border-b border-border/60 last:border-0 lg:grid lg:grid-cols-[15rem_minmax(0,1fr)]">
+            <div key={b} className="lg:grid lg:grid-cols-[15rem_minmax(0,1fr)]">
               <div className="space-y-1.5 px-3 pt-2 sm:px-4 lg:py-2.5 lg:pr-2">
                 <div className="flex items-center gap-1.5">
                   <Bone className="size-5 rounded" />
@@ -297,6 +298,7 @@ export function FeedSkeleton({ days = 4 }: { days?: number }) {
               </div>
             </div>
           ))}
+          </div>
         </div>
       ))}
     </div>
@@ -324,9 +326,9 @@ export function FiltersSkeleton({ fields = 7 }: { fields?: number }) {
 /** One `Card` per trade (ticker and member pages): pill, chips, amount, member; date at the end. */
 export function TradeRowsSkeleton({ rows = 6 }: { rows?: number }) {
   return (
-    <div className="-mx-4 divide-y divide-border border-y border-border sm:mx-0">
+    <div className="tile inset-rows py-1">
       {Array.from({ length: rows }, (_, i) => (
-        <Card key={i} className="px-3 py-2.5 sm:px-4">
+        <Card key={i} variant="open" className="px-3 py-2.5 sm:px-4">
           <div className="flex h-6 items-center gap-3">
             <Bone className="h-5 w-12 rounded-full" />
             <Bone className="h-3.5 w-24" />

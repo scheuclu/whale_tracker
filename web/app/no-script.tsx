@@ -34,16 +34,16 @@ body > footer { order: 1; }
 body > div[hidden][id^="S:"] {
   display: block !important;
   width: 100%;
-  max-width: 72rem;
+  max-width: 67.5rem;
   margin-inline: auto;
-  padding: 1.75rem 1rem 0;
+  padding: 1.5rem 1rem 0;
 }
 body > div[hidden][id^="S:"]:has(> template[id^="B:"]) { padding: 0; }
 body > div[hidden][id^="S:"]:last-of-type { padding-bottom: 5rem; }
-body > div[id^="S:"] > .space-y-8 > :not(:last-child) { margin-block-end: 28px; }
+body > div[id^="S:"] > .space-y-8 > :not(:last-child) { margin-block-end: 32px; }
 @media (min-width: 640px) {
-  body > div[hidden][id^="S:"] { padding-inline: 1.5rem; padding-top: 2.5rem; }
-  body > div[id^="S:"] > .space-y-8 > :not(:last-child) { margin-block-end: 40px; }
+  body > div[hidden][id^="S:"] { padding-inline: 1.5rem; padding-top: 3rem; }
+  body > div[id^="S:"] > .space-y-8 > :not(:last-child) { margin-block-end: 48px; }
 }
 }
 `;

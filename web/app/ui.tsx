@@ -50,13 +50,11 @@ export function ResponsiveTable({
   /** Let cells wrap (a column of free text) instead of extending the scroll. */
   wrap?: boolean;
 }) {
-  // Open, not boxed: the table stands on the paper under its section rule.
-  // From 640px it is flush with the column — the outer cells lose their
-  // inset (globals.css, .table-open) so the first column meets the title's
-  // edge. On a phone it runs edge to edge with the gutter as the inset,
-  // which is what a sideways-scrolling table wants.
+  // In a tile, like an iOS grouped table: the cells keep a 16px inset from
+  // the tile's edge, and the tile clips (overflow: clip, not hidden, so a
+  // sticky header can still reach the page) to its rounded corners.
   return (
-    <Card className={cn("table-open -mx-4 border-b border-border sm:mx-0", className)}>
+    <Card className={cn("overflow-clip p-0 sm:p-0", className)}>
       <ScrollX className={wrap ? undefined : "whitespace-nowrap"} stickyFirstColumn={stickyFirstColumn}>
         {children}
       </ScrollX>
@@ -89,8 +87,8 @@ export function ScrollRow({ children, className }: { children: React.ReactNode; 
    never the only carrier: every badge spells its meaning in words.
    ------------------------------------------------------------------ */
 
-const CHIP = "inline-flex h-5 shrink-0 align-middle items-center gap-1 whitespace-nowrap rounded-chip px-1.5 text-[11px] leading-none";
-const NEUTRAL = "bg-muted text-muted-foreground";
+const CHIP = "inline-flex h-[22px] shrink-0 align-middle items-center gap-1 whitespace-nowrap rounded-chip px-2 text-[12px] leading-none tracking-[-0.005em]";
+const NEUTRAL = "bg-fill text-ink-2";
 const HAIRLINE = "ring-1 ring-inset ring-border";
 const AMBER = "bg-attention-soft text-attention";
 /** A transcribed (scanned) row: neutral and dashed — provisional, not a colour. */
@@ -117,7 +115,7 @@ export function Tag({
         CHIP,
         variant === "soft" && NEUTRAL,
         variant === "outline" && cn(HAIRLINE, "text-muted-foreground"),
-        variant === "mono" && cn(HAIRLINE, "bg-muted font-mono font-medium tracking-tight text-ink-2"),
+        variant === "mono" && "bg-fill font-medium text-ink-2 tabular",
         className
       )}
       title={title}
@@ -149,7 +147,7 @@ export function ActionBadge({ action }: { action: string }) {
   const t = ACTION_TONE[action] ?? ACTION_TONE.exchange;
   const Glyph = t.glyph;
   return (
-    <span className={cn(CHIP, "gap-0.5 pl-1 pr-1.5 font-medium", t.cls)}>
+    <span className={cn(CHIP, "gap-0.5 pl-1.5 pr-2 font-semibold", t.cls)}>
       <Glyph className="size-3 shrink-0" strokeWidth={2.25} aria-hidden />
       {ACTION_LABEL[action] ?? action}
     </span>
@@ -189,7 +187,7 @@ export function Pill({ tone, dot, children }: { tone: string; dot: string; child
   return (
     <span
       className={cn(
-        "inline-flex h-5 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full align-middle px-2 text-[11px] font-medium leading-none",
+        "inline-flex h-[22px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full align-middle px-2.5 text-[12px] font-medium leading-none",
         tone
       )}
     >
@@ -220,9 +218,8 @@ export function PartyBadge({ party, full = false }: { party: string | null; full
     <span
       className={cn(
         CHIP,
-        HAIRLINE,
-        "justify-center bg-muted font-semibold text-ink-2",
-        full ? "px-1.5" : "w-5 px-0 text-[10.5px]"
+        "justify-center bg-fill font-semibold text-ink-2",
+        full ? "px-2" : "w-[22px] rounded-full px-0 text-[11px]"
       )}
       title={label}
     >
@@ -256,11 +253,10 @@ export function TickerChip({
       href={href ?? tickerHref(ticker)}
       className={cn(
         CHIP,
-        HAIRLINE,
         FOCUS_RING,
-        "bg-transparent px-1.5 font-mono text-[11.5px] font-semibold tracking-tight text-foreground",
-        "transition-[background-color,box-shadow,color] duration-(--dur) ease-(--ease-out)",
-        "hover:bg-accent hover:text-accent-foreground hover:ring-gold/60 active:bg-gold/25"
+        "bg-fill px-2 text-[12.5px] font-semibold tracking-[0.005em] text-foreground",
+        "transition-[background-color,color] duration-(--dur) ease-(--ease-out)",
+        "hover:bg-accent active:bg-foreground/[0.2]"
       )}
     >
       {ticker}
@@ -527,47 +523,52 @@ export function Amount({
 }
 
 /* ------------------------------------------------------------------
-   Controls. One segmented control, one button, one field, at two sizes
-   that share a radius (8px) and a focus ring.
+   Controls, iOS-style. Buttons are capsules: a grey fill for the
+   secondary, graphite for the one primary (white in dark mode) — never
+   blue, which means "bought". Fields are grey filled rounded rects (12px),
+   no border. The segmented control is a grey track with the selected
+   option raised as a white chip.
    ------------------------------------------------------------------ */
 
-/** A secondary button / link-button: hairline, soft hover, pressed tint. */
+/** A secondary button / link-button: a grey capsule. */
 export const BUTTON = cn(
-  "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-control border border-border",
-  "bg-[var(--field)] px-3 text-xs font-medium text-ink-2",
-  "transition-[background-color,border-color,color] duration-(--dur) ease-(--ease-out)",
-  "hover:border-border-strong hover:bg-raised hover:text-foreground active:bg-secondary",
+  "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full",
+  "bg-fill px-3.5 text-[13px] font-medium text-foreground",
+  "transition-[background-color,color] duration-(--dur) ease-(--ease-out)",
+  "hover:bg-foreground/[0.1] active:bg-foreground/[0.16]",
   FOCUS_RING
 );
-/** The one filled button in a form: its submit. Ink, not the accent — gold is never a button. */
+/** The one filled button in a form: its submit. A graphite capsule. */
 export const BUTTON_PRIMARY = cn(
-  "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-control bg-foreground px-3.5",
-  "text-xs font-semibold text-background",
-  "transition-[background-color] duration-(--dur) ease-(--ease-out) hover:bg-foreground/85 active:bg-foreground/75",
+  "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-primary px-4",
+  "text-[13px] font-semibold text-primary-foreground",
+  "transition-[background-color,opacity] duration-(--dur) ease-(--ease-out) hover:opacity-85 active:opacity-75",
   FOCUS_RING
 );
 
 /** Text inputs and selects: one height, radius, hover and focus treatment. */
 export const FIELD = cn(
-  "h-8 w-full min-w-0 rounded-control border border-input bg-[var(--field)] px-2.5 text-[13px] text-foreground",
-  "transition-[border-color,box-shadow] duration-(--dur) ease-(--ease-out) dark:[color-scheme:dark]",
-  // Focus keeps the base 2px ring (offset 2px); the border firms to match it.
-  "hover:border-border-strong focus:border-ring",
+  "h-9 w-full min-w-0 rounded-control border-0 bg-[var(--field)] px-3 text-[14px] text-foreground",
+  "transition-[background-color,box-shadow] duration-(--dur) ease-(--ease-out) dark:[color-scheme:dark]",
+  "hover:bg-foreground/[0.09]",
   "placeholder:text-muted-foreground"
 );
 
 /** One option of a segmented control (see `Segmented`). */
 export function segmentClass(active: boolean) {
   return cn(
-    "inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-chip px-2.5 text-xs font-medium",
+    "inline-flex h-7 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[7px] px-3 text-[13px] font-medium",
     "transition-[background-color,color,box-shadow] duration-(--dur) ease-(--ease-out)",
     FOCUS_RING,
     "focus-visible:outline-offset-1",
     active
-      ? "bg-foreground text-background"
-      : "text-ink-2 hover:bg-secondary hover:text-foreground active:bg-foreground/[0.08]"
+      ? "bg-card text-foreground shadow-segment dark:bg-[#636366]"
+      : "text-ink-2 hover:text-foreground active:bg-foreground/[0.06]"
   );
 }
+
+/** The segmented control's track. */
+export const SEGMENT_TRACK = "inline-flex max-w-full items-center gap-0.5 rounded-[9px] bg-fill p-0.5";
 
 /**
  * A segmented control of links: the state is the URL, so each option is a
@@ -585,10 +586,7 @@ export function Segmented({
   className?: string;
 }) {
   return (
-    <nav
-      aria-label={label}
-      className={cn("inline-flex max-w-full items-center gap-0.5 rounded-control p-0.5 ring-1 ring-inset ring-border", className)}
-    >
+    <nav aria-label={label} className={cn(SEGMENT_TRACK, className)}>
       {items.map((it) => (
         <a key={it.key} href={it.href} aria-current={it.active ? "page" : undefined} className={segmentClass(it.active)}>
           {it.dot ? <span className="size-1.5 rounded-full" style={{ background: it.dot }} aria-hidden /> : null}
