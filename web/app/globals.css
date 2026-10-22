@@ -119,8 +119,12 @@
   --ok-soft: rgba(42, 112, 73, 0.1);
   --attention: #a34f0b;
   --attention-soft: rgba(163, 79, 11, 0.1);
-  --error: #b8322f;
-  --error-soft: rgba(184, 50, 47, 0.09);
+  /* Error is plum, not red: red is "sold". Validated against --viz-sell
+     (CVD ΔE 14.5 protan, normal-vision 17.5) and --viz-buy (15.1 / 22.5);
+     6.7:1 on the paper. Error marks also change shape (a diamond, an
+     outline), so the word is never the only thing apart from "Sell". */
+  --error: #8a3478;
+  --error-soft: rgba(138, 52, 120, 0.09);
   --destructive: var(--error);
 
   /* Elevation. */
@@ -172,8 +176,9 @@
   --ok-soft: rgba(91, 181, 133, 0.13);
   --attention: #f0954a;
   --attention-soft: rgba(240, 149, 74, 0.13);
-  --error: #ef7d74;
-  --error-soft: rgba(239, 125, 116, 0.12);
+  /* vs sell: CVD ΔE 17.8 deutan, normal 19.1; vs buy 15.3 / 25.5; 9.9:1. */
+  --error: #eaa8e4;
+  --error-soft: rgba(234, 168, 228, 0.12);
 
   --elev-card: 0 0 #0000;
   --elev-card-hover: 0 0 #0000;

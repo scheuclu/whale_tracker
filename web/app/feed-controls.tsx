@@ -30,8 +30,8 @@ const PARTY_LABEL: Record<string, string> = {
 const CHAMBER_LABEL: Record<string, string> = { house: "House", senate: "Senate" };
 
 const SCANS_LABEL: Record<string, string> = {
-  only: "Only transcribed scans",
-  exclude: "Exclude transcribed scans",
+  only: "Only scans",
+  exclude: "Excluded",
 };
 
 function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
@@ -126,11 +126,12 @@ export function FilterBar({ filters, ignored }: { filters: TransactionFilters; i
         <Field label="to">
           <input type="date" name="to" defaultValue={filters.to ?? ""} className={cn(FIELD, "tabular")} />
         </Field>
-        <Field label="Scans" className="col-span-2 sm:col-span-1">
+        {/* The field names the subject, so the options can stay short enough not to clip. */}
+        <Field label="Transcribed scans" className="col-span-2 sm:col-span-1">
           <Select
             name="scans"
             value={filters.transcribed}
-            any="Include transcribed scans"
+            any="Included"
             options={TRANSCRIBED.map((t) => ({ value: t, label: SCANS_LABEL[t] }))}
           />
         </Field>

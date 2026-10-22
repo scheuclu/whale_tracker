@@ -30,6 +30,8 @@ const TABS = [
 export function Tabs({ className }: { className?: string }) {
   const pathname = usePathname();
   return (
+    // Below 360px the words drop to 13px and lose a little padding, so all five
+    // fit a 320px phone (e2e checks 320 and 390 for sideways scroll).
     <nav aria-label="Sections" className={cn("min-w-0", className)}>
       <ul className="-mx-1 flex items-stretch justify-between sm:-mx-2 sm:justify-start sm:gap-1">
         {TABS.map(({ href, label }) => {
@@ -44,11 +46,11 @@ export function Tabs({ className }: { className?: string }) {
                 href={href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "group/tab relative flex h-10 items-center whitespace-nowrap px-0.5 text-[14px] font-medium outline-none sm:h-11 sm:px-1 lg:h-[60px]",
+                  "group/tab relative flex h-10 items-center whitespace-nowrap px-0.5 text-[13px] font-medium outline-none min-[360px]:text-[14px] sm:h-11 sm:px-1 lg:h-[60px]",
                   active ? "text-foreground" : "text-ink-2 hover:text-foreground"
                 )}
               >
-                <span className="rounded-control px-1 py-1 group-focus-visible/tab:outline-solid group-focus-visible/tab:outline-2 group-focus-visible/tab:outline-ring">
+                <span className="rounded-control px-0.5 py-1 min-[360px]:px-1 group-focus-visible/tab:outline-solid group-focus-visible/tab:outline-2 group-focus-visible/tab:outline-ring">
                   {label}
                 </span>
                 {/* Stands on the masthead's ink rule (the header's border). */}

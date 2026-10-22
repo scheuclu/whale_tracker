@@ -82,9 +82,15 @@ gold button reads as a warning and spends the accent on chrome.
 | --- | --- | --- |
 | `--ok` | `#2a7049` | `#5bb585` |
 | `--attention` | `#a34f0b` (burnt orange, so it never reads as the brand gold) | `#f0954a` |
-| `--error` (`--destructive`) | `#b8322f` | `#ef7d74` |
+| `--error` (`--destructive`) | `#8a3478` (plum: red is "sold") | `#eaa8e4` |
 
 Each has a `*-soft` 10–13% wash for pills. Status always ships with a word.
+
+Error is **plum, not red**, because red means "sold" one chip away. Error
+vs `--viz-sell` (dataviz validator): light CVD ΔE 14.5 (protan), normal 17.5;
+dark CVD 17.8 (deutan), normal 19.1. Error vs `--viz-buy`: 15.1 / 22.5 light,
+15.3 / 25.5 dark. 6.7:1 / 9.9:1 as text on the paper. An error pill is also
+outlined and carries a diamond instead of a dot, so shape separates it too.
 
 ### Data-viz roles (`--viz-*`)
 

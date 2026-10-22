@@ -173,8 +173,10 @@ const STATUS_TONE: Record<string, { label: string; cls: string; dot: string }> =
   backfill_queued: { label: "queued", ...WARN },
   failed: {
     label: "unreadable",
-    cls: "bg-error-soft text-error",
-    dot: "bg-error",
+    // Plum and outlined, with a diamond rather than a dot: an error must
+    // never read as the red "Sell" chip beside it.
+    cls: "bg-error-soft text-error ring-1 ring-inset ring-error/40",
+    dot: "bg-error rounded-[1px]! rotate-45",
   },
   seen_skipped: { label: "indexed", ...GREY },
   // A scan the grid reader has captured but no model has transcribed: the

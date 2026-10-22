@@ -212,7 +212,7 @@ export default async function MethodologyPage() {
         <Card className="p-0 sm:p-0">
           <ul className="divide-y divide-border">
             {API_ENDPOINTS.map((e) => (
-              <li key={e.path} className="grid gap-x-6 gap-y-0.5 px-4 py-2.5 text-sm sm:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]">
+              <li key={e.path} className="grid gap-x-6 gap-y-0.5 py-2.5 text-sm sm:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]">
                 <span className="break-all font-mono text-[12.5px]">
                   {e.example ? (
                     <a href={e.example} className="hover:text-primary">

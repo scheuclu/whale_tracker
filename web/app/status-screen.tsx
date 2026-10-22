@@ -21,7 +21,7 @@ const SECTIONS = [
 const TONE = {
   neutral: { chip: "bg-muted text-ink-2", dot: "bg-muted-foreground" },
   attention: { chip: "bg-attention-soft text-attention", dot: "bg-attention" },
-  error: { chip: "bg-error-soft text-error", dot: "bg-error" },
+  error: { chip: "bg-error-soft text-error ring-1 ring-inset ring-error/40", dot: "bg-error rounded-[1px]! rotate-45" },
 } as const;
 
 export function StatusScreen({

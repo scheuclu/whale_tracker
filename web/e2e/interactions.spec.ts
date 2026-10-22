@@ -130,3 +130,25 @@ test.describe("phone width (390px)", () => {
     });
   }
 });
+
+/**
+ * The smallest phone in use (iPhone SE 1st gen, many Androids at 320 CSS px):
+ * all five sections must fit on one line with nothing pushed off screen.
+ */
+test.describe("phone width (320px)", () => {
+  test.use({ viewport: { width: 320, height: 640 }, isMobile: true, hasTouch: true });
+  test("no horizontal overflow on / and every section tab is on screen", async ({ page }) => {
+    await visit(page, "/");
+    const { scroll, client } = await page.evaluate(() => ({
+      scroll: document.documentElement.scrollWidth,
+      client: document.documentElement.clientWidth,
+    }));
+    expect(scroll, "page wider than the viewport").toBeLessThanOrEqual(client);
+    const tabs = page.getByRole("navigation", { name: "Sections" }).getByRole("link");
+    expect(await tabs.count()).toBe(5);
+    for (const box of await tabs.evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON()))) {
+      expect(box.left, "a tab starts off screen").toBeGreaterThanOrEqual(0);
+      expect(box.right, "a tab ends off screen").toBeLessThanOrEqual(client + 0.5);
+    }
+  });
+});

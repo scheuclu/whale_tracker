@@ -120,7 +120,7 @@ export type Health = "ok" | "attention" | "error" | "off";
 const HEALTH_TONE: Record<Health, { cls: string; dot: string }> = {
   ok: { cls: "text-ok bg-ok-soft border-ok/25", dot: "bg-ok" },
   attention: { cls: "text-attention bg-attention-soft border-attention/25", dot: "bg-attention" },
-  error: { cls: "text-error bg-error-soft border-error/25", dot: "bg-error" },
+  error: { cls: "text-error bg-error-soft border-error/45", dot: "bg-error rounded-[1px]! rotate-45" },
   off: { cls: "text-muted-foreground bg-muted border-border", dot: "bg-muted-foreground" },
 };
 
