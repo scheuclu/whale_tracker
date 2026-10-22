@@ -483,6 +483,22 @@ bot's commits without redeploying.
 Locally, no configuration is needed — it reads `../data/trades.sqlite3`
 directly.
 
+### Contact form and `/admin`
+
+`/contact` stores each message as one JSON file in a **private Vercel Blob
+store**; `/admin` lists them behind **Sign in with Vercel**. Both degrade
+safely: without a store the form says it is temporarily unavailable, and
+without the sign-in variables `/admin` admits nobody.
+
+| Env var | Value |
+|---|---|
+| `BLOB_STORE_ID` | set by Vercel when a private Blob store is connected to the project (OIDC auth; no token to manage) |
+| `AUTH_SECRET` | random, `openssl rand -base64 32`; also keys the IP hash unless `CONTACT_IP_SALT` is set |
+| `AUTH_VERCEL_ID` / `AUTH_VERCEL_SECRET` | client ID and secret of a Vercel App (Team Settings → Apps), callback `https://www.fatcatwatch.com/api/auth/callback/vercel` |
+| `ADMIN_VERCEL_USER_IDS` | comma-separated Vercel user IDs (Account Settings → "Vercel ID") allowed into `/admin` |
+
+Outside Vercel, `BLOB_READ_WRITE_TOKEN` stands in for the OIDC pair.
+
 ### Public URL, search engines and link previews
 
 Canonical URLs, `sitemap.xml`, `robots.txt`, Open Graph cards and JSON-LD are

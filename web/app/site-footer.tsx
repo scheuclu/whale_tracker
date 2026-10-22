@@ -59,6 +59,10 @@ export function SiteFooter() {
               Methodology and how to quote the data
               <ArrowRight className="size-3" aria-hidden />
             </Link>
+            <Link href="/contact" className="inline-flex items-center gap-1 rounded-sm font-medium text-ink-2 transition-colors duration-150 hover:text-primary">
+              Contact — report a data error, press, feedback
+              <ArrowRight className="size-3" aria-hidden />
+            </Link>
           </div>
 
           <div>

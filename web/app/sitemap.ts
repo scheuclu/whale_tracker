@@ -14,7 +14,7 @@ import { PRIVACY_UPDATED, TERMS_UPDATED } from "@/lib/legal";
  * `generateSitemaps` if the ticker count ever nears 40,000.
  *
  * Search, filtered/sorted variants and the per-scan pages are left out on
- * purpose: they are `noindex` or canonicalise elsewhere.
+ * purpose: they are `noindex` or canonicalise elsewhere. So is /admin.
  */
 export const revalidate = 3600;
 
@@ -52,6 +52,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // Dated by their own last change, not the data (lib/legal.ts).
     { url: absoluteUrl("/privacy"), lastModified: PRIVACY_UPDATED, changeFrequency: "yearly", priority: 0.2 },
     { url: absoluteUrl("/terms"), lastModified: TERMS_UPDATED, changeFrequency: "yearly", priority: 0.2 },
+    { url: absoluteUrl("/contact"), changeFrequency: "yearly", priority: 0.2 },
     ...members.map((m) => ({
       url: absoluteUrl(memberHref(m.name, m.bioguide_id)),
       lastModified: m.last_filed ?? undefined,

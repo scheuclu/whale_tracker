@@ -35,7 +35,7 @@ test("every third-party origin in production is one of the deliberate ones", () 
     .flat()
     .filter((s) => s.startsWith("https://"));
   // Only the operator's sign-in redirect (lib/security-headers.ts, form-action).
-  assert.deepEqual(origins, ["https://accounts.google.com", "https://vercel.com"]);
+  assert.deepEqual(origins, ["https://vercel.com"]);
   assert.deepEqual(cspDirectives()["form-action"].slice(1), origins);
 });
 
