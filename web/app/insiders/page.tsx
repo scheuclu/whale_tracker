@@ -13,7 +13,7 @@ import {
   type InsiderTradeRow,
 } from "@/lib/insider-queries";
 import { getTickerDetail, getTickerMembers, type TickerMemberRow, type TickerRow } from "@/lib/queries";
-import { memberHref, memberLabel, price, range, shares, shortDate, tickerHref, usd } from "@/lib/format";
+import { insiderIssuerHref, memberHref, memberLabel, price, range, shares, shortDate, tickerHref, usd } from "@/lib/format";
 import { Card, DivergingSplit, Empty, MagnitudeBars, SectionTitle, StatTile } from "../charts";
 import { ActionBadge, Amount, InsiderDelayTag, PartyBadge, PlanTag, ResponsiveTable, RoleTag, SectorTag, TickerChip } from "../ui";
 import { MemberAvatar } from "../avatar";
@@ -41,8 +41,9 @@ import {
 } from "../sortable-table";
 import { RowLinkBody, StickyThead } from "../table-client";
 import type { Metadata } from "next";
-import { clip, pageMetadata } from "@/lib/seo";
-import { plural } from "@/lib/site";
+import { clip, pageCard, pageMetadata } from "@/lib/seo";
+import { absoluteUrl, plural } from "@/lib/site";
+import { ShareControl } from "../share-control";
 
 export const dynamic = "force-dynamic";
 
@@ -78,6 +79,10 @@ export async function generateMetadata({
         200
       ),
       path,
+      card: pageCard(
+        `/cards/issuer/${encodeURIComponent(ticker)}`,
+        `${issuer.ticker ?? ticker}${name} insider trades on SEC Form 4: ${plural(issuer.insiders, "insider")}, ${plural(issuer.filings, "filing")}, ${issuer.buys} buys and ${issuer.sells} sells`
+      ),
     });
   }
   return pageMetadata({
@@ -85,6 +90,7 @@ export async function generateMetadata({
     description:
       "Open-market purchases and sales by corporate officers, directors and 10% owners from SEC Form 4 filings, by issuer, with clusters of insiders trading together. Values are shares × reported price.",
     path: "/insiders",
+    card: pageCard("/insiders", "Corporate insider trades from SEC Form 4: insider trades, issuers, buys and sells"),
   });
 }
 
@@ -622,6 +628,12 @@ async function IssuerDetail({ ticker }: { ticker: string }) {
     <div className={PAGE_STACK}>
       <PageHeader
         back={{ href: "/insiders", label: "all insiders" }}
+        share={
+          <ShareControl
+            url={absoluteUrl(insiderIssuerHref(issuer.ticker ?? ticker))}
+            text={`${issuer.ticker ?? ticker}${issuer.issuer_name ? ` (${issuer.issuer_name})` : ""}: corporate insider trades from SEC Form 4`}
+          />
+        }
         eyebrow="Insider issuer · SEC Form 4"
         title={issuer.ticker ?? ticker}
         titleClassName="font-mono"

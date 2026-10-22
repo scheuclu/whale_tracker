@@ -6,7 +6,7 @@ import { Card, Empty, SectionTitle, StatTile } from "../charts";
 import { Disclosure } from "../disclosure";
 import { HealthPill, DataError, PAGE_STACK, PageHeader, Quiet, type Health } from "../page-header";
 import { ResponsiveTable, StatusBadge } from "../ui";
-import { pageMetadata } from "@/lib/seo";
+import { pageCard, pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +17,7 @@ export const metadata = pageMetadata({
   description:
     "How current and complete the data is: filings indexed, trades parsed, scanned filings not yet readable, recent pipeline runs, and the status of the House, Senate eFD and SEC EDGAR sources.",
   path: "/pipeline",
+  card: pageCard("/pipeline", "FatCat Watch data pipeline: filings indexed, trades parsed, filings not yet readable and the last sync"),
 });
 
 export default async function PipelinePage() {

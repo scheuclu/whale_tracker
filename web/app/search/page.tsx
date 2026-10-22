@@ -7,7 +7,7 @@ import { DataError, PAGE_STACK, PageHeader, Quiet } from "../page-header";
 import { BUTTON_PRIMARY, FIELD, PartyBadge } from "../ui";
 import { cn } from "@/lib/utils";
 import { MemberAvatar } from "../avatar";
-import { pageMetadata } from "@/lib/seo";
+import { pageCard, pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +19,7 @@ export const metadata = pageMetadata({
   description: "Find a member of Congress, a ticker or a corporate insider issuer.",
   path: "/search",
   noindex: true,
+  card: pageCard("/search", "Search FatCat Watch for a member of Congress, a ticker or a corporate insider issuer"),
 });
 
 /** Hits per list; the lists say when there may be more. */

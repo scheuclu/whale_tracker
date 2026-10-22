@@ -4,7 +4,7 @@ import { Empty, SectionTitle, StatTile } from "../charts";
 import { Disclosure } from "../disclosure";
 import { DataError, PAGE_STACK, PageHeader, Quiet } from "../page-header";
 import { PartyBadge, StatusBadge, ResponsiveTable } from "../ui";
-import { pageMetadata } from "@/lib/seo";
+import { pageCard, pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +16,7 @@ export const metadata = pageMetadata({
   description:
     "House STOCK Act filings submitted as scanned paper, what the grid reader made of each page, and why transcribed rows are shown but never counted in any total.",
   path: "/scans",
+  card: pageCard("/scans", "Scanned paper STOCK Act filings: filings, captured pages and the rows the grid reader found"),
 });
 
 /**

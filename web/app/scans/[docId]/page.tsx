@@ -7,7 +7,7 @@ import { Disclosure } from "../../disclosure";
 import { DataError, PAGE_STACK, PageHeader, Quiet } from "../../page-header";
 import { PartyBadge, StatusBadge, ResponsiveTable } from "../../ui";
 import type { Metadata } from "next";
-import { pageMetadata } from "@/lib/seo";
+import { pageCard, pageMetadata } from "@/lib/seo";
 
 /** The read path as words; the raw `parse_method` stays in the label's title. */
 const METHOD_LABEL: Record<string, string> = {
@@ -32,6 +32,7 @@ export async function generateMetadata({ params }: { params: Promise<{ docId: st
     description: `Captured pages of scanned House filing ${id} and the rows the grid reader found on them. Transcribed rows are not counted in any total.`,
     path: `/scans/${encodeURIComponent(id)}`,
     noindex: true,
+    card: pageCard(`/scans/${encodeURIComponent(id)}`, `Scanned House filing ${id}: pages captured and rows the grid reader found`),
   });
 }
 

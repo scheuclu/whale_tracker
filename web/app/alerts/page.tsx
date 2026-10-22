@@ -14,7 +14,7 @@ import { Disclosure } from "../disclosure";
 import { DataError, PAGE_STACK, PageHeader, PillLinks, Quiet } from "../page-header";
 import { AlertLog, AlertRowCard } from "./alert-row";
 import { OutcomeLine, OutcomeSummarySection } from "./outcomes";
-import { pageMetadata } from "@/lib/seo";
+import { pageCard, pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +24,7 @@ export const metadata = pageMetadata({
   description:
     "Every alert the tracker sent, newest first, with the message as it went out: congressional clusters, late STOCK Act filings, watched members and insider Form 4 rules, and what each ticker did afterwards.",
   path: "/alerts",
+  card: pageCard("/alerts", "The FatCat Watch alert log: alerts sent, alerts in the last 7 days and the last one sent"),
 });
 
 /**

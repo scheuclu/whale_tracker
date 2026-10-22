@@ -17,7 +17,7 @@ import {
   type Texture,
 } from "../charts";
 import { DataTable } from "../data-table";
-import { pageMetadata } from "@/lib/seo";
+import { pageCard, pageMetadata } from "@/lib/seo";
 import { Disclosure } from "../disclosure";
 import { DataError, PAGE_STACK, PageHeader, PillLinks, Quiet } from "../page-header";
 
@@ -29,6 +29,7 @@ export const metadata = pageMetadata({
   description:
     "Monthly trades disclosed by members of Congress, disclosure delay against the 45-day STOCK Act deadline, rising tickers and scanned paper filings, beside SEC Form 4 insider activity.",
   path: "/trends",
+  card: pageCard("/trends", "Congressional stock trades by month: purchases above the line, sales below, last 12 months by trade date"),
 });
 
 /**

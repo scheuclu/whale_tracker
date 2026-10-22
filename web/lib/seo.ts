@@ -50,14 +50,22 @@ export function pageMetadata({
 type Card = { url: string; width: number; height: number; type: string; alt: string };
 
 /**
- * An entity segment's own cards (`<path>/opengraph-image`,
- * `<path>/twitter-image`), with the alt text its image files export.
+ * A segment's own card, `<path>/opengraph-image`, named for Open Graph and
+ * X alike: one image route, so one render and one CDN entry per card rather
+ * than two. `alt` is the page's own, specific description of the card.
+ *
+ * Pages that are a query-string view of a route (`/politicians?view=late`,
+ * `?committee=<id>`, `/insiders?t=<SYM>`) cannot have a file-based card —
+ * the image route never sees the search params — so theirs live under
+ * `app/cards/` and the page passes that path here.
  */
-export function entityCard(path: string, alt: string): { og: Card; twitter: Card } {
-  const base = path.split("?")[0];
-  const card = (file: string) => ({ url: `${base}/${file}`, width: 1200, height: 630, type: "image/png", alt });
-  return { og: card("opengraph-image"), twitter: card("twitter-image") };
+export function pageCard(path: string, alt: string): { og: Card; twitter: Card } {
+  const card: Card = { url: `${path.split("?")[0]}/opengraph-image`, width: 1200, height: 630, type: "image/png", alt };
+  return { og: card, twitter: card };
 }
+
+/** The member and ticker pages' name for `pageCard`. */
+export const entityCard = pageCard;
 
 const SITE_CARD_ALT =
   "FatCat Watch — US congressional and corporate-insider stock trades, from STOCK Act and SEC Form 4 filings";

@@ -2,6 +2,7 @@ import { ImageResponse } from "next/og";
 import { markDataUri } from "@/lib/brand";
 import { getPipeline } from "@/lib/queries";
 import { getInsiderTotals } from "@/lib/insider-queries";
+import { CARD_HEADERS } from "./share-card";
 
 export const alt =
   "FatCat Watch — US congressional and corporate-insider stock trades, from STOCK Act and SEC Form 4 filings";
@@ -126,7 +127,7 @@ export async function renderShareCard() {
         </div>
       </div>
     ),
-    size
+    { ...size, headers: CARD_HEADERS }
   );
 }
 
