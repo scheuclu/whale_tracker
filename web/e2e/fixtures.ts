@@ -14,7 +14,11 @@ import { test as base, expect, type Page } from "@playwright/test";
  * - The document itself when the test expects that status (the 404 page).
  *
  * The browser's own "Failed to load resource" console line is skipped in
- * favour of the response check, which knows the URL and the status.
+ * favour of the response check, which knows the URL and the status. So is
+ * the console line a `/_vercel/*` 404 produces under `X-Content-Type-Options:
+ * nosniff` ("Refused to execute script … MIME type ('text/plain')"): off
+ * Vercel the analytics script is a text/plain 404, on Vercel it is served
+ * as JavaScript.
  */
 const ALLOWED_RESPONSE = [/\/_vercel\//, /\/_next\/image\?url=https?%3A/];
 
@@ -30,6 +34,7 @@ export const test = base.extend<{ problems: Problems }>({
       page.on("console", (m) => {
         if (m.type() !== "error") return;
         if (m.text().startsWith("Failed to load resource")) return;
+        if (/Refused to execute script from '[^']*\/_vercel\//.test(m.text())) return;
         list.push(`console.error: ${m.text()} (${m.location().url})`);
       });
       page.on("response", (r) => {
