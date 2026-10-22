@@ -172,9 +172,9 @@ export function TradeRow({ r, subject }: { r: TransactionRow; subject: "asset" |
         exact={r.amount_exact_cents}
         transcribed={r.transcribed}
       />
-      <span className="flex min-w-0 items-center gap-1.5 text-[13px] [grid-area:detail]">
+      <span className="flex min-w-0 flex-wrap items-center gap-1.5 text-[13px] [grid-area:detail] sm:flex-nowrap">
         {subject === "asset" ? <AssetName name={r.asset_name} ticker={r.ticker} /> : null}
-        <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap empty:hidden">
+        <span className="flex min-w-0 flex-wrap items-center gap-1.5 empty:hidden sm:shrink-0 sm:flex-nowrap sm:whitespace-nowrap">
           <OptionBadge kind={r.option_kind} strikeCents={r.strike_cents} expiry={r.expiry} />
           <SectorTag group={r.industry_group} sic={r.sic} description={r.sic_description} />
           <OwnerTag owner={r.owner} />

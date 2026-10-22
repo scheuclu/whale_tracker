@@ -47,27 +47,22 @@ test("sorting a table header (JavaScript on)", async ({ page }) => {
 });
 
 /**
- * KNOWN BUG (expected to fail until fixed): without JavaScript every page
- * stays on its `loading.tsx` skeleton. The page content is streamed into a
- * `<div hidden id="S:0">` that only React's inline script swaps in, so the
- * sort links and GET forms built to work without JS are never visible.
- * `test.fail` keeps CI green while the bug stands and turns red the day it
- * is fixed — delete the annotation then.
+ * Without JavaScript the streamed page content is revealed by the
+ * <noscript> stylesheet in app/no-script.tsx (React's swap script never
+ * runs). These fail if a React/Next upgrade changes the streaming markup
+ * that stylesheet keys on.
  */
 test.describe("without JavaScript", () => {
   test.use({ javaScriptEnabled: false });
-  const NO_JS_BUG = "without JS the page never leaves the loading.tsx skeleton (Suspense content stays hidden)";
 
   test("sorting a table header still works", async ({ page }) => {
-    test.fail(true, NO_JS_BUG);
     await page.goto("/politicians");
-    await expect(page.locator("main h1")).toBeVisible({ timeout: 3_000 });
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 3_000 });
     await sortByTrades(page);
   });
   test("the Buys/Sells filter still works", async ({ page }) => {
-    test.fail(true, NO_JS_BUG);
     await page.goto("/");
-    await expect(page.locator("main h1")).toBeVisible({ timeout: 3_000 });
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 3_000 });
     await page.getByRole("navigation", { name: "Trade direction" }).getByRole("link", { name: "Sells" }).click();
     await expect(page).toHaveURL(/[?&]action=sell\b/);
     const labels = await page.locator("li.feed-row > span:first-child").allTextContents();
@@ -114,9 +109,7 @@ test("theme toggle switches and persists", async ({ page }) => {
  * `shrink-0 whitespace-nowrap`, so an option row pushes the page 18px past
  * a 390px screen on /members/nancy-pelosi-p000197.
  */
-const KNOWN_OVERFLOW: Record<string, string> = {
-  "/members/nancy-pelosi-p000197": "trade-row tag group (option · sector · owner) does not wrap at 390px",
-};
+const KNOWN_OVERFLOW: Record<string, string> = {};
 
 test.describe("phone width (390px)", () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
