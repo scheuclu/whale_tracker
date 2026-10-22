@@ -950,7 +950,16 @@ export async function getPipeline(): Promise<Pipeline> {
   const senate = db.prepare("SELECT value FROM sync_state WHERE key = 'senate_status'").get() as
     | { value: string }
     | undefined;
-  const last = db.prepare("SELECT MAX(updated_at) AS t FROM filings").get() as { t: string | null };
+  // When the pipeline last ran, not when a filing last changed: a run that
+  // finds nothing new still writes sync_state, so a quiet night is not
+  // "stale". Same source as /api/health (lib/health.ts). Filings are the
+  // fallback for a database written before sync_state existed.
+  const last = db
+    .prepare(
+      `SELECT COALESCE((SELECT MAX(updated_at) FROM sync_state),
+                       (SELECT MAX(updated_at) FROM filings)) AS t`
+    )
+    .get() as { t: string | null };
   const failures = db
     .prepare(
       "SELECT doc_id, filer_name, last_error, pdf_url FROM filings WHERE status = 'failed' ORDER BY filing_date DESC LIMIT 10"

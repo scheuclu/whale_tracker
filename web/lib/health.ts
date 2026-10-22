@@ -10,7 +10,7 @@
  *   run that found nothing new. This is what goes stale when the pipeline
  *   stops, so it is what the threshold is applied to;
  * - the **last filing write** (`MAX(filings.updated_at)`): the `data_as_of`
- *   the API and the header pill report. On a quiet day no filing changes for
+ *   the API reports. On a quiet day no filing changes for
  *   many hours while the pipeline is perfectly healthy, so it is reported
  *   but never judged.
  *
@@ -22,7 +22,7 @@
 import { parseRecentRuns } from "./queries";
 
 /**
- * Past this the header's sync pill turns amber and the health check reports
+ * Past this the footer's "Updated" line says the pipeline is behind and the health check reports
  * `degraded`. The poll is scheduled every 90 minutes, but GitHub delivers
  * scheduled runs late and unevenly (a ~5 h median gap), so a few hours
  * without a write is normal, not stale.
