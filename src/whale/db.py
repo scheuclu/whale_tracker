@@ -1134,22 +1134,25 @@ def replace_insider_owners(conn: sqlite3.Connection, filing_id: int,
 # --- issuers (industry classification) --------------------------------------
 
 
-def upsert_issuer_ticker(conn: sqlite3.Connection, ticker: str, cik: str | None) -> None:
+def upsert_issuer_ticker(conn: sqlite3.Connection, ticker: str, cik: str | None,
+                         looked_up_at: str | None = None) -> None:
     """Record what EDGAR's listing said about a symbol — including that it
     said nothing (cik None), so the symbol is not asked about again before
-    the refresh."""
+    the refresh. ``looked_up_at`` defaults to now; callers with an injected
+    clock pass theirs, so staleness is judged on one clock."""
     conn.execute(
         "INSERT INTO issuer_tickers (ticker, cik, looked_up_at) VALUES (?,?,?) "
         "ON CONFLICT(ticker) DO UPDATE SET cik=excluded.cik, looked_up_at=excluded.looked_up_at",
-        (ticker, cik, now_iso()),
+        (ticker, cik, looked_up_at or now_iso()),
     )
 
 
 def upsert_issuer(conn: sqlite3.Connection, cik: str, ticker: str | None = None,
                   name: str | None = None, sic: str | None = None,
                   sic_description: str | None = None, industry_group: str | None = None,
-                  error: str | None = None) -> None:
+                  error: str | None = None, fetched_at: str | None = None) -> None:
     """Store one issuer's classification, or the error that stood in for it.
+    ``fetched_at`` defaults to now (see ``upsert_issuer_ticker``).
 
     An error keeps whatever an earlier fetch stored: a refresh that fails
     must not blank a classification the dashboard was already showing.
@@ -1159,7 +1162,7 @@ def upsert_issuer(conn: sqlite3.Connection, cik: str, ticker: str | None = None,
             "INSERT INTO issuers (cik, fetched_at, last_error) VALUES (?,?,?) "
             "ON CONFLICT(cik) DO UPDATE SET fetched_at=excluded.fetched_at, "
             "last_error=excluded.last_error",
-            (cik, now_iso(), error),
+            (cik, fetched_at or now_iso(), error),
         )
         return
     conn.execute(
@@ -1170,7 +1173,7 @@ def upsert_issuer(conn: sqlite3.Connection, cik: str, ticker: str | None = None,
              ticker=excluded.ticker, name=excluded.name, sic=excluded.sic,
              sic_description=excluded.sic_description, industry_group=excluded.industry_group,
              fetched_at=excluded.fetched_at, last_error=NULL""",
-        (cik, ticker, name, sic, sic_description, industry_group, now_iso()),
+        (cik, ticker, name, sic, sic_description, industry_group, fetched_at or now_iso()),
     )
 
 

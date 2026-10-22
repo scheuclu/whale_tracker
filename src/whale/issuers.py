@@ -264,6 +264,10 @@ def classify(conn: sqlite3.Connection, config: Config, client: EdgarClient | Non
         return result
     if budget_seconds is None:
         budget_seconds = config.issuers.budget_seconds
+    # One clock for both sides of the staleness test: the cutoff below and
+    # the stamps written on this run. A caller that injects `today` gets
+    # stamps on that day; otherwise both come from the real clock.
+    stamp = None if today is None else f"{today.isoformat()}T00:00:00Z"
     today = today or date.today()
     stale_before = (today - timedelta(days=config.issuers.refresh_days)).isoformat()
 
@@ -282,7 +286,7 @@ def classify(conn: sqlite3.Connection, config: Config, client: EdgarClient | Non
                 return result
             for symbol in pending_symbols:
                 cik = resolve_symbol(listing, symbol)
-                db.upsert_issuer_ticker(conn, symbol, cik)
+                db.upsert_issuer_ticker(conn, symbol, cik, looked_up_at=stamp)
                 result.looked_up += 1
                 result.unresolved += cik is None
             conn.commit()
@@ -294,7 +298,7 @@ def classify(conn: sqlite3.Connection, config: Config, client: EdgarClient | Non
                 result.remaining = len(pending) - index
                 break
             try:
-                _fetch_issuer(conn, client, cik)
+                _fetch_issuer(conn, client, cik, stamp)
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code != 404:
                     result.aborted = _abort_reason(exc)
@@ -302,7 +306,7 @@ def classify(conn: sqlite3.Connection, config: Config, client: EdgarClient | Non
                     break
                 # EDGAR knows no such CIK: recorded, so it is not asked again
                 # before the refresh. The ticker it came from stays unknown.
-                db.upsert_issuer(conn, cik, error="not found (HTTP 404)")
+                db.upsert_issuer(conn, cik, error="not found (HTTP 404)", fetched_at=stamp)
                 result.failed += 1
             except (EdgarThrottled, httpx.HTTPError) as exc:
                 result.aborted = _abort_reason(exc)
@@ -312,7 +316,7 @@ def classify(conn: sqlite3.Connection, config: Config, client: EdgarClient | Non
                 # A response that does not parse must not wedge the queue:
                 # the row records why, and the refresh will try again.
                 log.exception("issuer %s failed", cik)
-                db.upsert_issuer(conn, cik, error=f"{type(exc).__name__}: {exc}"[:500])
+                db.upsert_issuer(conn, cik, error=f"{type(exc).__name__}: {exc}"[:500], fetched_at=stamp)
                 result.failed += 1
             else:
                 result.fetched += 1
@@ -361,7 +365,8 @@ def _pending_issuers(conn: sqlite3.Connection, stale_before: str) -> list[str]:
            ORDER BY s.fetched_at IS NOT NULL, s.fetched_at, w.cik""", (stale_before,))]
 
 
-def _fetch_issuer(conn: sqlite3.Connection, client: EdgarClient, cik: str) -> None:
+def _fetch_issuer(conn: sqlite3.Connection, client: EdgarClient, cik: str,
+                  stamp: str | None = None) -> None:
     doc = fetch_submissions(client, cik)
     sic = str(doc.get("sic") or "").strip() or None
     tickers = [str(t).strip().upper() for t in (doc.get("tickers") or []) if str(t).strip()]
@@ -372,6 +377,7 @@ def _fetch_issuer(conn: sqlite3.Connection, client: EdgarClient, cik: str) -> No
         sic=sic,
         sic_description=str(doc.get("sicDescription") or "").strip() or None,
         industry_group=sic_group(sic),
+        fetched_at=stamp,
     )
 
 
