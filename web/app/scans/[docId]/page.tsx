@@ -210,7 +210,8 @@ export default async function ScanDetailPage({
           {/* An even split: the page is landscape, and the transcription column
               now carries the asset name, owner and any disagreement note. */}
           <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-2">
-            <Card className="p-2">
+            {/* The page stays in view beside its rows rather than stretching to the table's height. */}
+            <Card className="p-2 xl:sticky xl:top-[calc(var(--sticky-top,4rem)+1rem)] xl:self-start">
               <div className="relative w-full">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img

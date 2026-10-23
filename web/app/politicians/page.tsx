@@ -651,6 +651,7 @@ async function LateView() {
       <PageHeader
         back={{ href: "/politicians", label: "all members" }}
         share={<ShareControl url={absoluteUrl("/politicians?view=late")} text="Late STOCK Act disclosures by members of Congress" />}
+        eyebrow="Congress · the STOCK Act deadline"
         title="Late disclosures"
         subtitle={
           <>

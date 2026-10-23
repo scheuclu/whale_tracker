@@ -44,7 +44,7 @@ export default async function SearchPage({
 
   return (
     <div className={PAGE_STACK}>
-      <PageHeader title="Search" subtitle="Members of Congress, the tickers they trade, and SEC Form 4 insider issuers.">
+      <PageHeader eyebrow="Across Congress and SEC Form 4" title="Search" subtitle="Members of Congress, the tickers they trade, and SEC Form 4 insider issuers.">
         <form method="get" action="/search" role="search" className="flex max-w-xl items-center gap-2">
           <label className="relative min-w-0 flex-1">
             <span className="sr-only">Search members, tickers and insider issuers</span>
