@@ -3,7 +3,9 @@
 import { useSearchParams } from "next/navigation";
 import {
   BarsSkeleton,
-  ProfileSkeleton,
+  GlanceSkeleton,
+  HeroSkeleton,
+  TimelineSkeleton,
   RangeSkeleton,
   SectionTitleSkeleton,
   SkeletonPage,
@@ -45,12 +47,19 @@ function MembersLoading() {
   );
 }
 
-/** One member: profile card, tiles, volume range, bars beside the buy/sell split, every trade. */
+/** One member: the contact-card hero, tiles and the glance tile, timeline, volume range, bars beside the buy/sell split, every trade. */
 export function MemberLoading() {
   return (
     <SkeletonPage label="the member">
-      <ProfileSkeleton />
-      <TilesSkeleton />
+      <HeroSkeleton />
+      <div className="space-y-3 sm:space-y-4">
+        <TilesSkeleton />
+        <GlanceSkeleton />
+      </div>
+      <section>
+        <SectionTitleSkeleton width="w-36" right />
+        <TimelineSkeleton />
+      </section>
       <section>
         <SectionTitleSkeleton width="w-44" />
         <RangeSkeleton />

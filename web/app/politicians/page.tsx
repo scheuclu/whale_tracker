@@ -58,6 +58,7 @@ import {
   sortHref,
 } from "../sortable-table";
 import { RowLinkBody, StickyThead } from "../table-client";
+import { ROW_LINK } from "../grouped-list";
 
 export const dynamic = "force-dynamic";
 
@@ -201,17 +202,17 @@ export default async function PoliticiansPage({
         title="Members of Congress"
         subtitle="Every member with a disclosed trade, by estimated volume and by number of trades. Amounts are disclosed brackets, so every volume here is an estimate."
       >
-      <section aria-label="All members" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <section aria-label="All members" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatTile label="Members" value={String(totals.members)} hint="with disclosed trades" />
         <StatTile label="Total volume" value={usd(totals.volume_mid)} hint="estimated" />
-        <a href="/politicians?view=late" className="block" title="Ranked late-filing view">
+        <a href="/politicians?view=late" className="block rounded-tile [&>div]:transition-shadow [&>div]:duration-(--dur) hover:[&>div]:shadow-[var(--elev-card-hover)]" title="Ranked late-filing view">
           <StatTile
             label="Late disclosures"
-            value={String(totals.late_trades)}
+            value={totals.late_trades.toLocaleString()}
             hint="past 45 days · ranked view →"
           />
         </a>
-        <a href="/politicians?view=late" className="block" title="Ranked late-filing view">
+        <a href="/politicians?view=late" className="block rounded-tile [&>div]:transition-shadow [&>div]:duration-(--dur) hover:[&>div]:shadow-[var(--elev-card-hover)]" title="Ranked late-filing view">
           <StatTile
             label="Members late"
             value={String(totals.members_late)}
@@ -295,11 +296,16 @@ export default async function PoliticiansPage({
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2">
                       <MemberAvatar name={r.member_name} bioguideId={r.bioguide_id} size="sm" />
-                      <a href={memberHref(r.member_name, r.bioguide_id)} className="row-name font-medium hover:text-primary">
+                      <a
+                        href={memberHref(r.member_name, r.bioguide_id)}
+                        className="row-name block max-w-[9.5rem] truncate font-medium sm:max-w-none"
+                        title={r.member_name}
+                      >
                         {r.member_name}
                       </a>
                       <PartyBadge party={r.party} />
-                      <span className="text-[11px] text-muted-foreground">
+                      {/* The seat is in the member's page; a phone gives its width to the figures. */}
+                      <span className="hidden text-[12px] text-muted-foreground sm:inline">
                         {r.state}
                         {r.district && r.district !== "0" ? r.district : ""}
                       </span>
@@ -443,7 +449,7 @@ async function CommitteeView({ id }: { id: string }) {
             ) : null}
           </p>
         ) : null}
-      <section aria-label="Committee totals" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <section aria-label="Committee totals" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatTile
           label="Members"
           value={String(members.length)}
@@ -467,13 +473,13 @@ async function CommitteeView({ id }: { id: string }) {
         <section>
           <SectionTitle>Subcommittees</SectionTitle>
           <Card className="p-0 sm:p-0">
-            <ul className="divide-y divide-border/50 text-[13px]">
+            <ul className="inset-rows py-1 text-[14px] [--sep-inset:1rem] sm:[--sep-inset:1.25rem]">
               {subs.map((s) => (
-                <li key={s.thomas_id} className="flex items-center justify-between gap-3 px-4 py-2">
-                  <a href={committeeHref(s.thomas_id)} className="font-medium hover:text-primary">
+                <li key={s.thomas_id} className="flex min-h-11 items-center justify-between gap-3 px-4 py-2.5 sm:px-5">
+                  <a href={committeeHref(s.thomas_id)} className={ROW_LINK}>
                     {s.name}
                   </a>
-                  <span className="tabular text-[11px] text-muted-foreground">
+                  <span className="tabular text-[13px] text-muted-foreground">
                     {s.members} member{s.members === 1 ? "" : "s"}
                   </span>
                 </li>
@@ -548,7 +554,7 @@ async function CommitteeView({ id }: { id: string }) {
                     <td
                       className={`tabular px-4 py-2 text-right ${
                         r.late_count > 0
-                          ? "font-medium text-red-600 dark:text-red-400"
+                          ? "font-medium text-error"
                           : "text-muted-foreground"
                       }`}
                     >
@@ -645,6 +651,7 @@ async function LateView() {
       <PageHeader
         back={{ href: "/politicians", label: "all members" }}
         share={<ShareControl url={absoluteUrl("/politicians?view=late")} text="Late STOCK Act disclosures by members of Congress" />}
+        eyebrow="Congress · the STOCK Act deadline"
         title="Late disclosures"
         subtitle={
           <>
@@ -663,10 +670,10 @@ async function LateView() {
             </>
           }
         />
-      <section aria-label="Late totals" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <section aria-label="Late totals" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatTile
           label="Late trades"
-          value={String(totals.late_trades)}
+          value={totals.late_trades.toLocaleString()}
           hint={`${share(totals.late_trades, late.trades)} of ${late.trades} disclosed trades`}
         />
         <StatTile
@@ -765,7 +772,7 @@ async function LateView() {
                   <td className="tabular py-1.5 pr-3 text-right text-muted-foreground">{m.trades}</td>
                   <td
                     className={`tabular py-1.5 pr-3 text-right ${
-                      m.late_trades > 0 ? "font-medium text-red-600 dark:text-red-400" : "text-muted-foreground"
+                      m.late_trades > 0 ? "font-medium text-error" : "text-muted-foreground"
                     }`}
                   >
                     {m.late_trades || "—"}
@@ -832,7 +839,7 @@ async function LateView() {
                     </div>
                   </td>
                   <td className="tabular px-4 py-2 text-right text-muted-foreground">{r.trades}</td>
-                  <td className="tabular px-4 py-2 text-right font-medium text-red-600 dark:text-red-400">
+                  <td className="tabular px-4 py-2 text-right font-medium text-error">
                     {r.late_count}
                   </td>
                   <td className="tabular px-4 py-2 text-right">{share(r.late_count, r.trades)}</td>
@@ -888,7 +895,7 @@ async function LateView() {
                 </span>
                 <span className="text-xs text-muted-foreground">filed {shortDate(f.filing_date)}</span>
                 <span
-                  className="text-xs font-medium text-red-600 dark:text-red-400"
+                  className="text-xs font-medium text-error"
                   title={
                     f.late.length === f.trades
                       ? "Every trade in this filing was past the deadline — its Telegram message led with how late"

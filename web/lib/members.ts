@@ -86,13 +86,18 @@ export function longDate(iso: string | null | undefined): string {
  * exchanges are neither. Never a dollar figure — the stat tiles carry the
  * estimate, labelled as one.
  */
-export function tradeSummary(r: {
-  trades: number;
-  tickers: number;
-  buys: number;
-  sells: number;
-}): string {
+export function tradeSummary(
+  r: {
+    trades: number;
+    tickers: number;
+    buys: number;
+    sells: number;
+  },
+  /** Who made them, for a page about an asset: "by 10 members". */
+  by?: string
+): string {
   const parts = [`${r.trades} trade${r.trades === 1 ? "" : "s"}`];
+  if (by) parts[0] += ` by ${by}`;
   if (r.tickers > 0) parts[0] += ` across ${r.tickers} ticker${r.tickers === 1 ? "" : "s"}`;
   const directional = r.buys + r.sells;
   let lean: string | null = null;

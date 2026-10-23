@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BrandMark } from "./brand";
 
@@ -77,34 +77,29 @@ export function StatusScreen({
             <ChevronRight aria-hidden className="size-3.5 transition-transform group-open:rotate-90" />
             Technical details
           </summary>
-          <div className="mt-2 overflow-x-auto rounded-control border border-border bg-card px-3 py-2.5 font-mono text-xs leading-relaxed text-ink-2">
+          <div className="tile mt-2 overflow-x-auto rounded-control px-3.5 py-3 font-mono text-xs leading-relaxed text-ink-2">
             {details}
           </div>
         </details>
       ) : null}
 
       <nav aria-label="Main sections" className="mt-12 w-full text-left">
-        <p className="kicker mb-2 border-b border-rule pb-2 text-foreground">Or go to</p>
-        <ul className="grid sm:grid-cols-2">
-          {SECTIONS.map(({ href, label, hint }, i) => (
-            <li
-              key={href}
-              className={cn(
-                "border-b border-border",
-                // Two columns from sm: a hairline between them.
-                i % 2 === 1 && "sm:border-l"
-              )}
-            >
+        <p className="kicker mb-2 pl-1">Or go to</p>
+        {/* An iOS grouped list: one tile, inset separators, a chevron per row. */}
+        <ul className="tile inset-rows overflow-hidden py-1 [--sep-inset:1.25rem]">
+          {SECTIONS.map(({ href, label, hint }) => (
+            <li key={href}>
               <Link
                 href={href}
-                className="group flex items-center gap-3 px-3 py-3 outline-offset-[-2px] transition-colors hover:bg-raised"
+                className="group flex min-h-11 items-center gap-3 px-5 py-3 outline-offset-[-2px] transition-colors hover:bg-[var(--feed-hover)]"
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block font-display text-[17px] font-semibold">{label}</span>
-                  <span className="block truncate text-xs text-muted-foreground">{hint}</span>
+                  <span className="block text-[16px] font-semibold tracking-[-0.012em]">{label}</span>
+                  <span className="block truncate text-[13px] text-muted-foreground">{hint}</span>
                 </span>
-                <ArrowRight
-                  className="size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary motion-reduce:transition-none motion-reduce:group-hover:translate-x-0"
+                <ChevronRight
+                  className="size-4 shrink-0 text-ink-3 transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none motion-reduce:group-hover:translate-x-0"
+                  strokeWidth={2.25}
                   aria-hidden
                 />
               </Link>
@@ -144,9 +139,9 @@ export function DataUnavailable({ message, action }: { message: string; action?:
   );
 }
 
-/** The one primary action: an ink button (gold is never a button), with a pressed state. */
+/** The one primary action: a graphite capsule (white in dark mode), like `BUTTON_PRIMARY`. */
 export const primaryAction =
-  "inline-flex h-9 items-center gap-1.5 rounded-control bg-foreground px-4 text-sm font-semibold text-background transition-[background-color,transform] duration-[var(--dur-fast)] ease-out hover:bg-foreground/85 active:translate-y-px motion-reduce:active:translate-y-0";
+  "inline-flex h-10 items-center gap-1.5 rounded-full bg-primary px-5 text-[15px] font-semibold text-primary-foreground transition-opacity duration-[var(--dur-fast)] ease-out hover:opacity-85 active:opacity-75";
 /** The quieter alternative: a text link. */
 export const secondaryAction =
-  "inline-flex items-center gap-1 rounded-md text-sm font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline";
+  "inline-flex h-10 items-center gap-1.5 rounded-full bg-fill px-5 text-[15px] font-medium text-foreground transition-colors duration-[var(--dur-fast)] hover:bg-foreground/[0.1]";

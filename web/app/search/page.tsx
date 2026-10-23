@@ -44,7 +44,7 @@ export default async function SearchPage({
 
   return (
     <div className={PAGE_STACK}>
-      <PageHeader title="Search" subtitle="Members of Congress, the tickers they trade, and SEC Form 4 insider issuers.">
+      <PageHeader eyebrow="Across Congress and SEC Form 4" title="Search" subtitle="Members of Congress, the tickers they trade, and SEC Form 4 insider issuers.">
         <form method="get" action="/search" role="search" className="flex max-w-xl items-center gap-2">
           <label className="relative min-w-0 flex-1">
             <span className="sr-only">Search members, tickers and insider issuers</span>
@@ -174,7 +174,7 @@ async function Results({ q }: { q: string }) {
                 href={tickerHref(t.ticker)}
                 className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-[13px] transition-colors duration-150 hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"
               >
-                <span className="font-mono font-semibold">{t.ticker}</span>
+                <span className="font-semibold">{t.ticker}</span>
                 <span className="min-w-0 truncate text-muted-foreground">{t.asset_name}</span>
                 <span className="ml-auto tabular text-xs text-muted-foreground">
                   {plural(t.politicians, "member")} · {plural(t.trades, "trade")} · last {shortDate(t.last_tx_date)}
@@ -202,7 +202,7 @@ async function Results({ q }: { q: string }) {
             {issuers.map((i) => {
               const inner = (
                 <>
-                  <span className="font-mono font-semibold">{i.ticker ?? "—"}</span>
+                  <span className="font-semibold">{i.ticker ?? "—"}</span>
                   <span className="min-w-0 truncate text-muted-foreground">{i.issuer_name}</span>
                   <span className="ml-auto tabular text-xs text-muted-foreground">
                     {plural(i.insiders, "insider")} · {plural(i.filings, "filing")} · {plural(i.trades, "trade")} · last{" "}

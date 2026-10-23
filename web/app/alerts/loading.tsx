@@ -11,7 +11,7 @@ export default function Loading() {
           </span>
         ))}
       </div>
-      <TilesSkeleton count={6} cols="sm:grid-cols-3 lg:grid-cols-6" />
+      <TilesSkeleton count={4} trend />
       <section>
         <SectionTitleSkeleton width="w-44" />
         <div className="max-w-[68ch]">
@@ -21,17 +21,22 @@ export default function Loading() {
             </span>
           ))}
         </div>
-        <div className="mt-4 space-y-2 border-l-2 border-border py-1 pl-3">
-          <Bone className="h-3 w-96 max-w-full" />
-          <Bone className="h-3 w-64 max-w-full" />
+        <div className="tile mt-3 inset-rows [--sep-inset:1rem]">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="flex h-11 items-center gap-6 px-4">
+              <Bone className="h-3 w-24" />
+              <Bone className="h-3 w-40 max-w-[30%]" />
+              <Bone className="h-3 w-40 max-w-[30%]" />
+            </div>
+          ))}
         </div>
       </section>
       <section>
         <SectionTitleSkeleton width="w-20" right />
         <PillsSkeleton count={5} note={false} />
-        <div className="mt-3 space-y-2">
+        <div className="tile mt-3 inset-rows py-1 [--sep-inset:1rem] sm:[--sep-inset:1.25rem]">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="glass space-y-3 rounded-2xl border border-border bg-card px-5 py-4">
+            <div key={i} className="space-y-3 px-4 py-3.5 sm:px-5">
               <div className="flex items-center gap-2">
                 <Bone className="h-5 w-24 rounded-full" />
                 <Bone className="h-5 w-12 rounded-full" />

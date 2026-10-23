@@ -18,7 +18,7 @@ export default function Loading() {
       <section>
         <SectionTitleSkeleton width="w-36" right />
         <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-2">
-          <div className="glass rounded-2xl border border-border bg-card p-2">
+          <div className="tile p-2">
             <Bone className="aspect-[1210/933] w-full rounded-xl" />
           </div>
           <TableSkeleton rows={6} cols={5} />

@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { Card, Empty, SectionTitle, StatTile } from "../../charts";
 import { Disclosure } from "../../disclosure";
 import { DataError, PAGE_STACK, PageHeader, Quiet } from "../../page-header";
-import { PartyBadge, StatusBadge, ResponsiveTable } from "../../ui";
+import { PartyBadge, StatusBadge, ResponsiveTable, Tag } from "../../ui";
 import type { Metadata } from "next";
 import { pageCard, pageMetadata } from "@/lib/seo";
 
@@ -112,17 +112,13 @@ export default async function ScanDetailPage({
         back={{ href: "/scans", label: "all scans" }}
         eyebrow="Scanned filing"
         title={filing.doc_id}
-        titleClassName="font-mono"
         badges={
           <span className="inline-flex flex-wrap items-center gap-2">
             <StatusBadge value={filing.status} />
             {filing.parse_method ? (
-              <span
-                className="rounded-md border border-border px-2 py-0.5 text-[12px] text-muted-foreground"
-                title={`parse_method: ${filing.parse_method}`}
-              >
+              <Tag title={`parse_method: ${filing.parse_method}`}>
                 {METHOD_LABEL[filing.parse_method] ?? filing.parse_method}
-              </span>
+              </Tag>
             ) : null}
           </span>
         }
@@ -131,7 +127,7 @@ export default async function ScanDetailPage({
             <PartyBadge party={filing.party} />
             <a
               href={memberHref(filing.member_name, filing.bioguide_id)}
-              className="font-medium text-foreground hover:text-primary"
+              className="font-medium text-foreground underline decoration-transparent underline-offset-[3px] hover:decoration-border-strong"
             >
               {memberLabel(filing.member_name, null, filing.state, filing.district, "house")}
             </a>
@@ -141,7 +137,7 @@ export default async function ScanDetailPage({
               href={filing.pdf_url}
               target="_blank"
               rel="noreferrer"
-              className="underline underline-offset-2 hover:text-primary"
+              className="ink-link"
             >
               Clerk PDF
             </a>
@@ -149,11 +145,15 @@ export default async function ScanDetailPage({
         }
       >
         {filing.last_error ? (
-          <p className="max-w-[68ch] text-[13px] text-attention">
-            Last error: <span className="break-words font-mono text-[12px]">{filing.last_error}</span>
-          </p>
+          <div className="tile flex max-w-[80ch] gap-3 px-4 py-3 text-[14px] leading-relaxed sm:px-5">
+            <span aria-hidden className="mt-[7px] size-2 shrink-0 rotate-45 rounded-[1px] bg-attention" />
+            <p className="min-w-0 text-ink-2">
+              <span className="font-semibold text-attention">Last error</span>{" "}
+              <span className="break-words">{filing.last_error}</span>
+            </p>
+          </div>
         ) : null}
-      <section aria-label="Scan totals" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <section aria-label="Scan totals" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatTile
           label="Pages"
           value={String(pages.length)}
@@ -210,7 +210,8 @@ export default async function ScanDetailPage({
           {/* An even split: the page is landscape, and the transcription column
               now carries the asset name, owner and any disagreement note. */}
           <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-2">
-            <Card className="p-2">
+            {/* The page stays in view beside its rows rather than stretching to the table's height. */}
+            <Card className="p-2 xl:sticky xl:top-[calc(var(--sticky-top,4rem)+1rem)] xl:self-start">
               <div className="relative w-full">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
@@ -227,15 +228,16 @@ export default async function ScanDetailPage({
             </Card>
             <ResponsiveTable wrap>
               {rows.length ? (
-                <table className="w-full text-[12px]">
+                <table className="w-full text-[13px]">
                   <thead>
-                    <tr className="border-b border-border text-left text-[12px] font-medium text-muted-foreground">
+                    <tr className="text-left text-[12px] font-medium text-muted-foreground">
                       <th className="px-3 py-2 font-medium">#</th>
                       <th className="px-3 py-2 font-medium">Amount</th>
                       <th className="px-3 py-2 text-right font-medium">margin</th>
                       <th className="px-3 py-2 font-medium">Type</th>
                       <th className="px-3 py-2 text-right font-medium">margin</th>
-                      <th className="px-3 py-2 font-medium">Transcription</th>
+                      {/* A floor on the prose column: squeezed on a phone it wrapped a word a line. */}
+                      <th className="min-w-[13rem] px-3 py-2 font-medium">Transcription</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -311,10 +313,10 @@ function Pager({
   const focus =
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
   const navCls = cn(
-    "shrink-0 whitespace-nowrap rounded-md border border-border px-2.5 py-1 text-xs transition-colors duration-150 hover:border-primary/40 hover:bg-accent",
+    "inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-full bg-fill px-3.5 text-[13px] font-medium transition-colors duration-150 hover:bg-foreground/[0.1]",
     focus
   );
-  const offCls = "shrink-0 whitespace-nowrap rounded-md border border-transparent px-2.5 py-1 text-xs text-muted-foreground";
+  const offCls = "inline-flex h-8 shrink-0 items-center whitespace-nowrap px-3.5 text-[13px] text-muted-foreground";
   return (
     <nav aria-label={`Pages — page ${current} of ${pages.length}`} className="mb-3 flex items-start gap-3">
       {prev ? (
@@ -337,12 +339,12 @@ function Pager({
                 aria-current={isCurrent ? "page" : undefined}
                 title={title}
                 className={cn(
-                  "tabular inline-block min-w-8 rounded-md border px-1.5 py-0.5 text-center text-[11px] transition-colors duration-150",
+                  "tabular inline-flex h-7 min-w-8 items-center justify-center rounded-[7px] px-2 text-[13px] font-medium transition-colors duration-150",
                   focus,
                   isCurrent
-                    ? "border-foreground bg-foreground font-semibold text-background"
-                    : "border-border hover:border-primary/40 hover:bg-accent",
-                  !isCurrent && p.error ? "text-red-600 dark:text-red-400" : "",
+                    ? "bg-primary font-semibold text-primary-foreground"
+                    : "bg-fill hover:bg-foreground/[0.1]",
+                  !isCurrent && p.error ? "text-error" : "",
                   !isCurrent && !p.error && p.unknown_rows ? "text-attention" : ""
                 )}
               >
@@ -372,7 +374,7 @@ function RowLine({ r }: { r: ScanRow }) {
       id={`row-${n}`}
       className={cn(
         // scroll-mt clears the sticky site header (~117px) when the row is the URL's anchor.
-        "scroll-mt-32 border-b border-border/50 last:border-0 target:bg-primary/10",
+        "scroll-mt-32 target:bg-foreground/[0.08]",
         flagged ? "bg-attention-soft" : ""
       )}
     >
@@ -384,8 +386,8 @@ function RowLine({ r }: { r: ScanRow }) {
       <td className="px-3 py-1.5">
         {r.amount_letter ? (
           <span>
-            <span className="font-mono font-semibold">{r.amount_letter}</span>{" "}
-            <span className="text-muted-foreground">{BRACKET[r.amount_letter]}</span>
+            <span className="font-semibold">{r.amount_letter}</span>{" "}
+            <span className="whitespace-nowrap text-muted-foreground">{BRACKET[r.amount_letter]}</span>
           </span>
         ) : (
           <span className="text-attention">

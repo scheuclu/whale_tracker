@@ -34,7 +34,7 @@ function Prose({ text }: { text: string }) {
     <>
       {parts.map((p, i) =>
         p.startsWith("`") && p.endsWith("`") ? (
-          <code key={i} className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em] text-ink-2">
+          <code key={i} className="rounded-[5px] bg-fill px-1 py-0.5 font-mono text-[0.85em] text-ink-2">
             {p.slice(1, -1)}
           </code>
         ) : (
@@ -66,7 +66,7 @@ function CoverageList({ c }: { c: Coverage }) {
     ]);
   }
   return (
-    <dl className="grid gap-x-6 gap-y-2.5 text-sm sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
+    <dl className="grid gap-x-6 gap-y-3 text-[15px] leading-snug sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
       {rows.map(([k, v]) => (
         <div key={k} className="contents">
           <dt className="text-muted-foreground">{k}</dt>
@@ -91,7 +91,7 @@ export default async function MethodologyPage() {
   }
 
   return (
-    <article className={`mx-auto max-w-3xl ${PAGE_STACK}`}>
+    <article className={`mx-auto max-w-[46rem] ${PAGE_STACK}`}>
       <AgentAlternates text="/llms-full.txt" />
       <PageHeader
         eyebrow="About the data"
@@ -100,7 +100,7 @@ export default async function MethodologyPage() {
           <>
             Where the data comes from, how each figure is computed, and how to quote it without saying more than the
             filings do. The same rules are published for language models in{" "}
-            <a href="/llms-full.txt" className="underline decoration-border underline-offset-2 hover:text-primary">
+            <a href="/llms-full.txt" className="ink-link">
               llms-full.txt
             </a>{" "}
             and repeated in every API response.
@@ -112,20 +112,20 @@ export default async function MethodologyPage() {
         <SectionTitle>
           <span id="rules">Rules for quoting</span>
         </SectionTitle>
-        <ol className="space-y-3">
+        <ol className="space-y-3 sm:space-y-4">
           {QUOTING_RULES.map((r, i) => (
             <li key={r.id} id={r.id} className="scroll-mt-28">
-              <Card className="flex gap-3.5">
-                <span className="tabular mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+              <Card className="flex gap-4 sm:px-7 sm:py-6">
+                <span className="tabular mt-px flex size-7 shrink-0 items-center justify-center rounded-full bg-fill text-[13px] font-semibold text-ink-2">
                   {i + 1}
                 </span>
-                <div className="min-w-0 space-y-1">
-                  <h3 className="text-[15px] font-semibold">
-                    <a href={`#${r.id}`} className="hover:text-primary">
+                <div className="min-w-0 space-y-1.5">
+                  <h3 className="text-[17px] font-semibold leading-snug tracking-[-0.015em]">
+                    <a href={`#${r.id}`} className="underline decoration-transparent underline-offset-[3px] hover:decoration-border-strong">
                       {r.title}
                     </a>
                   </h3>
-                  <p className="text-sm leading-relaxed text-muted-foreground">
+                  <p className="text-[16px] leading-[1.6] text-ink-2">
                     <Prose text={r.body} />
                   </p>
                 </div>
@@ -139,38 +139,40 @@ export default async function MethodologyPage() {
         <SectionTitle>
           <span id="sources">Sources</span>
         </SectionTitle>
-        <div className="grid gap-3">
-          {SOURCES.map((s) => (
-            <Card key={s.id} className="space-y-1">
-              <a
-                href={s.href}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-0.5 text-[15px] font-semibold hover:text-primary"
-              >
-                {s.name}
-                <ArrowUpRight className="size-3.5 opacity-60" aria-hidden />
-              </a>
-              <p className="text-sm leading-relaxed text-muted-foreground">
-                {s.what} {s.how}
-              </p>
-            </Card>
-          ))}
-        </div>
+        <Card className="p-0 sm:p-0">
+          <ul className="inset-rows py-1 [--sep-inset:1.25rem] sm:[--sep-inset:1.75rem]">
+            {SOURCES.map((s) => (
+              <li key={s.id} className="space-y-1 px-5 py-4 sm:px-7 sm:py-5">
+                <a
+                  href={s.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-0.5 text-[17px] font-semibold tracking-[-0.015em] underline decoration-transparent underline-offset-[3px] hover:decoration-border-strong"
+                >
+                  {s.name}
+                  <ArrowUpRight className="size-3.5 opacity-60" aria-hidden />
+                </a>
+                <p className="text-[16px] leading-[1.6] text-ink-2">
+                  {s.what} {s.how}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </Card>
       </section>
 
       <section aria-labelledby="coverage">
-        <SectionTitle right={<Link href="/pipeline" className="hover:text-primary">Pipeline status →</Link>}>
+        <SectionTitle right={<Link href="/pipeline" className="ink-link">Pipeline status</Link>}>
           <span id="coverage">Coverage, live</span>
         </SectionTitle>
-        <Card>{coverage ? <CoverageList c={coverage} /> : <p className="text-sm text-muted-foreground">Coverage figures are unavailable right now.</p>}</Card>
+        <Card className="sm:px-7">{coverage ? <CoverageList c={coverage} /> : <p className="text-[15px] text-muted-foreground">Coverage figures are unavailable right now.</p>}</Card>
       </section>
 
       <section aria-labelledby="cadence">
         <SectionTitle>
           <span id="cadence">Update cadence</span>
         </SectionTitle>
-        <ul className="list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-muted-foreground">
+        <ul className="tile list-disc space-y-2 py-5 pl-10 pr-5 text-[16px] leading-[1.6] text-ink-2 marker:text-ink-3 sm:py-6 sm:pl-12 sm:pr-7">
           {UPDATE_CADENCE.map((l) => (
             <li key={l}>
               <Prose text={l} />
@@ -183,7 +185,7 @@ export default async function MethodologyPage() {
         <SectionTitle>
           <span id="gaps">Known gaps</span>
         </SectionTitle>
-        <ul className="list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-muted-foreground">
+        <ul className="tile list-disc space-y-2 py-5 pl-10 pr-5 text-[16px] leading-[1.6] text-ink-2 marker:text-ink-3 sm:py-6 sm:pl-12 sm:pr-7">
           {KNOWN_GAPS.map((l) => (
             <li key={l}>{l}</li>
           ))}
@@ -194,28 +196,28 @@ export default async function MethodologyPage() {
         <SectionTitle>
           <span id="machines">For developers and AI agents</span>
         </SectionTitle>
-        <p className="mb-3 text-sm leading-relaxed text-muted-foreground">
+        <p className="mb-4 pl-1 text-[16px] leading-[1.6] text-ink-2">
           A read-only JSON API (no key, CORS open) with the rules above in every response&apos;s{" "}
-          <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]">meta.caveats</code>. Amounts come as{" "}
-          <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]">min_usd</code> /{" "}
-          <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]">max_usd</code> with the disclosed text,
+          <code className="rounded-[5px] bg-fill px-1 py-0.5 font-mono text-[0.85em]">meta.caveats</code>. Amounts come as{" "}
+          <code className="rounded-[5px] bg-fill px-1 py-0.5 font-mono text-[0.85em]">min_usd</code> /{" "}
+          <code className="rounded-[5px] bg-fill px-1 py-0.5 font-mono text-[0.85em]">max_usd</code> with the disclosed text,
           and any midpoint is named an estimate. Described by{" "}
-          <a href="/openapi.json" className="underline decoration-border underline-offset-2 hover:text-primary">
+          <a href="/openapi.json" className="ink-link">
             OpenAPI 3.1
           </a>
           ; summarised for language models in{" "}
-          <a href="/llms.txt" className="underline decoration-border underline-offset-2 hover:text-primary">
+          <a href="/llms.txt" className="ink-link">
             llms.txt
           </a>
           .
         </p>
         <Card className="p-0 sm:p-0">
-          <ul className="divide-y divide-border">
+          <ul className="inset-rows py-1 [--sep-inset:1.25rem] sm:[--sep-inset:1.75rem]">
             {API_ENDPOINTS.map((e) => (
-              <li key={e.path} className="grid gap-x-6 gap-y-0.5 py-2.5 text-sm sm:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]">
+              <li key={e.path} className="grid gap-x-6 gap-y-0.5 px-5 py-3 text-[15px] sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] sm:px-7">
                 <span className="break-all font-mono text-[12.5px]">
                   {e.example ? (
-                    <a href={e.example} className="hover:text-primary">
+                    <a href={e.example} className="underline decoration-transparent underline-offset-[3px] hover:decoration-border-strong">
                       {e.path}
                     </a>
                   ) : (
@@ -229,7 +231,7 @@ export default async function MethodologyPage() {
         </Card>
       </section>
 
-      <p className="text-xs text-muted-foreground">
+      <p className="pl-1 text-[13px] text-muted-foreground">
         Public disclosures, shown for information — not investment advice, and a disclosed trade is not evidence of
         wrongdoing.
       </p>

@@ -14,7 +14,9 @@
  * streamed `S:n` blocks in document order, and moves the footer below them.
  * A nested boundary's content (a chart streamed inside a page) lands after
  * the page body rather than in place; that is the best plain CSS can do, and
- * everything is readable and every link and form works.
+ * everything is readable and every link and form works. On a phone it also
+ * shows every table's "swipe for more columns" hint, which ScrollX would
+ * otherwise reveal once it had measured an overflow.
  *
  * The rules sit in Tailwind's `base` layer on purpose: preflight sets
  * `[hidden] { display: none !important }` there, and for `!important` a
@@ -41,6 +43,9 @@ body > div[hidden][id^="S:"] {
 body > div[hidden][id^="S:"]:has(> template[id^="B:"]) { padding: 0; }
 body > div[hidden][id^="S:"]:last-of-type { padding-bottom: 5rem; }
 body > div[id^="S:"] > .space-y-8 > :not(:last-child) { margin-block-end: 32px; }
+@media (max-width: 639px) {
+  .scroll-hint { display: flex !important; }
+}
 @media (min-width: 640px) {
   body > div[hidden][id^="S:"] { padding-inline: 1.5rem; padding-top: 3rem; }
   body > div[id^="S:"] > .space-y-8 > :not(:last-child) { margin-block-end: 48px; }

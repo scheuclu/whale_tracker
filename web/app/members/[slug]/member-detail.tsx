@@ -170,7 +170,7 @@ export async function MemberDetail({
               data={byTrades.slice(0, 12).map((r) => ({
                 key: r.ticker,
                 label: r.ticker,
-                sublabel: `${r.trades} trades`,
+                sublabel: `${r.trades} trade${r.trades === 1 ? "" : "s"}`,
                 buy: r.buys,
                 sell: r.sells,
                 href: tickerHref(r.ticker),

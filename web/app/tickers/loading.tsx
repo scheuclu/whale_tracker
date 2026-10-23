@@ -3,8 +3,9 @@
 import { usePathname, useSearchParams } from "next/navigation";
 import {
   BarsSkeleton,
-  CardGridSkeleton,
-  HeadingSkeleton,
+  GlanceSkeleton,
+  GroupedListSkeleton,
+  HeroSkeleton,
   PillsSkeleton,
   RangeSkeleton,
   SectionTitleSkeleton,
@@ -51,12 +52,19 @@ function TickersLoading() {
   );
 }
 
-/** One ticker: heading with the buy/sell balance, tiles, timeline, range, who traded it, every trade. */
+/** One ticker: the symbol hero, tiles and the buy/sell glance tile, price chart, timeline, range, who traded it, every trade. */
 export function TickerLoading() {
   return (
     <SkeletonPage label="the ticker">
-      <HeadingSkeleton split />
-      <TilesSkeleton wrap={false} />
+      <HeroSkeleton square />
+      <div className="space-y-3 sm:space-y-4">
+        <TilesSkeleton />
+        <GlanceSkeleton />
+      </div>
+      <section>
+        <SectionTitleSkeleton width="w-56" right />
+        <TimelineSkeleton />
+      </section>
       <section>
         <SectionTitleSkeleton width="w-32" right />
         <TimelineSkeleton />
@@ -67,7 +75,7 @@ export function TickerLoading() {
       </section>
       <section>
         <SectionTitleSkeleton width="w-36" right />
-        <CardGridSkeleton count={9} />
+        <GroupedListSkeleton rows={6} />
       </section>
       <section>
         <SectionTitleSkeleton width="w-40" right />

@@ -47,7 +47,7 @@ export function SkeletonPage({
   children,
 }: {
   label: string;
-  /** Lead with a `PageHeader` (kicker, serif headline, dek), as the index pages do. */
+  /** Lead with a `PageHeader` (eyebrow, large title, subtitle), as the index pages do. */
   head?: boolean;
   children: React.ReactNode;
 }) {
@@ -60,15 +60,18 @@ export function SkeletonPage({
   );
 }
 
-/** `PageHeader` (page-header.tsx): the kicker, the 46px serif headline, a two-line dek. */
+/**
+ * `PageHeader` (page-header.tsx), iOS large title: the 13px eyebrow, the
+ * 34px (48px from 640px) bold title, a two-line 17/19px subtitle.
+ */
 export function PageHeadSkeleton() {
   return (
     <div>
-      <Line h="h-4" bone="h-2.5 w-28" className="mb-2" />
-      <Bone className="h-9 w-64 max-w-full sm:h-12 sm:w-80" />
-      <div className="mt-2.5 max-w-[60ch] space-y-1">
-        <Line h="h-[25px] sm:h-[27px]" bone="h-3.5 w-full" />
-        <Line h="h-[25px] sm:h-[27px]" bone="h-3.5 w-2/3" />
+      <Line h="h-[18px]" bone="h-3 w-28" className="mb-1" />
+      <Line h="h-[37px] sm:h-[51px]" bone="h-[26px] w-64 max-w-full sm:h-9 sm:w-96" />
+      <div className="mt-2 max-w-[62ch] sm:mt-3">
+        <Line h="h-6 sm:h-[27px]" bone="h-3.5 w-full" />
+        <Line h="h-6 sm:h-[27px]" bone="h-3.5 w-2/3" />
       </div>
     </div>
   );
@@ -102,7 +105,7 @@ export function TileSkeleton({
 /** A row of `StatTile`s. `cols` mirrors the page's own grid classes. */
 export function TilesSkeleton({
   count = 4,
-  cols = "sm:grid-cols-4",
+  cols = "lg:grid-cols-4",
   tall = false,
   trend = false,
   wrap = true,
@@ -227,7 +230,10 @@ export function SplitSkeleton({ rows = 6 }: { rows?: number }) {
   );
 }
 
-/** A `ResponsiveTable`: header row, then hairline-separated rows. */
+/**
+ * A `ResponsiveTable`: a tile holding the header row, then rows under inset
+ * hairlines (`.grouped-table`), as the real table draws them.
+ */
 export function TableSkeleton({ rows = 8, cols = 6 }: { rows?: number; cols?: number }) {
   const cells = (row: number) =>
     Array.from({ length: cols }, (_, c) => (
@@ -242,12 +248,14 @@ export function TableSkeleton({ rows = 8, cols = 6 }: { rows?: number; cols?: nu
     ));
   return (
     <Card className="p-0 sm:p-0">
-      <div className="flex h-10 items-center gap-6 border-b border-border px-4">{cells(-1)}</div>
-      {Array.from({ length: rows }, (_, r) => (
-        <div key={r} className="flex h-11 items-center gap-6 border-b border-border/60 px-4 last:border-0">
-          {cells(r)}
-        </div>
-      ))}
+      <div className="inset-rows [--sep-inset:1rem]">
+        <div className="flex h-11 items-center gap-6 px-4 pt-1">{cells(-1)}</div>
+        {Array.from({ length: rows }, (_, r) => (
+          <div key={r} className="flex h-11 items-center gap-6 px-4">
+            {cells(r)}
+          </div>
+        ))}
+      </div>
     </Card>
   );
 }
@@ -302,24 +310,6 @@ export function FeedSkeleton({ days = 4 }: { days?: number }) {
         </div>
       ))}
     </div>
-  );
-}
-
-/** The feed's filter card (`FeedFilters`, feed-controls.tsx): labelled selects and Apply. */
-export function FiltersSkeleton({ fields = 7 }: { fields?: number }) {
-  const widths = ["w-20", "w-28", "w-36", "w-28", "w-32", "w-32", "w-40"];
-  return (
-    <Card variant="panel" className="mb-5 px-4 py-3">
-      <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
-        {Array.from({ length: fields }, (_, i) => (
-          <div key={i} className="space-y-1">
-            <Line h="h-[16px]" bone="h-2 w-12" />
-            <Bone className={cn("h-8 rounded-lg", widths[i % widths.length])} />
-          </div>
-        ))}
-        <Bone className="h-8 w-16 rounded-full" />
-      </div>
-    </Card>
   );
 }
 
@@ -474,69 +464,94 @@ export function ListSkeleton({ rows = 5, className }: { rows?: number; className
   );
 }
 
-/** `TickerMembers` (tickers/ticker-members.tsx): one card per member. */
-export function CardGridSkeleton({ count = 6 }: { count?: number }) {
+/**
+ * A `GroupedList` of people (grouped-list.tsx; `TickerMembers`): one tile,
+ * a 40px portrait, name over seat, the range and counts at the end.
+ */
+export function GroupedListSkeleton({ rows = 6 }: { rows?: number }) {
   return (
-    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-      {Array.from({ length: count }, (_, i) => (
-        <div key={i} className="flex items-center gap-3 rounded-card border border-border bg-card px-3.5 py-3">
-          <Bone className="size-10 shrink-0 rounded-full" />
-          <div className="min-w-0 flex-1">
-            <Line h="h-5" bone={cn("h-3", ["w-32", "w-40", "w-28"][i % 3])} />
-            <Line h="h-4" bone="h-2.5 w-36 max-w-full" />
-            <Line h="h-4" bone="h-2.5 w-24" className="mt-1" />
+    <Card className="p-0 sm:p-0">
+      <div className="inset-rows py-1 [--sep-inset:4.25rem]">
+        {Array.from({ length: rows }, (_, i) => (
+          <div key={i} className="flex h-[61px] items-center gap-3 px-4 sm:px-5">
+            <Bone className="size-10 shrink-0 rounded-full" />
+            <div className="min-w-0 flex-1">
+              <Line h="h-5" bone={cn("h-3.5", ["w-32", "w-40", "w-28"][i % 3])} />
+              <Line h="h-[18px]" bone="h-2.5 w-36 max-w-full" />
+            </div>
+            <div className="flex flex-col items-end">
+              <Line h="h-5" bone="h-3 w-20" />
+              <Line h="h-[18px]" bone="h-2.5 w-14" />
+            </div>
           </div>
-          <Bone className="h-3 w-16 shrink-0 self-start" />
-        </div>
-      ))}
-    </div>
+        ))}
+      </div>
+    </Card>
   );
 }
 
-/** A detail page's heading: back link, title and subtitle, and (tickers) the bought/sold balance. */
-export function HeadingSkeleton({ split = false }: { split?: boolean }) {
+/** A detail page's `PageHeader` with a back link (a scanned filing): back link, eyebrow, title, subtitle. */
+export function HeadingSkeleton() {
   return (
     <div>
-      <Line h="h-6" bone="h-2.5 w-20" />
-      <div className="mt-3 flex flex-wrap items-end justify-between gap-x-10 gap-y-5">
-        <div className="min-w-0">
-          <Bone className="h-9 w-36 sm:h-12 sm:w-44" />
-          <Line h="h-7" bone="h-4 w-72 max-w-full" className="mt-2.5" />
-        </div>
-        {split ? (
-          <div className="w-full sm:w-72">
-            <div className="flex h-5 items-center justify-between">
-              <Bone className="h-3 w-20" />
-              <Bone className="h-3 w-16" />
-            </div>
-            <Bone className="mt-2 h-2 w-full rounded-full" />
-            <div className="mt-2 flex h-4 items-center justify-between">
-              <Bone className="h-2.5 w-20" />
-              <Bone className="h-2.5 w-20" />
-            </div>
-          </div>
-        ) : null}
+      <Line h="h-[22px]" bone="h-3 w-20" />
+      <div className="mt-3">
+        <Line h="h-[18px]" bone="h-3 w-24" className="mb-1" />
+        <Line h="h-[37px] sm:h-[51px]" bone="h-[26px] w-40 sm:h-9 sm:w-52" />
+        <Line h="h-6 sm:h-[27px]" bone="h-3.5 w-72 max-w-full" className="mt-2 sm:mt-3" />
       </div>
     </div>
   );
 }
 
-/** The member page's header card: portrait, name, office, committee chips. */
-export function ProfileSkeleton() {
+/**
+ * The detail pages' hero (`MemberHero`, `SymbolHero`): back link, then a
+ * centred 96/120px mark — round for a member, a rounded square for a
+ * symbol — the name, the grey identity line, the plain-language line, the
+ * facts line and the capsule actions.
+ */
+export function HeroSkeleton({ square = false }: { square?: boolean }) {
   return (
-    <div>
-      <Line h="h-6" bone="h-2.5 w-24" />
-      <div className="flex h-[345px] flex-col gap-5 border-y border-border py-5 sm:h-[270px] sm:flex-row sm:items-start sm:py-6">
-        <Bone className="size-20 shrink-0 rounded-full sm:size-24" />
-        <div className="min-w-0 flex-1 space-y-3">
-          <Bone className="h-8 w-64 max-w-full" />
-          <Bone className="h-3.5 w-56 max-w-full" />
-          <div className="flex flex-wrap gap-1.5 pt-2">
-            {["w-28", "w-36", "w-24", "w-32", "w-20"].map((w) => (
-              <Bone key={w} className={cn("h-6 rounded-full", w)} />
-            ))}
-          </div>
+    <div className="space-y-8 sm:space-y-10">
+      <div className="-mb-2 sm:-mb-4">
+        <Line h="h-[22px]" bone="h-3 w-20" />
+      </div>
+      <div className="flex flex-col items-center">
+        <Bone className={cn("size-[96px] sm:size-[120px]", square ? "rounded-[28%]" : "rounded-full")} />
+        <Line h="h-[35px] sm:h-[46px]" bone="h-7 w-56 max-w-full sm:h-9 sm:w-72" className="mt-4 sm:mt-5" />
+        <Line h="h-[22px] sm:h-6" bone="h-3.5 w-40" className="mt-1.5" />
+        <Line h="h-[22px] sm:h-6" bone="h-3 w-72 max-w-full" className="mt-3" />
+        <Line h="h-5" bone="h-2.5 w-44" className="mt-0.5" />
+        <div className="mt-5 flex gap-2">
+          {["w-20", "w-8", "w-8", "w-8", "w-8"].map((w, i) => (
+            <Bone key={i} className={cn("h-8 rounded-full", w)} />
+          ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** `GlanceTile` (politicians/member-hero.tsx): the buy/sell split on the left, three capsules on the right. */
+export function GlanceSkeleton() {
+  return (
+    <div className="tile grid gap-x-10 gap-y-4 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-6 sm:py-5">
+      <div>
+        <div className="flex h-[22px] items-center justify-between">
+          <Bone className="h-4 w-24" />
+          <Bone className="h-4 w-20" />
+        </div>
+        <Bone className="mt-2.5 h-2 w-full rounded-full" />
+        <div className="mt-1.5 flex h-[18px] items-center justify-between">
+          <Bone className="h-2.5 w-20" />
+          <Bone className="h-2.5 w-20" />
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <Bone className="h-3 w-16" />
+        {["w-24", "w-28", "w-24"].map((w, i) => (
+          <Bone key={i} className={cn("h-7 rounded-full", w)} />
+        ))}
       </div>
     </div>
   );

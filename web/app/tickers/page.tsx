@@ -234,7 +234,7 @@ export default async function TickersPage({
                   <td className="px-3 py-2">
                     <a
                       href={tickerHref(r.ticker)}
-                      className="row-name font-mono font-semibold hover:text-primary"
+                      className="row-name font-semibold"
                     >
                       {r.ticker}
                     </a>
@@ -293,7 +293,7 @@ function SectorLeaderboard({ sectors }: { sectors: SectorRow[] }) {
       {classified.length ? (
         <div className="grid gap-6 lg:grid-cols-2">
           <Card>
-            <h3 className="mb-3 text-[11px] font-medium uppercase tracking-[0.07em] text-muted-foreground">
+            <h3 className="mb-3 text-[13px] font-semibold text-muted-foreground">
               Most members trading
             </h3>
             <MagnitudeBars
@@ -308,7 +308,7 @@ function SectorLeaderboard({ sectors }: { sectors: SectorRow[] }) {
             />
           </Card>
           <Card>
-            <h3 className="mb-3 text-[11px] font-medium uppercase tracking-[0.07em] text-muted-foreground">
+            <h3 className="mb-3 text-[13px] font-semibold text-muted-foreground">
               Estimated volume
             </h3>
             <MagnitudeBars

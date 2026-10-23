@@ -4,6 +4,10 @@ import { useSearchParams } from "next/navigation";
 import {
   BarsSkeleton,
   Bone,
+  GlanceSkeleton,
+  HeroSkeleton,
+  ListSkeleton,
+  TimelineSkeleton,
   PillsSkeleton,
   SectionTitleSkeleton,
   SkeletonPage,
@@ -11,7 +15,6 @@ import {
   TilesSkeleton,
   TradeRowsSkeleton,
 } from "../skeletons";
-import { Card } from "../charts";
 
 /**
  * Insiders has two shapes on one route: the overview, and one issuer
@@ -26,7 +29,7 @@ export default function Loading() {
 function InsidersLoading() {
   return (
     <SkeletonPage label="insiders" head>
-      <TilesSkeleton count={6} cols="sm:grid-cols-3 lg:grid-cols-6" wrap={false} />
+      <TilesSkeleton count={6} cols="sm:grid-cols-3" wrap={false} />
       <section>
         <SectionTitleSkeleton width="w-36" right />
         <SplitSkeleton rows={8} />
@@ -46,29 +49,26 @@ function InsidersLoading() {
   );
 }
 
-/** One issuer: symbol and name, five tiles, the member cross-link, then every trade. */
+/** One issuer: the symbol hero, tiles and the glance tile, the price chart, who traded, then every trade. */
 function IssuerLoading() {
   return (
     <SkeletonPage label="the issuer">
-      <div>
-        <span className="flex h-6 items-center">
-          <Bone className="h-2.5 w-20" />
-        </span>
-        <Bone className="mt-2 h-9 w-28" />
-        <span className="flex h-5 items-center">
-          <Bone className="h-3 w-80 max-w-full" />
-        </span>
+      <HeroSkeleton square />
+      <div className="space-y-3 sm:space-y-4">
+        <TilesSkeleton />
+        <GlanceSkeleton />
       </div>
-      <TilesSkeleton count={5} cols="sm:grid-cols-5" wrap={false} />
       <section>
-        <SectionTitleSkeleton width="w-40" />
-        <Card>
-          <Bone className="h-3.5 w-96 max-w-full" />
-        </Card>
+        <SectionTitleSkeleton width="w-56" right />
+        <TimelineSkeleton />
       </section>
       <section>
-        <SectionTitleSkeleton width="w-36" right />
-        <div className="mb-3 space-y-1.5">
+        <SectionTitleSkeleton width="w-28" right />
+        <ListSkeleton rows={5} />
+      </section>
+      <section>
+        <SectionTitleSkeleton width="w-36" />
+        <div className="mb-3 space-y-1.5 pl-1">
           <Bone className="h-2.5 w-full max-w-3xl" />
           <Bone className="h-2.5 w-1/2" />
         </div>

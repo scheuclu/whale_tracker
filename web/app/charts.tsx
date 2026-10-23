@@ -55,7 +55,7 @@ export function StatTile({
   // label, a big confident figure, one grey line of context. A zero figure
   // is set in muted ink, so the tiles that report something lead.
   return (
-    <div data-stat-tile className="viz-rise flex h-full min-w-0 flex-col rounded-tile bg-card p-4 shadow-card sm:px-5 sm:pb-5 sm:pt-4">
+    <div data-stat-tile className="viz-rise flex h-full min-w-0 flex-col rounded-tile bg-card p-4 shadow-card max-[359px]:px-3.5 sm:px-5 sm:pb-5 sm:pt-4">
       <div className="flex items-baseline justify-between gap-2">
         <div className="truncate text-[13px] font-semibold leading-5 text-muted-foreground">{label}</div>
         {trend?.length && trendCaption ? (
@@ -75,16 +75,59 @@ export function StatTile({
           <Sparkbars values={trend} label={trendLabel ?? label} names={trendLabels} />
         ) : null}
       </div>
-      {hint ? <div className="mt-auto pt-2.5 text-[13px] leading-snug text-muted-foreground">{hint}</div> : null}
+      {hint ? (
+        <div className="mt-auto pt-2.5 text-[13px] leading-snug text-muted-foreground max-[359px]:text-[12px]">
+          <Hint text={hint} />
+        </div>
+      ) : null}
       {delta ? (
-        <div className="tabular mt-1 text-[13px] leading-snug text-ink-2" title={delta.title}>
+        <div className="tabular mt-1 text-[13px] leading-snug text-ink-2 max-[359px]:text-[12px]" title={delta.title}>
           <span aria-hidden className="mr-1 text-[9px] text-muted-foreground">
             {delta.direction === "up" ? "▲" : delta.direction === "down" ? "▼" : "■"}
           </span>
-          {delta.text}
+          <Hint text={delta.text} />
         </div>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * A tile's grey context line, broken only where it reads well. On a phone a
+ * tile is ~140px wide and the line wraps; left alone it broke inside a
+ * phrase ("438 in last / 12 wk") or a range ("$3.9M– / $8.9M"). Each
+ * " · "-separated phrase is kept whole when it is short enough to fit a
+ * phone tile (21 characters: "1,787 in last 12 wk" fits a 390px phone's
+ * tile at 13px and a 320px one's at 12px), and a range never breaks at its
+ * dash.
+ */
+function Hint({ text }: { text: string }) {
+  const parts = text.split(" · ");
+  return (
+    <>
+      {parts.map((p, i) => (
+        <span key={i}>
+          {i ? " · " : null}
+          <span className={p.length <= 21 ? "whitespace-nowrap" : undefined}>{keepTogether(p)}</span>
+        </span>
+      ))}
+    </>
+  );
+}
+
+/**
+ * Where a longer phrase may not break: never at a range's dash, and never
+ * before its last word, so no word sits alone on a line (the last two words
+ * are one unbreakable span; the text itself keeps plain spaces).
+ */
+function keepTogether(p: string): React.ReactNode {
+  const t = p.replace(/(\d[kMB%]?)–(\$?\d)/g, "$1\u2060–\u2060$2");
+  const words = t.split(" ");
+  if (words.length < 3) return t;
+  return (
+    <>
+      {words.slice(0, -2).join(" ")} <span className="whitespace-nowrap">{words.slice(-2).join(" ")}</span>
+    </>
   );
 }
 
@@ -974,11 +1017,18 @@ export function MonthlyColumns({ data, height = 112 }: { data: ColumnDatum[]; he
   // Cap labels are the one direct label per stack. They need a desktop slot
   // and no more than ~14 of them; past that (or on a phone) the tooltip and
   // the table carry the values and the caps stay empty rather than collide.
-  const cap = cn("tabular hidden text-[11px] leading-[14px] text-muted-foreground", n <= 14 && "sm:block");
+  // The slot must also be wide enough: in a half-width tile twelve "$1.5M"
+  // caps ran into each other, so they need ~3rem a slot (a container query
+  // on the chart, not the viewport).
+  const cap = cn(
+    "tabular hidden text-[11px] leading-[14px] text-muted-foreground",
+    n <= 6 ? "@min-[18rem]:block" : n <= 12 ? "@min-[36rem]:block" : n <= 14 && "@min-[42rem]:block"
+  );
   const stack =
     "flex w-full max-w-6 flex-col gap-[2px] transition-opacity duration-(--dur) ease-(--ease-out) group-hover:opacity-80 group-focus-visible:opacity-80 motion-reduce:transition-none";
 
   return (
+    <div className="@container">
     <div className="flex gap-[2px]">
       {data.map((d, i) => {
         const up = d.up.filter((s) => s.value > 0);
@@ -1034,6 +1084,7 @@ export function MonthlyColumns({ data, height = 112 }: { data: ColumnDatum[]; he
           </div>
         );
       })}
+    </div>
     </div>
   );
 }

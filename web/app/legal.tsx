@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { SectionTitle } from "./charts";
-import { Disclosure } from "./disclosure";
+import { ChevronRight } from "lucide-react";
 import { PAGE_STACK, PageHeader } from "./page-header";
 
 /**
@@ -38,7 +38,7 @@ export function LegalPage({
   sections: LegalSection[];
 }) {
   return (
-    <article className={`mx-auto max-w-3xl ${PAGE_STACK}`}>
+    <article className={`mx-auto max-w-[46rem] ${PAGE_STACK}`}>
       <PageHeader
         eyebrow={
           <>
@@ -48,18 +48,29 @@ export function LegalPage({
         title={title}
         subtitle={subtitle}
       >
-        <Disclosure lead={summary} />
+        {/* The short version, in a tile: the part of the page most readers need. */}
+        <div className="tile px-5 py-5 sm:px-7 sm:py-6">
+          <p className="kicker mb-1.5">The short version</p>
+          <div className="text-[17px] leading-[1.55] text-foreground [&_a]:text-foreground">{summary}</div>
+        </div>
       </PageHeader>
 
       <nav aria-labelledby="legal-contents">
         <SectionTitle>
           <span id="legal-contents">On this page</span>
         </SectionTitle>
-        <ol className="grid list-decimal gap-x-8 gap-y-1 pl-5 text-sm text-ink-2 marker:text-muted-foreground sm:grid-cols-2">
-          {sections.map((s) => (
+        <ol className="tile inset-rows py-1 [--sep-inset:3rem] sm:[--sep-inset:3.5rem]">
+          {sections.map((s, i) => (
             <li key={s.id}>
-              <a href={`#${s.id}`} className="rounded-sm transition-colors duration-150 hover:text-primary">
-                {s.title}
+              <a
+                href={`#${s.id}`}
+                className="group/toc flex min-h-11 items-center gap-3 px-5 py-2.5 text-[15px] outline-offset-[-2px] sm:px-7"
+              >
+                <span className="tabular w-4 shrink-0 text-right text-[13px] text-muted-foreground">{i + 1}</span>
+                <span className="flex-1 underline decoration-transparent underline-offset-[3px] transition-[text-decoration-color] group-hover/toc:decoration-border-strong">
+                  {s.title}
+                </span>
+                <ChevronRight aria-hidden className="size-4 shrink-0 text-ink-3" strokeWidth={2.25} />
               </a>
             </li>
           ))}
@@ -74,7 +85,7 @@ export function LegalPage({
               {s.title}
             </span>
           </SectionTitle>
-          <div className="space-y-3 text-sm leading-relaxed text-muted-foreground [&_li]:pl-0.5 [&_strong]:font-semibold [&_strong]:text-ink-2 [&_ul]:list-disc [&_ul]:space-y-1.5 [&_ul]:pl-5">
+          <div className="tile space-y-3.5 px-5 py-5 text-[16px] leading-[1.6] text-ink-2 sm:px-7 sm:py-6 [&_li]:pl-0.5 [&_strong]:font-semibold [&_strong]:text-foreground [&_ul]:list-disc [&_ul]:space-y-2 [&_ul]:pl-5 [&_ul]:marker:text-ink-3">
             {s.body}
           </div>
         </section>
@@ -86,7 +97,7 @@ export function LegalPage({
 /** An in-text link at the fine-print style the footer uses. */
 export function TextLink({ href, children }: { href: string; children: React.ReactNode }) {
   const cls =
-    "rounded-sm text-ink-2 underline decoration-border-strong underline-offset-2 transition-colors duration-150 hover:text-primary hover:decoration-primary/50";
+    "rounded-sm text-inherit underline decoration-border-strong underline-offset-[3px] transition-[text-decoration-color] duration-150 hover:decoration-current";
   if (href.startsWith("/")) {
     return (
       <Link href={href} className={cls}>
@@ -103,5 +114,5 @@ export function TextLink({ href, children }: { href: string; children: React.Rea
 
 /** A field or key name, set in mono like the methodology page's. */
 export function Code({ children }: { children: React.ReactNode }) {
-  return <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em] text-ink-2">{children}</code>;
+  return <code className="rounded-[5px] bg-fill px-1 py-0.5 font-mono text-[0.85em] text-ink-2">{children}</code>;
 }

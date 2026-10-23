@@ -1,3 +1,4 @@
+import { ChevronRight } from "lucide-react";
 import { ResponsiveTable } from "./ui";
 
 /**
@@ -15,8 +16,11 @@ export function DataTable({
   rows: (string | number)[][];
 }) {
   return (
-    <details className="mt-3 text-[12px] text-muted-foreground">
-      <summary className="w-fit cursor-pointer select-none rounded-sm transition-colors duration-(--dur-fast) hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">Show as table</summary>
+    <details className="group/table mt-3 text-[13px] text-muted-foreground">
+      <summary className="inline-flex w-fit cursor-pointer select-none list-none items-center gap-1 rounded-sm font-medium text-ink-2 transition-colors duration-(--dur-fast) hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
+        <ChevronRight aria-hidden className="size-3.5 shrink-0 transition-transform duration-150 group-open/table:rotate-90 motion-reduce:transition-none" />
+        Show as table
+      </summary>
       <ResponsiveTable className="mt-2">
         <table className="w-full text-[13px]">
           <caption className="sr-only">{caption}</caption>

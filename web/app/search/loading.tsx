@@ -15,7 +15,7 @@ export default function Loading() {
       {["w-20", "w-16", "w-28"].map((w, s) => (
         <section key={w}>
           <SectionTitleSkeleton width={w} right />
-          <div className="glass divide-y divide-border/50 rounded-2xl border border-border bg-card">
+          <div className="tile inset-rows py-1 [--sep-inset:1rem]">
             {Array.from({ length: s === 0 ? 4 : 3 }, (_, i) => (
               <div key={i} className="flex items-center gap-3 px-4 py-3">
                 <Bone className="size-5 rounded" />

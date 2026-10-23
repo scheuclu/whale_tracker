@@ -1,3 +1,4 @@
+import { ChevronRight } from "lucide-react";
 import { MoneyText } from "../money";
 import type { TickerMemberRow } from "@/lib/queries";
 import { memberHref, range, shortDate } from "@/lib/format";
@@ -5,11 +6,13 @@ import { seatLabel } from "@/lib/members";
 import { SectionTitle } from "../charts";
 import { MemberAvatar } from "../avatar";
 import { PartyBadge } from "../ui";
+import { GroupedList } from "../grouped-list";
 
 /**
- * Who traded this ticker: one card per member, with their buys and sells
- * spelled out and the range their brackets disclose. Every counted trade is
- * included, not the page's trade list, so the cards add up to the tiles.
+ * Who traded this ticker: an iOS grouped list, one row per member — the
+ * portrait, name and seat, their buys and sells spelled out, and the range
+ * their brackets disclose. Every counted trade is included, not the page's
+ * trade list, so the rows add up to the tiles. The whole row is the link.
  */
 export function TickerMembers({ ticker, members }: { ticker: string; members: TickerMemberRow[] }) {
   if (!members.length) return null;
@@ -17,69 +20,69 @@ export function TickerMembers({ ticker, members }: { ticker: string; members: Ti
     <section>
       <SectionTitle
         right={
-          <span className="text-[11px] text-muted-foreground">
+          <span>
             {members.length} member{members.length === 1 ? "" : "s"} · by est. volume · disclosed range
           </span>
         }
       >
         Who traded {ticker}
       </SectionTitle>
-      <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <GroupedList inset="4.25rem">
         {members.map((m) => {
           const seat = seatLabel(m.chamber, m.state, m.district);
           const counted = m.trades > m.transcribed;
+          const other = m.trades - m.buys - m.sells;
           return (
             <li key={m.member_name}>
               <a
                 href={memberHref(m.member_name, m.bioguide_id)}
-                className="glass lift flex h-full items-center gap-3 rounded-2xl border border-border bg-card px-3.5 py-3"
+                className="group/row flex items-center gap-3 px-4 py-2.5 outline-offset-[-2px] transition-colors duration-(--dur-fast) hover:bg-[var(--feed-hover)] sm:px-5"
               >
                 <MemberAvatar name={m.member_name} bioguideId={m.bioguide_id} size="lg" />
                 <div className="min-w-0 flex-1">
                   <div className="flex min-w-0 items-center gap-1.5">
-                    <span className="truncate text-[13px] font-semibold tracking-tight">{m.member_name}</span>
+                    <span className="truncate text-[15px] font-semibold tracking-[-0.01em] underline decoration-transparent underline-offset-[3px] transition-[text-decoration-color] group-hover/row:decoration-border-strong">
+                      {m.member_name}
+                    </span>
                     <PartyBadge party={m.party} />
                   </div>
-                  <div className="truncate text-[11px] text-muted-foreground">
+                  <div className="truncate text-[13px] text-muted-foreground">
                     {seat ?? "not matched to the roster"} · last {shortDate(m.last_tx_date)}
                   </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-2.5 text-[11px]">
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-0.5 text-right">
+                  <span
+                    className="tabular text-[14px] text-foreground"
+                    title={
+                      counted
+                        ? "The range this member's brackets disclose for the ticker"
+                        : "Transcribed from a scan: counted as a trade, never in a total"
+                    }
+                  >
+                    {counted ? <MoneyText value={range(m.volume_min, m.volume_max)} /> : <span className="text-muted-foreground">not counted</span>}
+                  </span>
+                  <span className="tabular flex items-center gap-2 text-[12px] text-muted-foreground">
                     {m.buys ? (
                       <span className="inline-flex items-center gap-1">
-                        <span className="size-1.5 rounded-full" style={{ background: "var(--viz-buy)" }} />
-                        <span className="tabular font-medium">{m.buys}</span>
-                        <span className="text-muted-foreground">bought</span>
+                        <span aria-hidden className="size-1.5 rounded-full" style={{ background: "var(--viz-buy)" }} />
+                        {m.buys} bought
                       </span>
                     ) : null}
                     {m.sells ? (
                       <span className="inline-flex items-center gap-1">
-                        <span className="size-1.5 rounded-full" style={{ background: "var(--viz-sell)" }} />
-                        <span className="tabular font-medium">{m.sells}</span>
-                        <span className="text-muted-foreground">sold</span>
+                        <span aria-hidden className="size-1.5 rounded-full" style={{ background: "var(--viz-sell)" }} />
+                        {m.sells} sold
                       </span>
                     ) : null}
-                    {m.trades - m.buys - m.sells > 0 ? (
-                      <span className="text-muted-foreground">
-                        {m.trades - m.buys - m.sells} exchanged
-                      </span>
-                    ) : null}
-                  </div>
+                    {other > 0 ? <span>{other} exchanged</span> : null}
+                  </span>
                 </div>
-                <div
-                  className="tabular shrink-0 self-start text-right text-[12px] text-muted-foreground"
-                  title={
-                    counted
-                      ? "The range this member's brackets disclose for the ticker"
-                      : "Transcribed from a scan: counted as a trade, never in a total"
-                  }
-                >
-                  {counted ? <MoneyText value={range(m.volume_min, m.volume_max)} /> : "not counted"}
-                </div>
+                <ChevronRight aria-hidden className="hidden size-4 shrink-0 text-ink-3 sm:block" strokeWidth={2.25} />
               </a>
             </li>
           );
         })}
-      </ul>
+      </GroupedList>
     </section>
   );
 }
