@@ -17,10 +17,12 @@ App Store.** Concretely:
 2. **The system font.** `-apple-system` / `BlinkMacSystemFont` first, so
    Apple devices render SF Pro; Inter (self-hosted) everywhere else. Large,
    bold, tight titles; reading-size body; tabular figures for every number.
-3. **Monochrome interface.** Graphite in light mode, white in dark: the
-   filled button, the selected segment, the active section, link hovers.
-   **Apple's blue is not available — blue means "bought".** Buy-blue and
-   sell-red are the only saturated colours on a page.
+3. **Monochrome, data included.** Graphite in light mode, white in dark:
+   the filled button, the selected segment, the active section, link
+   hovers — and the data: **bought is the ink, sold is silver** (the user's
+   choice, 2026-10-23). Direction always also reads from position and
+   words. The only colour left is small status accents (a dot, a diamond)
+   and the app icon's gold tie.
 4. **Big numbers, small grey labels.** Stocks/Health tiles: a 13px semibold
    grey label, a 30–36px figure, one grey line of context.
 5. **Grouped lists.** Lists and tables sit in a tile as iOS inset-grouped
@@ -77,50 +79,87 @@ canvas, the tile and the hover wash in both modes.
 Where iOS would be blue, v3 is graphite: links are ink with a hairline
 underline that firms on hover; the selected segment is a white raised chip
 on a grey track (`#636366` in dark mode); the active nav section is a grey
-capsule. Nothing interactive is ever blue or red.
+capsule. Nothing interactive is ever coloured.
 
-### Status (pipeline and filing state — never buy/sell, never the accent)
+### Status accents (pipeline and filing state — never buy/sell, never the accent)
 
-| Token | Light | Dark |
-| --- | --- | --- |
-| `--ok` | `#24744a` | `#5bb585` |
-| `--attention` | `#a34f0b` | `#f0954a` |
-| `--error` (`--destructive`) | `#8a3478` (plum: red is "sold") | `#eaa8e4` |
+| Token | Light | Dark | On tile (light / dark) |
+| --- | --- | --- | --- |
+| `--ok` | `#248a3d` | `#30d158` | 4.4 / 8.4 |
+| `--attention` | `#c93400` | `#ff9f0a` | 5.3 / 8.3 |
+| `--error` (`--destructive`) | `#ff3b30` | `#ff453a` | 3.6 / 5.0 |
 
-Each has a `*-soft` wash for pills. Status always ships with a word; error
-pills are also outlined and carry a diamond, not a dot. Error vs buy/sell on
-the v3 tiles (dataviz validator, `--pairs all`): light CVD ΔE 14.5 (protan),
-normal 17.5; dark CVD 15.3, normal 19.1; all ≥ 3:1.
+iOS Settings style: the state is a **small mark beside ink text** — a dot for
+ok and attention, a **diamond** for an error — in a grey pill (`StatusBadge`,
+`HealthPill`, the status screen's chip) or before a sentence
+(`StatusNote`, `AsFiled`). Pills are never tinted and words are never set in
+these colours (they are non-text marks: 3:1 is the bar). An error pill also
+carries a hairline outline, so "unreadable" reads by shape and word, not by
+red alone. Ok and attention dots are 4.8 apart under deuteranopia (validator)
+— the word carries the state; never use a dot without one. Late counts are
+an ink figure (an outlined chip in tables, "49d late" in rows) with no
+colour: a reporting fact, not an alarm. Red is free for errors because it no
+longer means "sold".
 
 ### Data-viz roles (`--viz-*`)
 
 | Role | Light | Dark | Notes |
 | --- | --- | --- | --- |
-| `--viz-buy` | `#2a78d6` | `#3987e5` | bought; diverging pair with sell |
-| `--viz-sell` | `#d03b3b` | `#e66767` | sold |
-| `--viz-seq` | `#3a3a3c` | `#aeaeb2` | single-series magnitude (ranked bars, sparkbars' current period, the range band). Graphite, like the interface. |
+| `--viz-buy` | `#1d1d1f` | `#f5f5f7` | bought: the ink |
+| `--viz-sell` | `#aeaeb2` | `#636366` | sold: silver (2.2:1 / 2.8:1 on the tile — always labelled) |
+| `--viz-seq` | `#7c7c80` | `#909095` | a neutral quantity: ranked volume and count bars, sparkbars' current period, the range band, the bracket ladder's own rung, "exchange / other" marks, scan counts. The mid grey, **never the buy ink**. |
+| `--viz-price` | `#48484a` | `#c1c1c6` | the strong neutral line: the price close, the delay median. Dark grey, not the ink. |
+| `--viz-bench` | = seq, dashed | = seq, dashed | the SPY benchmark, the delay p90 (solid) |
 | `--viz-track` | fill 12% | fill 24% | empty bar track |
 | `--viz-grid` / `--viz-axis` | `#e8e8ed` / `#8e8e93` | `#2c2c2e` / `#8e8e93` | recessive grid and axes |
-| `--viz-rung-off/below/on` | `#e8e8ed` / `#aeaeb2` / `#1d1d1f` | `#3a3a3c` / `#636366` / `#f5f5f7` | the bracket ladder (neutral ordinal ramp) |
-| `--viz-price` / `--viz-bench` | `#1d1d1f` / `#8e8e93` | `#f5f5f7` / `#aeaeb2` | price overlay: one ink, one grey |
+| `--viz-rung-off/below/on` | `#e8e8ed` / `#aeaeb2` / seq | `#3a3a3c` / `#636366` / seq | the bracket ladder (neutral ordinal ramp) |
+
+**Direction is double-encoded, always.** Ink vs silver is only the echo:
+
+| Where | Position | Words / arrows |
+| --- | --- | --- |
+| `DivergingSplit` | bought left of the axis, sold right | legend "Bought" / "Sold", "← Bought" / "Sold →" captions, counts at every tip |
+| `MonthlyColumns` (/trends) | bought up, sold down | legend, cap labels, tooltip, table |
+| Timeline, price lanes | buys above the axis, sells below | "Buys →" / "← Sells", "bought" / "sold" lane labels, legend counts, tooltips |
+| `SplitCell`, member/ticker glance bar | buys first (left) | "12 / 30" with the header naming the order; "44 bought … sold 34" |
+| `ActionBadge` | — | "↗ Buy" (ink on a darker tint) / "↘ Sell" (secondary ink on a light tint) |
+| Insider value cells, "Most bought / sold" | their own column or list | the column header / section title |
+| Share cards | — | a small dot beside "buys" / "sells" |
+
+Collisions with the neutral roles, and how they are kept apart:
+
+- **Quantity vs bought.** A single-series bar is the mid grey, ΔE 35 from the
+  ink and 16 from silver, and never carries a Bought/Sold legend.
+- **Price line vs buys.** The close is `--viz-price`, a dark grey line in its
+  own panel; buys are ink dots in the lanes under it, with "bought" printed
+  beside them. SPY is the mid grey, dashed, named in the legend.
+- **Exchange / other.** The mid grey, on the axis (neither above nor below),
+  named in the legend.
+- **Cluster spans.** A buying cluster is a flat grey wash with a solid bar
+  over its lane; a selling cluster is a diagonal hatch with a dashed bar.
+  Legend, span list and readout say "buying" / "selling".
+- **Party inside a direction.** Hatching (solid Democrat, 45° Republican,
+  135° other), tone-on-tone inside the ink or silver column.
+- **Transcribed (scanned) rows are not a colour.** They are drawn hollow and
+  dashed (the bracket ladder, the timeline) or hatched (/trends), and always
+  say "transcribed from scan" in words.
 
 Validated with the `dataviz` skill's `validate_palette.js` against the v3
 tiles (`#ffffff` / `#1c1c1e`); re-run it before changing any value:
 
-- buy · sell · seq, `--pairs all` — light: worst CVD ΔE 14.2 (seq/sell,
-  protan), normal 27.7, all ≥ 3:1; dark: CVD 10.5 (seq/sell, deutan), normal
-  17.9, all ≥ 3:1. The lightness-band and chroma-floor checks fail for seq by
-  design: it is a neutral single-series role, never a categorical slot.
-- buy/sell alone (unchanged hues): CVD 23.8 / normal 31.6 light, 19.2 / 29.0
-  dark — on the tiles and on the canvases (`#f5f5f7`, `#000`); all pass.
-- price · bench · buy · sell, `--pairs all` — light CVD 11.6, normal 17.3;
-  dark CVD 10.5, normal 17.9; all ≥ 3:1.
-- rung below → on, `--ordinal` — both modes pass (monotone L, ΔL ≥ 0.06,
-  light end 2.21:1 light / 2.84:1 dark).
-
-**Transcribed (scanned) rows are not a colour.** They are drawn hollow and
-dashed (the bracket ladder, the timeline) or hatched, and always say
-"transcribed from scan" in words.
+- buy · sell — ΔE 52.0 light (on the tile and on `#f5f5f7`), 47.0 dark (on
+  the tile and on `#000`); with no hue, CVD equals normal vision.
+- buy · sell · seq · price, `--pairs all` — worst 16.4 light (seq/sell), 15.4
+  dark (seq/sell); all ≥ 15.
+- Every slot FAILs the lightness-band and chroma-floor checks (they are
+  greys), and silver WARNs on contrast (2.21:1 light, 2.84:1 dark; 2.03:1 on
+  the light canvas). Acceptable **only** because direction is double-encoded
+  and every silver mark is labelled. Never use these as categorical colours.
+- rung below → on (`#aeaeb2` → `#7c7c80`, `#636366` → `#909095`),
+  `--ordinal` — both modes pass (monotone L, ΔL 0.164 / 0.154, light end
+  2.21:1 light / 2.84:1 dark).
+- Green/red stays out: Apple's `#34c759` / `#ff3b30` measure CVD ΔE 6.8
+  (deutan) on white.
 
 ## Type
 
@@ -193,8 +232,10 @@ Sentence case everywhere; no tracked capitals.
 - **Disclosure** — "How to read this": the lead at reading size in
   secondary ink, the detail in a native `<details>`.
 - **Badges** (`ui.tsx`) — chip (6px, facts), pill (round, filing state).
-  Direction chips are buy/sell tints with a glyph and the word; ticker chips
-  are grey-filled semibold sans; `ScanTag` is a dashed outline.
+  Direction chips are "↗ Buy" on a darker ink tint and "↘ Sell" on a light
+  silver tint — the glyph and word carry it; ticker chips are grey-filled
+  semibold sans; `ScanTag` is a dashed outline; state pills are grey with a
+  small status mark.
 - **Controls** — `Segmented` (iOS segmented control), `BUTTON` (grey
   capsule), `BUTTON_PRIMARY` (graphite capsule), `FIELD` (grey filled 12px
   rect, no border). One focus ring.
@@ -223,8 +264,10 @@ Sentence case everywhere; no tracked capitals.
 ## Do / don't
 
 - **Do** put content in a tile; **don't** add borders round tiles.
-- **Do** use graphite/white for anything interactive; **don't** use blue or
-  red for anything but buy/sell, and **don't** colour a party.
+- **Do** use graphite/white for anything interactive; **don't** add colour
+  beyond the small status accents, and **don't** colour a party.
+- **Do** give every buy/sell mark a position and/or words; **don't** draw a
+  neutral quantity in the buy ink, or a silver mark without its label.
 - **Do** give every number tabular figures; **don't** print a congressional
   dollar figure without "est." or a range.
 - **Do** say a caveat once, in a `Disclosure`.

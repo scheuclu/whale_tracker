@@ -97,7 +97,6 @@ export function ScrollRow({ children, className }: { children: React.ReactNode; 
 const CHIP = "inline-flex h-[22px] shrink-0 align-middle items-center gap-1 whitespace-nowrap rounded-chip px-2 text-[12px] leading-none tracking-[-0.005em]";
 const NEUTRAL = "bg-fill text-ink-2";
 const HAIRLINE = "ring-1 ring-inset ring-border";
-const AMBER = "bg-attention-soft text-attention";
 /** A transcribed (scanned) row: neutral and dashed — provisional, not a colour. */
 const SCAN = "border border-dashed border-border-strong text-ink-2";
 /** Focus ring for every link and control: 2px primary, offset off the surface. */
@@ -133,15 +132,16 @@ export function Tag({
 }
 
 /**
- * Direction chips: a soft tint of the diverging buy/sell role, a direction
- * glyph and the word. The word carries the meaning, so a colour-blind reader
- * loses nothing; the ink is the role mixed toward the foreground so 11px text
- * clears contrast on both surfaces without inventing a new colour.
+ * Direction chips: "↗ Buy" / "↘ Sell" on a tint of the buy ink or the sell
+ * silver. The glyph and the word carry the direction; the tint only echoes
+ * the chart marks, so it is never read alone: Buy is a visibly darker
+ * capsule than the grey fact chips around it, Sell about as light as them.
+ * The text is ink (Buy, 11.7:1 light / 7.9:1 dark on its tint) and the
+ * secondary ink (Sell, 8.4:1 / 7.9:1), never the tint's own grey: silver
+ * text would miss 4.5:1.
  */
-const BUY_TONE =
-  "bg-[color-mix(in_oklab,var(--viz-buy)_12%,transparent)] text-[color-mix(in_oklab,var(--viz-buy)_74%,var(--foreground))]";
-const SELL_TONE =
-  "bg-[color-mix(in_oklab,var(--viz-sell)_11%,transparent)] text-[color-mix(in_oklab,var(--viz-sell)_76%,var(--foreground))]";
+const BUY_TONE = "bg-[color-mix(in_srgb,var(--viz-buy)_18%,transparent)] dark:bg-[color-mix(in_srgb,var(--viz-buy)_22%,transparent)] text-foreground";
+const SELL_TONE = "bg-[color-mix(in_srgb,var(--viz-sell)_25%,transparent)] dark:bg-[color-mix(in_srgb,var(--viz-sell)_35%,transparent)] text-ink-2";
 
 const ACTION_TONE: Record<string, { cls: string; glyph: LucideIcon }> = {
   purchase: { cls: BUY_TONE, glyph: ArrowUpRight },
@@ -162,26 +162,40 @@ export function ActionBadge({ action }: { action: string }) {
 }
 
 /**
- * Filing states. Round pills with a dot, in the muted status set: green ok,
- * ink in flight, attention (burnt orange), error, grey history — the status
- * tokens, never the buy/sell pair.
+ * The status accents as small marks beside ink text (iOS Settings): a dot
+ * for ok and attention, a diamond for an error. Classes, so a pill, a page
+ * header badge and a sentence all draw the same mark.
  */
-const OK = { cls: "bg-ok-soft text-ok", dot: "bg-ok" };
-const GREY = { cls: NEUTRAL, dot: "bg-muted-foreground" };
-const WARN = { cls: AMBER, dot: "bg-attention" };
+export const STATUS_MARK = {
+  ok: "bg-ok rounded-full",
+  attention: "bg-attention rounded-full",
+  error: "bg-error rounded-[1px]! rotate-45",
+} as const;
+
+/**
+ * Filing states, the way iOS Settings shows one: a grey pill with the word
+ * in ink and a small status mark — a green dot (alerted), an orange dot (in
+ * flight / needs attention), a red diamond (unreadable), a grey or ink dot
+ * (history, sending). The pill itself is never tinted; the word carries the
+ * state and the mark's shape, not only its colour, sets an error apart.
+ */
+const PILL = "bg-fill text-ink-2";
+const OK = { cls: PILL, dot: "bg-ok" };
+const GREY = { cls: PILL, dot: "bg-muted-foreground" };
+const WARN = { cls: PILL, dot: "bg-attention" };
 
 const STATUS_TONE: Record<string, { label: string; cls: string; dot: string }> = {
   notified: { label: "alerted", ...OK },
   backfilled: { label: "history", ...GREY },
-  parsed: { label: "sending", cls: "bg-foreground/[0.07] text-foreground", dot: "bg-foreground" },
-  new: { label: "processing", cls: AMBER, dot: "bg-attention motion-safe:animate-pulse" },
+  parsed: { label: "sending", cls: PILL, dot: "bg-foreground" },
+  new: { label: "processing", cls: PILL, dot: "bg-attention motion-safe:animate-pulse" },
   backfill_queued: { label: "queued", ...WARN },
   failed: {
     label: "unreadable",
-    // Plum and outlined, with a diamond rather than a dot: an error must
-    // never read as the red "Sell" chip beside it.
-    cls: "bg-error-soft text-error ring-1 ring-inset ring-error/40",
-    dot: "bg-error rounded-[1px]! rotate-45",
+    // A diamond rather than a dot, and a hairline round the pill: the
+    // error reads by shape and word, not by the red alone.
+    cls: cn(PILL, "text-foreground ring-1 ring-inset ring-border-strong"),
+    dot: STATUS_MARK.error,
   },
   seen_skipped: { label: "indexed", ...GREY },
   // A scan the grid reader has captured but no model has transcribed: the
@@ -189,6 +203,35 @@ const STATUS_TONE: Record<string, { label: string; cls: string; dot: string }> =
   // boxes were read, only the written text is missing.
   not_transcribed: { label: "not transcribed", ...WARN },
 };
+
+/**
+ * A status accent in running text: the small mark, then the sentence in the
+ * text ink. Use it wherever a warning or error used to be coloured text.
+ */
+export function StatusNote({
+  tone,
+  children,
+  className,
+  as: As = "span",
+  title,
+}: {
+  tone: keyof typeof STATUS_MARK;
+  children: React.ReactNode;
+  className?: string;
+  as?: "span" | "p" | "div";
+  title?: string;
+}) {
+  return (
+    <As className={cn(As === "span" ? "inline" : "block", className)} title={title}>
+      <span
+        aria-hidden
+        className={cn("mr-1.5 inline-block size-1.5 shrink-0", tone === "error" && "mx-0.5 mr-2 size-[7px]", STATUS_MARK[tone])}
+        style={{ verticalAlign: "0.12em" }}
+      />
+      {children}
+    </As>
+  );
+}
 
 export function Pill({ tone, dot, children }: { tone: string; dot: string; children: React.ReactNode }) {
   return (
@@ -214,9 +257,8 @@ export function StatusBadge({ value }: { value: string }) {
 }
 
 /**
- * Party as a neutral letter (or, with `full`, the word). Deliberately not
- * blue/red: that pair is the buy/sell encoding on every chart and pill, and
- * a Democrat tinted like a purchase would read as one.
+ * Party as a neutral letter (or, with `full`, the word). Never tinted: the
+ * page has no party colours, and the greys are the buy/sell encoding.
  */
 export function PartyBadge({ party, full = false }: { party: string | null; full?: boolean }) {
   if (!party) return null;
@@ -364,9 +406,20 @@ export function OwnerTag({ owner }: { owner: string | null }) {
   return <Tag>{OWNER_LABEL[owner]}</Tag>;
 }
 
-/** The error status ink: muted, and AA as text on every surface. */
-const LATE_INK = "text-error";
-const AS_FILED_INK = "text-attention";
+/** A late delay is ink at medium weight with the word "late"; no colour. */
+const LATE_INK = "text-foreground";
+
+/**
+ * "date as filed": a row whose dates contradict each other, reproduced
+ * rather than corrected. Secondary ink with a small attention dot.
+ */
+export function AsFiled({ title }: { title: string }) {
+  return (
+    <StatusNote tone="attention" className="whitespace-nowrap text-[11px] text-ink-2" title={title}>
+      date as filed
+    </StatusNote>
+  );
+}
 
 /** "13d" / "49d late": the figure at full weight, the unit and verdict lighter. */
 function Days({ days, late }: { days: number; late: boolean }) {
@@ -386,12 +439,7 @@ function Days({ days, late }: { days: number; late: boolean }) {
 export function DelayTag({ days, inconsistent }: { days: number | null; inconsistent?: number }) {
   if (inconsistent) {
     return (
-      <span
-        className={cn("whitespace-nowrap text-[11px]", AS_FILED_INK)}
-        title="The filing's trade and notification dates contradict each other — reproduced as filed"
-      >
-        date as filed
-      </span>
+      <AsFiled title="The filing's trade and notification dates contradict each other — reproduced as filed" />
     );
   }
   if (days == null) return null;
@@ -430,12 +478,7 @@ export function InsiderDelayTag({
 }) {
   if (days == null) {
     return (
-      <span
-        className={cn("whitespace-nowrap text-[11px]", AS_FILED_INK)}
-        title="The trade and filing dates could not be compared (malformed or contradictory) — reproduced as filed"
-      >
-        date as filed
-      </span>
+      <AsFiled title="The trade and filing dates could not be compared (malformed or contradictory) — reproduced as filed" />
     );
   }
   const isLate = late === 1;
@@ -455,7 +498,7 @@ export function InsiderDelayTag({
         <Days days={days} late={isLate} />
       </span>
       {timeliness === "L" ? (
-        <span className={cn(CHIP, AMBER)} title="The filer ticked the form's own 'late' box">
+        <span className={cn(CHIP, NEUTRAL)} title="The filer ticked the form's own 'late' box">
           marked late by filer
         </span>
       ) : null}
@@ -531,8 +574,7 @@ export function Amount({
 
 /* ------------------------------------------------------------------
    Controls, iOS-style. Buttons are capsules: a grey fill for the
-   secondary, graphite for the one primary (white in dark mode) — never
-   blue, which means "bought". Fields are grey filled rounded rects (12px),
+   secondary, graphite for the one primary (white in dark mode). Fields are grey filled rounded rects (12px),
    no border. The segmented control is a grey track with the selected
    option raised as a white chip.
    ------------------------------------------------------------------ */

@@ -11,7 +11,7 @@ import {
 } from "@/lib/feed-filters";
 import type { TransactionTotals } from "@/lib/queries";
 import { cn } from "@/lib/utils";
-import { BUTTON, BUTTON_PRIMARY, FIELD, MoneyText } from "./ui";
+import { BUTTON, BUTTON_PRIMARY, FIELD, MoneyText, StatusNote } from "./ui";
 
 /**
  * The feed's filter bar and pagination. Plain GET forms and links: the
@@ -181,9 +181,9 @@ export function FilterBar({ filters, ignored }: { filters: TransactionFilters; i
         </a>
       ) : null}
       {ignored.length ? (
-        <p className="basis-full text-[13px] text-attention">
+        <StatusNote as="p" tone="attention" className="basis-full text-[13px] text-foreground">
           Ignored unrecognised filter{ignored.length === 1 ? "" : "s"}: {ignored.join(", ")}
-        </p>
+        </StatusNote>
       ) : null}
     </>
   );

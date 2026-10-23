@@ -441,12 +441,36 @@ parser stays faithful to the PDF and the UI flags the row rather than
 Charts are pure CSS/SVG in `web/app/charts.tsx`; no chart library. Colour roles
 live in `--viz-*` at the bottom of `web/app/globals.css`.
 
-Buy/sell uses a **blue↔red diverging pair, not the finance-convention
-green/red**. Green/red measures a CVD ΔE of 4.1 under deuteranopia against
-these surfaces — red-green colourblind readers cannot separate them. Blue/red
-measures 23.8 light / 19.2 dark. Direction is always spelled out in text too,
-so colour never carries meaning alone. Re-run the validator in the `dataviz`
-skill before changing any palette value.
+Buy/sell is **ink and silver**: bought `#1d1d1f` / sold `#aeaeb2` in light
+mode, `#f5f5f7` / `#636366` in dark. The user chose it on 2026-10-23 (over the
+earlier blue↔red pair, which they found "not very Apple-like") for an
+Apple-like monochrome page; colour is left for small status accents and the
+app icon's gold tie. **Green/red is still out**: Apple's own green/red pair
+measures CVD ΔE 6.8 under deuteranopia on white, so red-green colourblind
+readers cannot rely on it.
+
+- **Direction is always double-encoded**, because a tone alone does not
+  carry it: by **position** (diverging bars: bought left, sold right; the
+  timeline and price lanes: buys above the axis, sells below; split cells:
+  buys first) **and/or words and arrows** ("↗ Buy" / "↘ Sell" chips,
+  "Bought" / "Sold" legends and captions, every tooltip). A chart that cannot
+  give direction a position must label it in words.
+- **Silver is 2.2:1 on white**, so every silver mark has its value or label
+  printed beside it in text ink (never in the silver itself).
+- **Neutral single-series marks never use the buy ink.** Volume, counts, the
+  bracket ladder and "exchange / other" take the mid grey `--viz-seq`
+  (`#7c7c80` / `#909095`); the price line and the delay median take
+  `--viz-price` (`#48484a` / `#c1c1c6`), a dark grey that is not the ink; the
+  SPY benchmark is the mid grey, dashed. Buying vs selling cluster spans
+  differ by texture (flat wash vs hatch, solid vs dashed bar), party inside a
+  direction by hatching.
+- Status (ok / attention / error) is a small accent beside ink text — a dot,
+  a diamond for an error — never a tinted pill, never a coloured sentence.
+- Validator numbers (light / dark): buy·sell ΔE 52.0 / 47.0; buy·sell·seq·
+  price `--pairs all` worst 16.4 / 15.4. Lightness-band and chroma-floor FAIL
+  for every grey, and silver WARNs on contrast: acceptable **only** because
+  direction is double-encoded. Re-run the validator in the `dataviz` skill
+  before changing any palette value.
 
 ## Price overlay (ticker and insider-issuer pages)
 

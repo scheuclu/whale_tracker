@@ -26,7 +26,7 @@ const TABS = [
  * scrolls: spread edge to edge on a phone, set left from 640px, inline with
  * the brand from 1024px. Small medium-weight words, apple.com's nav; the
  * active section sits in a grey capsule (the Apple TV / Music top-tab
- * pattern) and carries `aria-current`. No colour: blue means "bought".
+ * pattern) and carries `aria-current`. No colour: the page is monochrome.
  */
 export function Tabs({ className }: { className?: string }) {
   const pathname = usePathname();

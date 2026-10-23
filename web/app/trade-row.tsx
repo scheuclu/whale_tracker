@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { MemberAvatar } from "./avatar";
 import { BracketAmount } from "./bracket-glyph";
 import { Card } from "./charts";
-import { ActionBadge, DelayTag, OptionBadge, OwnerTag, PartyBadge, ScanTag, SectorTag, TickerChip } from "./ui";
+import { ActionBadge, AsFiled, DelayTag, OptionBadge, OwnerTag, PartyBadge, ScanTag, SectorTag, TickerChip } from "./ui";
 
 /* ---------------------------------------------------------------- cells */
 
@@ -82,14 +82,7 @@ export function TickerCell({ ticker, type }: { ticker: string | null; type: stri
  */
 export function TradeDelay({ r }: { r: Pick<TransactionRow, "tx_date" | "filing_date" | "delay_days" | "dates_inconsistent"> }) {
   if (!r.dates_inconsistent && filedBeforeTrade(r.tx_date, r.filing_date)) {
-    return (
-      <span
-        className="text-[11px] text-attention"
-        title="The filing is dated before the trade it reports — reproduced as filed"
-      >
-        date as filed
-      </span>
-    );
+    return <AsFiled title="The filing is dated before the trade it reports — reproduced as filed" />;
   }
   return <DelayTag days={r.delay_days} inconsistent={r.dates_inconsistent} />;
 }

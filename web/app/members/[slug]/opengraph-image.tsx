@@ -63,10 +63,10 @@ export default async function Image({ params }: { params: Promise<{ slug: string
             overflow: "hidden",
             alignItems: "center",
             justifyContent: "center",
-            backgroundColor: "#e7e2d6",
+            backgroundColor: "#e8e8ed",
             border: `1px solid ${HAIRLINE}`,
             fontSize: 64,
-            color: "#5c574b",
+            color: "#6e6e73",
           }}
         >
           {photo ? (

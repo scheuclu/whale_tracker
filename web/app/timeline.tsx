@@ -4,8 +4,9 @@
  *
  * Encoding:
  * - x: trade date as filed. Buys stack above the axis, sells below, exchanges
- *   and other actions sit on it. Direction is spelled out in the legend and
- *   every tooltip, so the blue↔red pair never carries it alone.
+ *   and other actions sit on it (in the mid grey). Buys are the ink, sells
+ *   silver, but the side of the axis, the "Buys →" / "← Sells" labels, the
+ *   legend and every tooltip carry the direction, never the tone alone.
  * - Mark size: the bracket FLOOR (log scale) — the least the disclosed range
  *   allows. Never a midpoint, never "the amount".
  * - Diamond: an option trade. Hollow dashed: transcribed from a scanned
@@ -29,7 +30,7 @@ import { publicErrorMessage } from "@/lib/public-error";
 
 type Mode = "ticker" | "member";
 
-const COLOR = { buy: "var(--viz-buy)", sell: "var(--viz-sell)", other: "var(--viz-axis)" } as const;
+const COLOR = { buy: "var(--viz-buy)", sell: "var(--viz-sell)", other: "var(--viz-seq)" } as const;
 const TOP = 18;
 const AXIS_BAND = 36;
 // Axis text at the 12px meta size, its year line a step below. Inline: the

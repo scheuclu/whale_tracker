@@ -3,6 +3,7 @@ import { ArrowUpRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BrandMark, Wordmark } from "./brand";
 import { LiveRelativeTime } from "./live-relative-time";
+import { StatusNote } from "./ui";
 
 const SOURCES = [
   {
@@ -117,7 +118,10 @@ export function SiteFooter({
                 Updated <LiveRelativeTime iso={updatedAt} initial={updated} />
               </Link>
               {stale ? (
-                <span className="text-attention"> · the pipeline is behind schedule</span>
+                <span className="text-foreground">
+                  {" · "}
+                  <StatusNote tone="attention">the pipeline is behind schedule</StatusNote>
+                </span>
               ) : null}
             </p>
           </div>

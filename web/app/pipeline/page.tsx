@@ -5,7 +5,7 @@ import { duration, relativeTime } from "@/lib/format";
 import { Card, Empty, SectionTitle, StatTile } from "../charts";
 import { Disclosure } from "../disclosure";
 import { HealthPill, DataError, PAGE_STACK, PageHeader, Quiet, type Health } from "../page-header";
-import { ResponsiveTable, StatusBadge } from "../ui";
+import { ResponsiveTable, StatusBadge, StatusNote } from "../ui";
 import { pageCard, pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
@@ -76,10 +76,10 @@ export default async function PipelinePage() {
               }
             >
               {senate.health === "attention" ? (
-                <p className="text-[13px] text-attention">
+                <StatusNote as="p" tone="attention" className="text-[13px] text-foreground">
                   The last attempt did not reach the report list, so no new Senate filings are being added
                   until it does.
-                </p>
+                </StatusNote>
               ) : null}
             </Source>
             <Source
@@ -113,14 +113,14 @@ export default async function PipelinePage() {
                 </p>
               ) : null}
               {ins?.state.edgar_gap ? (
-                <p className="text-[13px] text-attention">
+                <StatusNote as="p" tone="attention" className="text-[13px] text-foreground">
                   Feed gap {ins.state.edgar_gap} — each run walks the daily index for it until it clears
                   (progress in the status above); to finish by hand:{" "}
                   <code className="break-all font-mono text-[12px]">
                     backfill-insiders --from {ins.state.edgar_gap.split("..")[0]} --to{" "}
                     {ins.state.edgar_gap.split("..")[1]}
                   </code>
-                </p>
+                </StatusNote>
               ) : null}
               {ins?.state.edgar_backfill_through ? (
                 <p className="text-[13px] text-muted-foreground">

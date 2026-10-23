@@ -12,9 +12,9 @@ import { CARD_CDN_CACHE_CONTROL } from "@/lib/cache-policy";
  * congressional total is a range, and a card has no room to say so; a
  * count needs no caveat. Insider cards count too: a value would need
  * "shares × reported price" beside it, and the page says it. Buy and sell
- * use the site's blue↔red pair (the light-scheme `--viz-buy` /
- * `--viz-sell`, validated on this paper) and are always spelled out beside
- * the colour.
+ * use the site's ink/silver pair (the light-scheme `--viz-buy` /
+ * `--viz-sell`) as a small dot, always beside the count and the word
+ * ("12 buys", "30 sells") — the word carries the direction.
  */
 
 export const CARD_SIZE = { width: 1200, height: 630 };
@@ -31,8 +31,8 @@ export const KICKER = "#6e6e73";
 export const GOLD = "#fbbf24";
 export const HAIRLINE = "rgba(60,60,67,0.16)";
 
-export const BUY = "#2a78d6";
-export const SELL = "#d03b3b";
+export const BUY = "#1d1d1f";
+export const SELL = "#aeaeb2";
 
 /**
  * The display face for headlines and figures: Inter SemiBold registered

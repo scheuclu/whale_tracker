@@ -15,7 +15,7 @@ import {
 import { getTickerDetail, getTickerMembers, type TickerMemberRow, type TickerRow } from "@/lib/queries";
 import { insiderIssuerHref, memberHref, memberLabel, price, range, shares, shortDate, tickerHref, usd } from "@/lib/format";
 import { Card, DivergingSplit, Empty, MagnitudeBars, SectionTitle, StatTile } from "../charts";
-import { ActionBadge, Amount, BUTTON, InsiderDelayTag, PartyBadge, PlanTag, ResponsiveTable, RoleTag, SectorTag, Tag, TickerChip } from "../ui";
+import { ActionBadge, Amount, BUTTON, InsiderDelayTag, PartyBadge, PlanTag, ResponsiveTable, RoleTag, SectorTag, StatusNote, Tag, TickerChip } from "../ui";
 import { MemberAvatar } from "../avatar";
 import { Disclosure } from "../disclosure";
 import { PriceOverlay } from "../price-overlay";
@@ -558,15 +558,16 @@ function TradeList({ trades, showIssuer }: { trades: InsiderTradeRow[]; showIssu
               // Reproduced, not believed: the figure is what was filed, and
               // the label says it counts toward nothing on this page.
               <span className="inline-flex items-center gap-1.5">
-                <span className="tabular text-[13px] text-muted-foreground line-through decoration-attention/60">
+                <span className="tabular text-[13px] text-muted-foreground line-through decoration-muted-foreground">
                   {usd(r.amount_exact_cents)}
                 </span>
-                <span
-                  className="text-[12px] text-attention"
+                <StatusNote
+                  tone="attention"
+                  className="text-[12px] text-ink-2"
                   title="The price cell appears to hold the aggregate consideration (or is otherwise beyond belief). Shown as filed; excluded from every total, cluster value and alert."
                 >
                   as filed, implausible
-                </span>
+                </StatusNote>
               </span>
             ) : (
               <span className="font-semibold">

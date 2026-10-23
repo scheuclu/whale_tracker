@@ -3,7 +3,7 @@ import { memberHref, shortDate } from "@/lib/format";
 import { Empty, SectionTitle, StatTile } from "../charts";
 import { Disclosure } from "../disclosure";
 import { DataError, PAGE_STACK, PageHeader, Quiet } from "../page-header";
-import { PartyBadge, StatusBadge, ResponsiveTable } from "../ui";
+import { PartyBadge, StatusBadge, StatusNote, ResponsiveTable } from "../ui";
 import { pageCard, pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
@@ -132,8 +132,9 @@ export default async function ScansPage({
                         <>
                           {f.pages}
                           {f.pages_failed ? (
-                            <span className="text-[11px] text-attention">
-                              {" "}· {f.pages_failed} unread
+                            <span className="text-[11px] text-ink-2">
+                              {" · "}
+                              <StatusNote tone="attention">{f.pages_failed} unread</StatusNote>
                             </span>
                           ) : null}
                         </>
@@ -144,7 +145,7 @@ export default async function ScansPage({
                     <td className="tabular px-4 py-2 text-right">{f.pages ? f.rows : "—"}</td>
                     <td
                       className={`tabular px-4 py-2 text-right ${
-                        f.unknown_rows ? "text-attention" : "text-muted-foreground"
+                        f.unknown_rows ? "font-medium text-foreground" : "text-muted-foreground"
                       }`}
                     >
                       {f.pages ? f.unknown_rows : "—"}

@@ -192,10 +192,16 @@ function SpanList({ spans }: { spans: ClusterSpan[] }) {
     <ul className="mt-3 space-y-1 px-1 text-[12px] text-muted-foreground">
       {shown.map((s, i) => (
         <li key={i} className="flex items-start gap-1.5">
+          {/* The lane bar's own key: solid for buying, dashed for selling. */}
           <span
             aria-hidden
             className="mt-[5px] h-[3px] w-3 shrink-0 rounded-full"
-            style={{ background: s.side === "buy" ? "var(--viz-buy)" : "var(--viz-sell)" }}
+            style={{
+              background:
+                s.side === "buy"
+                  ? "var(--viz-buy)"
+                  : "repeating-linear-gradient(90deg, var(--viz-sell) 0 4px, transparent 4px 7px)",
+            }}
           />
           <span>
             <span className="font-medium text-ink-2">

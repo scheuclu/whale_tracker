@@ -1,6 +1,6 @@
 import { ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Segmented } from "./ui";
+import { STATUS_MARK, Segmented } from "./ui";
 import { Empty } from "./charts";
 import { publicErrorMessage } from "@/lib/public-error";
 
@@ -119,15 +119,19 @@ export function Quiet({ children, className }: { children: React.ReactNode; clas
 
 export type Health = "ok" | "attention" | "error" | "off";
 
-/** Status tokens from globals.css — never the buy/sell pair. */
+/**
+ * iOS Settings style: a grey pill, the word in ink, and the status as a
+ * small accent — a green or orange dot, a red diamond (with a hairline
+ * round the pill) for an error. The pill is never tinted.
+ */
 const HEALTH_TONE: Record<Health, { cls: string; dot: string }> = {
-  ok: { cls: "text-ok bg-ok-soft border-ok/25", dot: "bg-ok" },
-  attention: { cls: "text-attention bg-attention-soft border-attention/25", dot: "bg-attention" },
-  error: { cls: "text-error bg-error-soft border-error/45", dot: "bg-error rounded-[1px]! rotate-45" },
-  off: { cls: "text-muted-foreground bg-muted border-border", dot: "bg-muted-foreground" },
+  ok: { cls: "text-ink-2 bg-fill border-transparent", dot: STATUS_MARK.ok },
+  attention: { cls: "text-ink-2 bg-fill border-transparent", dot: STATUS_MARK.attention },
+  error: { cls: "text-foreground bg-fill border-border-strong", dot: STATUS_MARK.error },
+  off: { cls: "text-muted-foreground bg-fill border-transparent", dot: "bg-muted-foreground rounded-full" },
 };
 
-/** A source's or run's state as a pill: the word carries it, the dot repeats it. */
+/** A source's or run's state as a pill: the word carries it, the mark repeats it. */
 export function HealthPill({ health, children, title }: { health: Health; children: React.ReactNode; title?: string }) {
   const t = HEALTH_TONE[health];
   return (
@@ -138,7 +142,7 @@ export function HealthPill({ health, children, title }: { health: Health; childr
         t.cls
       )}
     >
-      <span aria-hidden className={cn("size-1.5 rounded-full", t.dot)} />
+      <span aria-hidden className={cn("size-1.5", t.dot)} />
       {children}
     </span>
   );

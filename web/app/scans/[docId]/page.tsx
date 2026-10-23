@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { Card, Empty, SectionTitle, StatTile } from "../../charts";
 import { Disclosure } from "../../disclosure";
 import { DataError, PAGE_STACK, PageHeader, Quiet } from "../../page-header";
-import { PartyBadge, StatusBadge, ResponsiveTable, Tag } from "../../ui";
+import { PartyBadge, StatusBadge, StatusNote, ResponsiveTable, Tag } from "../../ui";
 import type { Metadata } from "next";
 import { pageCard, pageMetadata } from "@/lib/seo";
 
@@ -66,9 +66,9 @@ function statusLabel(status: string): string {
 /**
  * One scanned filing, one page at a time: the captured image with the grid
  * reader's decisions drawn over it, and the rows it read beside it. The
- * overlay is drawn from `scan_rows` in the image's own pixels. Direction
- * uses the site's blue/red diverging pair and is always spelled out in the
- * table; unknown rows are outlined dashed in the neutral axis colour and
+ * overlay is drawn from `scan_rows` in the image's own pixels. A ticked
+ * type cell is washed in the buy ink or the sell silver; its column on the
+ * form is the direction, and the table spells it out ("↗ Purchase"); unknown rows are outlined dashed in the neutral axis colour and
  * labelled. A transcribed row shows what the model read beside what the
  * grid decided, and says so where the two disagreed.
  */
@@ -146,9 +146,9 @@ export default async function ScanDetailPage({
       >
         {filing.last_error ? (
           <div className="tile flex max-w-[80ch] gap-3 px-4 py-3 text-[14px] leading-relaxed sm:px-5">
-            <span aria-hidden className="mt-[7px] size-2 shrink-0 rotate-45 rounded-[1px] bg-attention" />
+            <span aria-hidden className="mt-[7px] size-2 shrink-0 rotate-45 rounded-[1px] bg-error" />
             <p className="min-w-0 text-ink-2">
-              <span className="font-semibold text-attention">Last error</span>{" "}
+              <span className="font-semibold text-foreground">Last error</span>{" "}
               <span className="break-words">{filing.last_error}</span>
             </p>
           </div>
@@ -203,9 +203,9 @@ export default async function ScanDetailPage({
           </SectionTitle>
           <Pager base={base} pages={pages} current={pageNo} prev={prev} next={next} />
           {page.error ? (
-            <p className="mb-2 text-xs text-attention">
+            <StatusNote as="p" tone="error" className="mb-2 text-xs text-foreground">
               This page yielded no rows: <span className="break-all font-mono">{page.error}</span>
-            </p>
+            </StatusNote>
           ) : null}
           {/* An even split: the page is landscape, and the transcription column
               now carries the asset name, owner and any disagreement note. */}
@@ -258,7 +258,7 @@ export default async function ScanDetailPage({
 
       <Disclosure
         size="sm"
-        lead="Each row the reader counted as a transaction is boxed and the cell it read as ticked is filled — blue for a buy, red for a sell, grey for an exchange. A row with no tick or more than one is outlined dashed and stored as unknown, never guessed."
+        lead="Each row the reader counted as a transaction is boxed and the cell it read as ticked is washed — dark for a buy, light grey for a sell or an exchange; its column on the form is the direction, and the table beside it says it in words. A row with no tick or more than one is outlined dashed and stored as unknown, never guessed."
       >
         <p>
           Overlay: each row the reader counted as a transaction is boxed; its amount and type
@@ -344,8 +344,7 @@ function Pager({
                   isCurrent
                     ? "bg-primary font-semibold text-primary-foreground"
                     : "bg-fill hover:bg-foreground/[0.1]",
-                  !isCurrent && p.error ? "text-error" : "",
-                  !isCurrent && !p.error && p.unknown_rows ? "text-attention" : ""
+                  !isCurrent && (p.error || p.unknown_rows) ? "text-foreground" : ""
                 )}
               >
                 {p.page_no}
@@ -375,7 +374,7 @@ function RowLine({ r }: { r: ScanRow }) {
       className={cn(
         // scroll-mt clears the sticky site header (~117px) when the row is the URL's anchor.
         "scroll-mt-32 target:bg-foreground/[0.08]",
-        flagged ? "bg-attention-soft" : ""
+        flagged ? "bg-foreground/[0.04]" : ""
       )}
     >
       <td className="tabular px-3 py-1.5 text-muted-foreground">
@@ -390,12 +389,12 @@ function RowLine({ r }: { r: ScanRow }) {
             <span className="whitespace-nowrap text-muted-foreground">{BRACKET[r.amount_letter]}</span>
           </span>
         ) : (
-          <span className="text-attention">
+          <StatusNote tone="attention" className="text-foreground">
             unknown
             {r.amount_marks.length > 1
               ? ` (${r.amount_marks.map((i) => LETTERS[i]).join(", ")} ticked)`
               : " (no tick)"}
-          </span>
+          </StatusNote>
         )}
       </td>
       <td className="tabular px-3 py-1.5 text-right text-muted-foreground">
@@ -403,21 +402,15 @@ function RowLine({ r }: { r: ScanRow }) {
       </td>
       <td className="px-3 py-1.5">
         {r.action ? (
-          <span
-            className={
-              isBuy(r.action)
-                ? "text-[#1c5cab] dark:text-[#86b6ef]"
-                : isSell(r.action)
-                  ? "text-[#a32c2c] dark:text-[#e89f9f]"
-                  : ""
-            }
-          >
+          <span className={cn("whitespace-nowrap", isBuy(r.action) ? "font-medium text-foreground" : isSell(r.action) ? "text-ink-2" : "")}>
+            {/* Direction in words and an arrow, like the ActionBadge: no tone carries it. */}
+            {isBuy(r.action) ? "↗ " : isSell(r.action) ? "↘ " : ""}
             {ACTION_LABEL[r.action] ?? r.action}
           </span>
         ) : (
-          <span className="text-attention">
+          <StatusNote tone="attention" className="text-foreground">
             unknown{r.type_marks.length > 1 ? " (several ticked)" : " (no tick)"}
-          </span>
+          </StatusNote>
         )}
       </td>
       <td className="tabular px-3 py-1.5 text-right text-muted-foreground">
@@ -434,18 +427,20 @@ function RowLine({ r }: { r: ScanRow }) {
               <span className="tabular">{range(r.amount_min_cents, r.amount_max_cents)}</span>
             </div>
             {r.type_disputed ? (
-              <div className="text-attention">
+              <StatusNote as="div" tone="attention" className="text-foreground">
                 type disputed: model read {ACTION_LABEL[r.model_action ?? ""] ?? r.model_action}; grid&rsquo;s{" "}
                 {ACTION_LABEL[r.action ?? ""] ?? r.action} kept
-              </div>
+              </StatusNote>
             ) : null}
             {r.amount_disputed ? (
-              <div className="text-attention">
+              <StatusNote as="div" tone="attention" className="text-foreground">
                 amount: model read {r.model_amount_letter}; grid&rsquo;s {r.amount_letter} kept
-              </div>
+              </StatusNote>
             ) : null}
             {r.status !== "read" ? (
-              <div className="text-attention">{statusLabel(r.status)}</div>
+              <StatusNote as="div" tone="attention" className="text-foreground">
+                {statusLabel(r.status)}
+              </StatusNote>
             ) : null}
           </div>
         ) : (

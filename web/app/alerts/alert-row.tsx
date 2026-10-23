@@ -197,8 +197,12 @@ function SourceLink({ a }: { a: AlertRow }) {
 function Message({ a }: { a: AlertRow }) {
   if (!a.message) return null;
   const [headline, ...rest] = telegramPlainText(a.message).split("\n");
+  // The text is the message exactly as sent, emoji included; only its
+  // rendering is greyscale. Telegram's 🟢 / 🔴 mean buy / sell, and on this
+  // page direction is ink and silver plus words — a green/red pair would
+  // bring back the encoding colour-blind readers cannot separate.
   return (
-    <details className="group mt-2">
+    <details className="group mt-2 grayscale">
       <summary className="cursor-pointer list-none text-[13px] text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
         <span className="font-medium text-foreground">{headline}</span>
         <span className="ml-2 underline decoration-border-strong underline-offset-[3px] group-open:hidden">show message</span>

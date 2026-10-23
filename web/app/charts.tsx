@@ -6,9 +6,10 @@
  * baseline, hairline recessive axes, 2px surface gaps between touching fills,
  * and selective direct labels (the value at the bar tip, never on every mark).
  *
- * Colour roles come from `--viz-*` in globals.css. Buy/sell is a diverging
- * blue↔red pair rather than the finance-convention green/red, which fails
- * colour-vision-deficiency separation — see the note in globals.css.
+ * Colour roles come from `--viz-*` in globals.css. Buy/sell is ink and
+ * silver (no hue), so direction is always double-encoded: by position
+ * (bought left / above, sold right / below) and by words or arrows. A
+ * single-series quantity is the mid grey `--viz-seq`, never the buy ink.
  */
 
 import { useId } from "react";
@@ -19,7 +20,7 @@ import { usd } from "@/lib/format";
 
 /** A change against a named earlier period. `text` must name the period
  *  ("+8% vs prior 12 wk"); colour stays neutral — more trades is neither
- *  good nor bad, and blue/red is reserved for buy/sell. */
+ *  good nor bad. */
 export type StatDelta = {
   text: string;
   direction: "up" | "down" | "flat";
@@ -425,7 +426,10 @@ export type SplitDatum = {
 /**
  * Diverging bars centred on a shared baseline: buys extend left, sells right.
  * This is a polarity encoding, so both arms share one scale and the midpoint
- * is neutral surface — the reader compares direction, not just size.
+ * is neutral surface — the reader compares direction, not just size. Ink and
+ * silver are only the echo: the side of the axis, the "← Bought" / "Sold →"
+ * captions and the legend carry the direction, and every bar has its count
+ * printed at the tip (silver is 2.2:1 on white, so it is never unlabelled).
  */
 export function DivergingSplit({ data, unit }: { data: SplitDatum[]; unit: string }) {
   const uid = useId();
@@ -567,10 +571,10 @@ export function DivergingSplit({ data, unit }: { data: SplitDatum[]; unit: strin
 
 /**
  * One arm's bar with its count at the tip. The count always sits OUTSIDE the
- * bar, in the gutter reserved for it, never inside: a 12px numeral in white
- * on the blue or red fill misses 4.5:1 in one mode or the other, and a count
- * that moved in and out of its bar with the bar's length would not scan down
- * the column.
+ * bar, in the gutter reserved for it, never inside: a 12px numeral on the
+ * silver fill misses 4.5:1, and a count that moved in and out of its bar
+ * with the bar's length would not scan down the column. The count is in the
+ * muted text ink (5.1:1 light, 5.9:1 dark), not the bar's grey.
  */
 function SplitBar({ value, pct, side, i }: { value: number; pct: number; side: "buy" | "sell"; i: number }) {
   const buy = side === "buy";
@@ -942,14 +946,14 @@ export function ColumnSeries({ data, height = 128 }: { data: ColumnSeriesDatum[]
 /**
  * Change over time — the forms /trends introduced. Two conventions:
  *
- * - Columns grow from a shared baseline, bought up and sold down: the same
- *   diverging blue/red polarity as `DivergingSplit`, turned vertical for a
- *   time axis. Lines share one y-axis, always — two measures of different
- *   scale get two charts, never a second axis.
+ * - Columns grow from a shared baseline, bought up (ink) and sold down
+ *   (silver): the same polarity as `DivergingSplit`, turned vertical for a
+ *   time axis, so position carries direction. Lines share one y-axis,
+ *   always — two measures of different scale get two charts, never a
+ *   second axis.
  * - A second identity inside a direction (party within "bought") is carried
- *   by TEXTURE, not a third hue. There are two direction colours, and the
- *   party badges already use the same blue and red, so a hue per party
- *   would collide with both readings. Texture is the backup identity
+ *   by TEXTURE, not a hue: the page has no party colours, and a hue would
+ *   be the only colour in the chart. Texture is the backup identity
  *   channel: 45° and its 135° mirror only (horizontal or vertical reads as
  *   gridlines), always tone-on-tone with the fill it sits in.
  *
