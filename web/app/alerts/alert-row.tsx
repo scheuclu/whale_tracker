@@ -10,6 +10,7 @@ import {
 import { memberHref, range, relativeTime, telegramPlainText, usd } from "@/lib/format";
 import { Card } from "../charts";
 import { ActionBadge, PartyBadge, Tag, TickerChip } from "../ui";
+import { ROW_LINK } from "../grouped-list";
 
 /**
  * One alert, as sent. Exported so later pages — post-alert price outcomes
@@ -21,11 +22,11 @@ import { ActionBadge, PartyBadge, Tag, TickerChip } from "../ui";
  * schema 13 have neither range nor text, and say so rather than re-rendering
  * a message that cannot be reconstructed.
  */
-/** The log's container: one card, rows divided by hairlines rather than a stack of cards. */
+/** The log's container: one tile, rows under inset hairlines (an iOS grouped list). */
 export function AlertLog({ children }: { children: React.ReactNode }) {
   return (
-    <Card className="p-0 sm:p-0">
-      <ol className="divide-y divide-border/70">{children}</ol>
+    <Card className="overflow-hidden p-0 sm:p-0">
+      <ol className="inset-rows py-1 [--sep-inset:1rem] sm:[--sep-inset:1.25rem]">{children}</ol>
     </Card>
   );
 }
@@ -34,39 +35,39 @@ export function AlertRowCard({ alert: a, extra }: { alert: AlertRow; extra?: Rea
   const kind = a.kind as AlertKind;
   const action = a.direction === "buy" ? "purchase" : a.direction === "sell" ? "sale" : null;
   return (
-    <li data-alert-id={a.id} className="py-3.5">
+    <li data-alert-id={a.id} className="px-4 py-3.5 sm:px-5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <KindBadge kind={a.kind} />
         {action ? (
           <ActionBadge action={action} />
         ) : a.volume_mid_cents != null ? (
-          <span className="text-[11px] text-muted-foreground" title="The filing has trades on both sides">
+          <span className="text-[12px] text-muted-foreground" title="The filing has trades on both sides">
             mixed sides
           </span>
         ) : null}
         <Subject a={a} />
         <Volume a={a} />
         {a.window_days > 0 ? (
-          <span className="text-xs text-muted-foreground">
+          <span className="text-[13px] text-muted-foreground">
             {a.politician_count} {COUNT_NOUN[kind] ?? "participants"} · {a.window_days}d window
           </span>
         ) : null}
         <div className="flex-1" />
-        <time dateTime={a.fired_at} title={a.fired_at} className="tabular text-xs text-muted-foreground">
+        <time dateTime={a.fired_at} title={a.fired_at} className="tabular text-[13px] text-muted-foreground">
           {relativeTime(a.fired_at)}
         </time>
       </div>
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px]">
         <Participants a={a} />
         {a.rule_name ? (
           <span
-            className="rounded bg-muted px-1.5 py-px text-[10px] text-muted-foreground"
+            className="rounded-chip bg-fill px-1.5 py-px text-[11px] text-ink-2"
             title="The config.yaml rule that claimed this alert"
           >
             rule: {a.rule_name}
           </span>
         ) : null}
-        {a.issuer_name ? <span className="truncate text-muted-foreground">· {a.issuer_name}</span> : null}
+        {a.issuer_name ? <span className="truncate text-[13px] text-muted-foreground">· {a.issuer_name}</span> : null}
         <SourceLink a={a} />
       </div>
       {a.message ? <Message a={a} /> : null}
@@ -150,12 +151,12 @@ function Participants({ a }: { a: AlertRow }) {
     if (!name) return <span className="text-muted-foreground">unknown member</span>;
     return (
       <>
-        <Link href={memberHref(name, a.bioguide_id)} className="font-medium hover:text-primary">
+        <Link href={memberHref(name, a.bioguide_id)} className={ROW_LINK}>
           {name}
         </Link>
         <PartyBadge party={a.party} />
         {a.state ? (
-          <span className="text-xs text-muted-foreground">
+          <span className="text-[12px] text-muted-foreground">
             {a.state}
             {a.district && a.district !== "0" ? `-${a.district}` : ""}
           </span>
@@ -185,9 +186,10 @@ function SourceLink({ a }: { a: AlertRow }) {
       href={href}
       target="_blank"
       rel="noreferrer"
-      className="ml-auto text-[11px] text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
+      className="ml-auto rounded-sm text-[12px] text-muted-foreground underline decoration-border-strong underline-offset-[3px] transition-colors duration-(--dur-fast) hover:text-foreground hover:decoration-current"
     >
       {a.pdf_url ? "PDF" : "filing"}
+      <span aria-hidden>&nbsp;↗</span>
     </a>
   );
 }
@@ -197,12 +199,12 @@ function Message({ a }: { a: AlertRow }) {
   const [headline, ...rest] = telegramPlainText(a.message).split("\n");
   return (
     <details className="group mt-2">
-      <summary className="cursor-pointer list-none text-xs text-muted-foreground hover:text-foreground">
+      <summary className="cursor-pointer list-none text-[13px] text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
         <span className="font-medium text-foreground">{headline}</span>
-        <span className="ml-2 group-open:hidden">show message</span>
-        <span className="ml-2 hidden group-open:inline">hide message</span>
+        <span className="ml-2 underline decoration-border-strong underline-offset-[3px] group-open:hidden">show message</span>
+        <span className="ml-2 hidden underline decoration-border-strong underline-offset-[3px] group-open:inline">hide message</span>
       </summary>
-      <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-muted/60 px-3 py-2 font-sans text-xs leading-relaxed">
+      <pre className="mt-2 whitespace-pre-wrap rounded-control bg-fill px-3.5 py-2.5 font-sans text-[13px] leading-relaxed text-ink-2">
         {rest.join("\n").trim()}
       </pre>
     </details>

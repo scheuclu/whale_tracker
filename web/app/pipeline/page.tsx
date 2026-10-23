@@ -54,7 +54,7 @@ export default async function PipelinePage() {
           <span id="coverage-title">Coverage</span>
         </SectionTitle>
         <Card className="p-0 sm:p-0">
-          <ul className="divide-y divide-border/70">
+          <ul className="inset-rows py-1 [--sep-inset:1rem] sm:[--sep-inset:1.5rem]">
             <Source
               name="US House"
               health="ok"
@@ -271,8 +271,8 @@ export default async function PipelinePage() {
           >
             <span id="unreadable-title">Unreadable filings</span>
           </SectionTitle>
-          <Card className="p-0 sm:p-0">
-            <ul className="divide-y divide-border/70">
+          <Card className="overflow-hidden p-0 sm:p-0">
+            <ul className="inset-rows py-1 [--sep-inset:1rem] sm:[--sep-inset:1.5rem]">
               {p.failures.map((f) => (
                 <Failure key={f.doc_id} href={f.pdf_url} id={f.doc_id} who={f.filer_name} error={f.last_error} />
               ))}
@@ -391,16 +391,16 @@ function Source({
   children?: React.ReactNode;
 }) {
   return (
-    <li className="py-4" data-source={name}>
+    <li className="px-4 py-4 sm:px-6" data-source={name}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <h3 className="text-[14px] font-semibold">{name}</h3>
+        <h3 className="text-[15px] font-semibold tracking-[-0.01em]">{name}</h3>
         <HealthPill health={health} title={raw ?? undefined}>
           {state}
         </HealthPill>
         {sentence ? <span className="tabular text-[13px] text-ink-2">{sentence}</span> : null}
       </div>
       <div className="mt-1.5 max-w-[68ch] space-y-1.5">
-        <p className="text-[13px] leading-relaxed text-muted-foreground">{description}</p>
+        <p className="text-[14px] leading-relaxed text-muted-foreground">{description}</p>
         {children}
       </div>
       {raw ? (
@@ -426,11 +426,11 @@ function Failure({
   tag?: string;
 }) {
   return (
-    <li className="py-2.5">
+    <li className="px-4 py-3 sm:px-6">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[13px]">
-        <span className="font-medium">{who}</span>
+        <span className="font-semibold">{who}</span>
         {tag ? (
-          <span className="rounded bg-muted px-1.5 py-px text-[10px] text-muted-foreground">{tag}</span>
+          <span className="rounded-chip bg-fill px-1.5 py-px text-[11px] text-ink-2">{tag}</span>
         ) : null}
         <a
           href={href}

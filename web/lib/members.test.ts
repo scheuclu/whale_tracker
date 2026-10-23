@@ -94,4 +94,8 @@ test("tradeSummary calls a 2:1 majority 'mostly', anything closer a mix", () => 
   assert.equal(tradeSummary({ trades: 1, tickers: 1, buys: 0, sells: 1 }), "1 trade across 1 ticker, a sell");
   // Treasuries have no ticker, and exchanges are neither direction.
   assert.equal(tradeSummary({ trades: 3, tickers: 0, buys: 0, sells: 0 }), "3 trades");
+  assert.equal(
+    tradeSummary({ trades: 17, tickers: 0, buys: 8, sells: 9 }, "10 members"),
+    "17 trades by 10 members, a mix of buys and sells"
+  );
 });

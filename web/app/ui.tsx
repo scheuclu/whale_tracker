@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowDownRight, ArrowLeftRight, ArrowUpRight, type LucideIcon } from "lucide-react";
+import { ArrowDownRight, ArrowLeftRight, ArrowUpRight, ChevronRight, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   ACTION_LABEL,
@@ -50,14 +50,20 @@ export function ResponsiveTable({
   /** Let cells wrap (a column of free text) instead of extending the scroll. */
   wrap?: boolean;
 }) {
-  // In a tile, like an iOS grouped table: the cells keep a 16px inset from
-  // the tile's edge, and the tile clips (overflow: clip, not hidden, so a
-  // sticky header can still reach the page) to its rounded corners.
+  // In a tile, like an iOS inset-grouped table (`.grouped-table` in
+  // globals.css): the cells keep a 16px inset from the tile's edge, the row
+  // separators stop at that inset, and the tile clips (overflow: clip, not
+  // hidden, so a sticky header can still reach the page) to its rounded
+  // corners. On a phone a table wider than the tile says so under its rows.
   return (
-    <Card className={cn("overflow-clip p-0 sm:p-0", className)}>
+    <Card className={cn("grouped-table overflow-clip p-0 sm:p-0", className)}>
       <ScrollX className={wrap ? undefined : "whitespace-nowrap"} stickyFirstColumn={stickyFirstColumn}>
         {children}
       </ScrollX>
+      <p aria-hidden className="scroll-hint items-center justify-end gap-1 px-4 pb-2.5 pt-0.5 text-[12px] text-muted-foreground">
+        Swipe for more columns
+        <ChevronRight className="size-3.5" strokeWidth={2.25} />
+      </p>
     </Card>
   );
 }

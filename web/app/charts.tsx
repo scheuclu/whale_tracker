@@ -55,7 +55,7 @@ export function StatTile({
   // label, a big confident figure, one grey line of context. A zero figure
   // is set in muted ink, so the tiles that report something lead.
   return (
-    <div data-stat-tile className="viz-rise flex h-full min-w-0 flex-col rounded-tile bg-card p-4 shadow-card sm:px-5 sm:pb-5 sm:pt-4">
+    <div data-stat-tile className="viz-rise flex h-full min-w-0 flex-col rounded-tile bg-card p-4 shadow-card max-[359px]:px-3.5 sm:px-5 sm:pb-5 sm:pt-4">
       <div className="flex items-baseline justify-between gap-2">
         <div className="truncate text-[13px] font-semibold leading-5 text-muted-foreground">{label}</div>
         {trend?.length && trendCaption ? (
@@ -75,7 +75,11 @@ export function StatTile({
           <Sparkbars values={trend} label={trendLabel ?? label} names={trendLabels} />
         ) : null}
       </div>
-      {hint ? <div className="mt-auto pt-2.5 text-[13px] leading-snug text-muted-foreground">{hint}</div> : null}
+      {hint ? (
+        <div className="mt-auto pt-2.5 text-[13px] leading-snug text-muted-foreground">
+          <Hint text={hint} />
+        </div>
+      ) : null}
       {delta ? (
         <div className="tabular mt-1 text-[13px] leading-snug text-ink-2" title={delta.title}>
           <span aria-hidden className="mr-1 text-[9px] text-muted-foreground">
@@ -85,6 +89,29 @@ export function StatTile({
         </div>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * A tile's grey context line, broken only where it reads well. On a phone a
+ * tile is ~140px wide and the line wraps; left alone it broke inside a
+ * phrase ("438 in last / 12 wk") or a range ("$3.9M– / $8.9M"). Each
+ * " · "-separated phrase is kept whole when it is short enough to fit a
+ * phone tile, and a range never breaks at its dash.
+ */
+function Hint({ text }: { text: string }) {
+  const parts = text.split(" · ");
+  return (
+    <>
+      {parts.map((p, i) => (
+        <span key={i}>
+          {i ? " · " : null}
+          <span className={p.length <= 18 ? "whitespace-nowrap" : undefined}>
+            {p.replace(/(\d[kMB%]?)–(\$?\d)/g, "$1⁠–⁠$2")}
+          </span>
+        </span>
+      ))}
+    </>
   );
 }
 

@@ -188,7 +188,7 @@ export function BracketAmount({
         className={cn("text-[13px]", scan && "text-ink-2 underline decoration-dashed decoration-border-strong underline-offset-[3px]")}
       />
       {exact != null ? (
-        <span className="rounded-[4px] border border-border px-1 text-[10px] font-medium uppercase leading-4 tracking-wide text-muted-foreground">
+        <span className="rounded-[5px] bg-fill px-1.5 text-[11px] font-medium leading-[18px] text-ink-2">
           exact
         </span>
       ) : null}

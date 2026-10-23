@@ -440,10 +440,10 @@
     position: sticky;
     left: 0;
     z-index: 1;
-    background: var(--card-solid);
+    background-color: var(--card-solid);
   }
   .scroll-x[data-sticky-col] tr:hover > :is(th, td):first-child {
-    background: color-mix(in srgb, var(--card-solid) 97%, var(--foreground));
+    background-color: color-mix(in srgb, var(--card-solid) 97%, var(--foreground));
   }
   .scroll-x[data-sticky-col][data-overflow="true"][data-at-start="false"] :is(th, td):first-child {
     box-shadow: 8px 0 12px -8px rgba(0, 0, 0, 0.28);
@@ -752,20 +752,6 @@
   padding-right: 1rem;
 }
 
-/* An open table (ResponsiveTable, app/ui.tsx) is flush with the column from
-   640px: the outer cells drop their inset so the first column meets the
-   section title's edge and the last the column's right edge. */
-@media (min-width: 640px) {
-  .table-open table > :is(thead, tbody, tfoot) > tr > :is(th, td):first-child,
-  .table-open .data-table > thead > tr > th:first-child > a {
-    padding-left: 0;
-  }
-  .table-open table > :is(thead, tbody, tfoot) > tr > :is(th, td):last-child,
-  .table-open .data-table > thead > tr > th:last-child > a {
-    padding-right: 0;
-  }
-}
-
 /* Whole-row target: the row is the click area, the name link stays the real link. */
 .data-table .data-row[data-href] {
   cursor: pointer;
@@ -777,7 +763,7 @@
   background: color-mix(in srgb, var(--foreground) 4.5%, transparent);
 }
 .scroll-x[data-sticky-col][data-at-start="false"] .data-table .data-row:hover > td:first-child {
-  background: color-mix(in srgb, var(--card-solid) 95.5%, var(--foreground));
+  background-color: color-mix(in srgb, var(--card-solid) 95.5%, var(--foreground));
 }
 .data-table .data-row:hover .row-name {
   text-decoration: underline;
@@ -796,15 +782,15 @@
    ------------------------------------------------------------------ */
 .scroll-x[data-sticky-col][data-at-start="true"] :is(th, td):first-child,
 .scroll-x[data-sticky-col][data-at-start="true"] tr:hover > :is(th, td):first-child {
-  background: transparent;
+  background-color: transparent;
 }
 .data-table > thead > tr > th,
 .scroll-x[data-sticky-col] .data-table > thead > tr > th:first-child {
-  background: transparent;
+  background-color: transparent;
 }
 .data-table[data-stuck] > thead > tr > th,
 .scroll-x[data-sticky-col] .data-table[data-stuck] > thead > tr > th:first-child {
-  background: var(--card-solid);
+  background-color: var(--card-solid);
 }
 .data-table[data-stuck] > thead > tr > th {
   box-shadow:
@@ -814,10 +800,85 @@
 /* Scrolled sideways: the pinned header cell is solid too, and keeps both its
    bottom rule and the pinned column's edge shadow. */
 .scroll-x[data-sticky-col][data-at-start="false"] .data-table > thead > tr > th:first-child {
-  background: var(--card-solid);
+  background-color: var(--card-solid);
   box-shadow:
     inset 0 -1px 0 var(--border),
     8px 0 12px -8px rgba(0, 0, 0, 0.28);
+}
+
+/* ------------------------------------------------------------------
+   Tables in a tile (ResponsiveTable, app/ui.tsx) are iOS inset-grouped
+   lists: no full-bleed rules, a hairline between rows that stops 16px short
+   of the tile's edges (the cells' own inset), and one under the header.
+   The separator is painted as a cell background rather than a border, so
+   it can be inset on a table row and still travel with a pinned first
+   column; it is half a device pixel on a retina screen (the top half of a
+   1px gradient), --border on a 1x one. Unlayered, so it beats the rows'
+   `border-b` utilities.
+   ------------------------------------------------------------------ */
+.grouped-table {
+  --sep: var(--border-strong);
+  --sep-line: linear-gradient(to bottom, var(--sep) 50%, transparent 50%);
+}
+.grouped-table table > :is(thead, tbody, tfoot) > tr {
+  border-top-width: 0;
+  border-bottom-width: 0;
+}
+.grouped-table table > tbody > tr + tr > :is(td, th),
+.grouped-table table > thead > tr > th {
+  background-image: var(--sep-line);
+  background-repeat: no-repeat;
+  background-size: 100% 1px;
+  background-position: 0 0;
+}
+.grouped-table table > thead > tr > th {
+  background-position: 0 100%;
+  background-image: linear-gradient(to top, var(--sep) 50%, transparent 50%);
+}
+.grouped-table table > tbody > tr + tr > :is(td, th):first-child,
+.grouped-table table > thead > tr > th:first-child {
+  background-size: calc(100% - 1rem) 1px;
+  background-position-x: 1rem;
+}
+.grouped-table table > tbody > tr + tr > :is(td, th):last-child,
+.grouped-table table > thead > tr > th:last-child {
+  background-size: calc(100% - 1rem) 1px;
+}
+.grouped-table table > tbody > tr + tr > :is(td, th):only-child,
+.grouped-table table > thead > tr > th:only-child {
+  background-size: calc(100% - 2rem) 1px;
+}
+@media (max-resolution: 1dppx) {
+  .grouped-table {
+    --sep: var(--border);
+    --sep-line: linear-gradient(var(--sep), var(--sep));
+  }
+  .grouped-table table > thead > tr > th {
+    background-image: linear-gradient(var(--sep), var(--sep));
+  }
+}
+/* The header's hairline is the inset separator now; the stuck header keeps
+   a full-width edge and its lift, since it floats over the rows. */
+.grouped-table .data-table:not([data-stuck]) > thead > tr > th {
+  box-shadow: none;
+}
+.grouped-table table > tbody > tr:last-child > :is(td, th) {
+  padding-bottom: 0.75rem;
+}
+.grouped-table table > thead > tr > th {
+  padding-top: 0.75rem;
+}
+
+/* "Swipe for more": a phone's table that is wider than its tile says so in
+   words under the rows, besides the edge fade. Shown once ScrollX has
+   measured an overflow (no-script.tsx shows it on every phone table). */
+.scroll-hint {
+  display: none;
+}
+@media (max-width: 639px) {
+  .scroll-x[data-overflow="true"] + .scroll-hint {
+    display: flex;
+  }
 }
 
 /* In-cell magnitude bar (BarCell): a tint behind the number, anchored at the

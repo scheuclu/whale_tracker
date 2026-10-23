@@ -99,19 +99,49 @@ export function MemberGlance({
     .sort((a, b) => b.trades - a.trades || b.volume_mid - a.volume_mid)
     .slice(0, 3);
   return (
+    <GlanceTile
+      className={className}
+      aside={
+        top.length ? (
+          <>
+            <span className="mr-1 font-semibold">Most traded</span>
+            {top.map((t) => (
+              <TickerChip key={t.ticker} ticker={t.ticker} />
+            ))}
+          </>
+        ) : null
+      }
+    >
+      <DirectionSplit buys={detail.buys} sells={detail.sells} exchanges={exchanges} />
+    </GlanceTile>
+  );
+}
+
+/**
+ * The glance tile shared by the member, ticker and issuer pages: a
+ * `DirectionSplit` on the left and a short "most ..." line on the right
+ * (under it on a phone).
+ */
+export function GlanceTile({
+  children,
+  aside,
+  className,
+}: {
+  children: React.ReactNode;
+  aside?: React.ReactNode;
+  className?: string;
+}) {
+  return (
     <div
       className={cn(
         "tile grid gap-x-10 gap-y-4 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-6 sm:py-5",
         className
       )}
     >
-      <DirectionSplit buys={detail.buys} sells={detail.sells} exchanges={exchanges} />
-      {top.length ? (
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-[13px] text-muted-foreground">
-          <span className="mr-1 font-semibold">Most traded</span>
-          {top.map((t) => (
-            <TickerChip key={t.ticker} ticker={t.ticker} />
-          ))}
+      {children}
+      {aside ? (
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-2 text-[13px] text-muted-foreground sm:max-w-[28rem] sm:justify-end">
+          {aside}
         </div>
       ) : null}
     </div>
@@ -119,39 +149,62 @@ export function MemberGlance({
 }
 
 /**
- * Share of the member's trades by direction, as a single thin bar. The
- * diverging buy/sell pair is used because this *is* direction, and the
- * counts are written beside it so colour never carries the meaning alone.
- * Exchanges are neither and are counted in words only.
+ * Share of trades by direction, as a single thin bar. The diverging buy/sell
+ * pair is used because this *is* direction, and the counts are written
+ * beside it so colour never carries the meaning alone. Exchanges are neither
+ * and are counted in words only. `buyers`/`sellers` add who did it ("by 4
+ * members") under each end.
  */
-function DirectionSplit({ buys, sells, exchanges }: { buys: number; sells: number; exchanges: number }) {
+export function DirectionSplit({
+  buys,
+  sells,
+  exchanges = 0,
+  buyers,
+  sellers,
+  noun = "member",
+}: {
+  buys: number;
+  sells: number;
+  exchanges?: number;
+  buyers?: number;
+  sellers?: number;
+  /** What `buyers`/`sellers` count. */
+  noun?: string;
+}) {
   const total = buys + sells;
   if (!total) {
     return <div className="text-[13px] text-muted-foreground">No buys or sells — exchanges only</div>;
   }
   const buyPct = (buys / total) * 100;
+  const by = (n: number | undefined) => (n == null ? "" : `by ${n} ${noun}${n === 1 ? "" : "s"}`);
   return (
     <div className="min-w-0">
       <div className="flex items-baseline justify-between gap-3 text-[13px]">
         <span className="inline-flex items-baseline gap-1.5">
-          <span className="size-2 self-center rounded-full" style={{ background: "var(--viz-buy)" }} />
+          <span aria-hidden className="size-2 self-center rounded-full" style={{ background: "var(--viz-buy)" }} />
           <span className="figure text-[22px] leading-none text-foreground">{buys}</span>
           <span className="text-muted-foreground">bought</span>
         </span>
         <span className="inline-flex items-baseline gap-1.5">
           <span className="text-muted-foreground">sold</span>
           <span className="figure text-[22px] leading-none text-foreground">{sells}</span>
-          <span className="size-2 self-center rounded-full" style={{ background: "var(--viz-sell)" }} />
+          <span aria-hidden className="size-2 self-center rounded-full" style={{ background: "var(--viz-sell)" }} />
         </span>
       </div>
       <div
         className="mt-2.5 flex h-2 gap-[3px]"
         role="img"
-        aria-label={`${buys} buys and ${sells} sells`}
+        aria-label={[`${buys} buys`, by(buyers), "and", `${sells} sells`, by(sellers)].filter(Boolean).join(" ")}
       >
         {buys ? <div className="rounded-full" style={{ width: `${buyPct}%`, background: "var(--viz-buy)" }} /> : null}
         {sells ? <div className="flex-1 rounded-full" style={{ background: "var(--viz-sell)" }} /> : null}
       </div>
+      {buyers != null || sellers != null ? (
+        <div className="tabular mt-1.5 flex justify-between gap-3 text-[12px] text-muted-foreground">
+          <span>{buys ? by(buyers) : null}</span>
+          <span>{sells ? by(sellers) : null}</span>
+        </div>
+      ) : null}
       {exchanges ? (
         <div className="mt-1.5 text-[12px] text-muted-foreground">
           + {exchanges} exchange{exchanges === 1 ? "" : "s"}, neither direction

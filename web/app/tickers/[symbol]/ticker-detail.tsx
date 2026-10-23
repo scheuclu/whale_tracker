@@ -3,7 +3,8 @@ import { getInsiderIssuer, getIssuerInsiders, type IssuerInsiderRow, type Issuer
 import { ASSET_TYPE_LABEL, memberHref, memberLabel, range, shortDate, tickerHref, usd } from "@/lib/format";
 import { Card, Empty, SectionTitle, StatTile, VolumeRange } from "../../charts";
 import { ExportLink } from "../../feed-controls";
-import { ActionBadge, Amount, OptionBadge, OwnerTag, ResponsiveTable, RoleTag, SectorTag } from "../../ui";
+import { PLAIN_BODY_ROW, PLAIN_HEAD_ROW } from "../../sortable-table";
+import { ActionBadge, Amount, BUTTON, OptionBadge, OwnerTag, ResponsiveTable, RoleTag, SectorTag, Tag } from "../../ui";
 import { TradeList, TradeRow } from "../../trade-row";
 import { getTimelineTrades, type TimelineTrade } from "@/lib/timeline-queries";
 import { TradeTimeline } from "../../timeline";
@@ -13,9 +14,16 @@ import { TickerMembers } from "../ticker-members";
 import { AgentAlternates } from "../../agent-alternates";
 import { assetLabel } from "@/lib/asset-label";
 import { Disclosure, RangeCaption } from "../../disclosure";
-import { DataError, PAGE_STACK, PageHeader, Quiet } from "../../page-header";
+import { BackLink, DataError, PAGE_STACK, Quiet } from "../../page-header";
 import { ShareControl } from "../../share-control";
-import { absoluteUrl } from "@/lib/site";
+import { absoluteUrl, plural } from "@/lib/site";
+import { longDate, tradeSummary } from "@/lib/members";
+import { cn } from "@/lib/utils";
+import { MemberAvatar } from "../../avatar";
+import { DirectionSplit, GlanceTile } from "../../politicians/member-hero";
+import { SymbolHero } from "../../symbol-hero";
+import { GROUPED_ROW, GroupedList, LIST_FOOT_LINK, ROW_LINK } from "../../grouped-list";
+import { ChevronRight } from "lucide-react";
 
 /*
  * One ticker's page, `/tickers/<SYMBOL>`. Moved out of app/tickers/page.tsx
@@ -46,63 +54,88 @@ export async function TickerDetail({ stat }: { stat: TickerRow }) {
   const assetTypes = assetTypeMix(timeline);
   const disclosed = range(stat.volume_min, stat.volume_max);
   const other = stat.trades - stat.buys - stat.sells;
+  // The three members with the most trades in it, for the glance tile.
+  const topMembers = [...members].sort((a, b) => b.trades - a.trades || b.volume_mid - a.volume_mid).slice(0, 3);
 
   return (
     <div className={PAGE_STACK}>
       <AgentAlternates ticker={ticker} />
-      <PageHeader
-        back={{ href: "/tickers", label: "all tickers" }}
-        share={<ShareControl url={absoluteUrl(tickerHref(ticker))} text={`${ticker}: stock trades disclosed by members of Congress`} />}
-        title={stat.ticker}
-        titleClassName="font-mono sm:text-[44px]"
-        badges={
-          <>
-              {assetTypes.map((a) => (
-                <span
-                  key={a.code}
-                  className="rounded-md border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
-                  title={`${a.count} of ${timeline.length} trades filed with asset type ${a.code}`}
-                >
-                  {a.label}
-                </span>
-              ))}
-              <SectorTag
-                group={trades[0]?.industry_group}
-                sic={trades[0]?.sic}
-                description={trades[0]?.sic_description}
-              />
-          </>
-        }
-        subtitle={
-          <span className="text-ink-2" title={stat.asset_name ?? undefined}>
-            {assetLabel(stat.asset_name, { ticker: stat.ticker })}
-          </span>
-        }
-        aside={
-          <FlowSplit
-            buys={stat.buys}
-            sells={stat.sells}
-            other={other}
-            buyers={stat.buy_politicians}
-            sellers={stat.sell_politicians}
-          />
-        }
-      >
-      <section aria-label="Ticker totals" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatTile label="Members" value={String(stat.politicians)} hint="distinct filers" />
-        <StatTile label="Trades" value={String(stat.trades)} hint={`${stat.buys} buy / ${stat.sells} sell`} />
-        <StatTile
-          label="Volume (est.)"
-          value={usd(stat.volume_mid)}
-          hint={
-            stat.transcribed
-              ? `disclosed ${disclosed} · ${stat.transcribed} transcribed not counted`
-              : `disclosed ${disclosed}`
+      <header className="space-y-8 sm:space-y-10">
+        <div className="-mb-2 flex items-center justify-between sm:-mb-4">
+          <BackLink href="/tickers" label="Tickers" />
+        </div>
+        <SymbolHero
+          symbol={stat.ticker}
+          identity={
+            <span title={stat.asset_name ?? undefined}>{assetLabel(stat.asset_name, { ticker: stat.ticker })}</span>
+          }
+          badges={
+            assetTypes.length || trades[0]?.industry_group ? (
+              <>
+                {assetTypes.map((a) => (
+                  <Tag key={a.code} title={`${a.count} of ${timeline.length} trades filed with asset type ${a.code}`}>
+                    {a.label}
+                  </Tag>
+                ))}
+                <SectorTag
+                  group={trades[0]?.industry_group}
+                  sic={trades[0]?.sic}
+                  description={trades[0]?.sic_description}
+                />
+              </>
+            ) : null
+          }
+          summary={<>{tradeSummary({ trades: stat.trades, tickers: 0, buys: stat.buys, sells: stat.sells }, plural(stat.politicians, "member"))}.</>}
+          facts={stat.last_tx_date ? `last traded ${longDate(stat.last_tx_date)}` : null}
+          actions={
+            <ShareControl url={absoluteUrl(tickerHref(ticker))} text={`${ticker}: stock trades disclosed by members of Congress`} />
           }
         />
-        <StatTile label="Last trade" value={shortDate(stat.last_tx_date)} />
-      </section>
-      </PageHeader>
+        <div className="space-y-3 sm:space-y-4">
+          <section aria-label="Ticker totals" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+            <StatTile label="Members" value={String(stat.politicians)} hint="distinct filers" />
+            <StatTile label="Trades" value={String(stat.trades)} hint={`${stat.buys} buy / ${stat.sells} sell`} />
+            <StatTile
+              label="Volume (est.)"
+              value={usd(stat.volume_mid)}
+              hint={
+                stat.transcribed
+                  ? `disclosed ${disclosed} · ${stat.transcribed} transcribed not counted`
+                  : `disclosed ${disclosed}`
+              }
+            />
+            <StatTile label="Last trade" value={shortDate(stat.last_tx_date)} />
+          </section>
+          <GlanceTile
+            aside={
+              topMembers.length ? (
+                <>
+                  <span className="mr-1 font-semibold">Most active</span>
+                  {topMembers.map((m) => (
+                    <a
+                      key={m.member_name}
+                      href={memberHref(m.member_name, m.bioguide_id)}
+                      className={cn(BUTTON, "h-7 gap-1.5 pl-1 pr-3 text-[12.5px]")}
+                      title={`${m.trades} trade${m.trades === 1 ? "" : "s"} in ${ticker}`}
+                    >
+                      <MemberAvatar name={m.member_name} bioguideId={m.bioguide_id} size="xs" />
+                      {m.member_name}
+                    </a>
+                  ))}
+                </>
+              ) : null
+            }
+          >
+            <DirectionSplit
+              buys={stat.buys}
+              sells={stat.sells}
+              exchanges={other}
+              buyers={stat.buy_politicians}
+              sellers={stat.sell_politicians}
+            />
+          </GlanceTile>
+        </div>
+      </header>
 
       <PriceOverlay ticker={ticker} focus="congress" congress={timeline} />
 
@@ -143,7 +176,7 @@ export async function TickerDetail({ stat }: { stat: TickerRow }) {
         <section>
           <SectionTitle
             right={
-              <span className="text-[11px] text-muted-foreground">
+              <span>
                 {calls} call{calls === 1 ? "" : "s"} · {puts} put{puts === 1 ? "" : "s"}
               </span>
             }
@@ -153,7 +186,7 @@ export async function TickerDetail({ stat }: { stat: TickerRow }) {
           <ResponsiveTable>
             <table className="w-full text-[13px]">
               <thead>
-                <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.06em] text-muted-foreground">
+                <tr className={PLAIN_HEAD_ROW}>
                   <th className="px-4 py-2.5 font-medium">Contract</th>
                   <th className="px-4 py-2.5 font-medium">Action</th>
                   <th className="px-4 py-2.5 font-medium">Member</th>
@@ -165,7 +198,7 @@ export async function TickerDetail({ stat }: { stat: TickerRow }) {
               </thead>
               <tbody>
                 {optionTrades.map((r) => (
-                  <tr key={r.id} className="border-b border-border/50 last:border-0 hover:bg-muted/50">
+                  <tr key={r.id} className={PLAIN_BODY_ROW}>
                     <td className="px-4 py-2">
                       <OptionBadge kind={r.option_kind} strikeCents={r.strike_cents} expiry={null} />
                     </td>
@@ -227,71 +260,6 @@ function assetTypeMix(rows: TimelineTrade[]): { code: string; label: string; cou
     .map(([code, count]) => ({ code, label: ASSET_TYPE_LABEL[code] ?? code, count }));
 }
 
-/**
- * Buys against sells as one split bar — trade counts, not money, so it is
- * exact. Two fills with a 2px surface gap; both counts and directions are
- * spelled out beside it, so the colour pair never carries the meaning
- * alone. Exchanges and other actions are named, not drawn.
- */
-function FlowSplit({
-  buys,
-  sells,
-  other,
-  buyers,
-  sellers,
-}: {
-  buys: number;
-  sells: number;
-  other: number;
-  buyers: number;
-  sellers: number;
-}) {
-  const total = buys + sells;
-  if (!total) return null;
-  return (
-    <div
-      className="w-full sm:w-72"
-      role="img"
-      aria-label={`${buys} buys by ${buyers} members, ${sells} sells by ${sellers} members`}
-    >
-      <div className="mb-1.5 flex items-baseline justify-between text-[11px] text-muted-foreground">
-        <span>
-          <span className="text-sm font-semibold text-foreground">{buys}</span> bought
-        </span>
-        <span>
-          sold <span className="text-sm font-semibold text-foreground">{sells}</span>
-        </span>
-      </div>
-      <div className="flex h-2.5 gap-0.5">
-        {buys ? (
-          <div
-            className="h-full"
-            style={{
-              width: `${(buys / total) * 100}%`,
-              background: "var(--viz-buy)",
-              borderRadius: sells ? "4px 2px 2px 4px" : "4px",
-            }}
-          />
-        ) : null}
-        {sells ? (
-          <div
-            className="h-full flex-1"
-            style={{ background: "var(--viz-sell)", borderRadius: buys ? "2px 4px 4px 2px" : "4px" }}
-          />
-        ) : null}
-      </div>
-      <div className="mt-1.5 flex justify-between text-[11px] text-muted-foreground">
-        <span>
-          by {buyers} member{buyers === 1 ? "" : "s"}
-        </span>
-        <span>
-          {other ? `${other} other · ` : ""}by {sellers} member{sellers === 1 ? "" : "s"}
-        </span>
-      </div>
-    </div>
-  );
-}
-
 /** Trade-date window for the cross-link, matching the insider page's own 90d view. */
 const CROSS_WINDOW_DAYS = 90;
 
@@ -318,24 +286,21 @@ async function InsidersInIssuer({ ticker }: { ticker: string }) {
     );
   }
   const href = `/insiders?t=${encodeURIComponent(ticker)}`;
-  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
   return (
     <section>
       <SectionTitle
         right={
-          <span className="text-[11px] text-muted-foreground">
-            last {CROSS_WINDOW_DAYS} days · SEC Form 4
-          </span>
+          <span>last {CROSS_WINDOW_DAYS} days · SEC Form 4</span>
         }
       >
         Insiders in this issuer
       </SectionTitle>
-      <Card>
-        {issuer ? (
-          <>
-            <p className="text-[13px]">
-              <span className="font-medium">{plural(issuer.insiders, "insider")}</span> of{" "}
+      {issuer ? (
+        <GroupedList
+          header={
+            <p className="text-[14px] leading-relaxed text-ink-2">
+              <span className="font-semibold text-foreground">{plural(issuer.insiders, "insider")}</span> of{" "}
               {issuer.issuer_name ?? ticker} filed {plural(issuer.filings, "Form 4")} —{" "}
               {[
                 issuer.buy_insiders
@@ -349,51 +314,53 @@ async function InsidersInIssuer({ ticker }: { ticker: string }) {
                 .join(", ")}
               <span className="text-muted-foreground"> · last trade {shortDate(issuer.last_tx_date)}</span>
             </p>
-            <div className="mt-3 space-y-2">
-              {owners.map((p) => (
-                <div key={p.cik} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
-                  <a href={`/insiders?cik=${encodeURIComponent(p.cik)}`} className="font-medium hover:text-primary">
-                    {p.name}
-                  </a>
-                  <RoleTag
-                    isDirector={p.is_director}
-                    isOfficer={p.is_officer}
-                    isTenPercentOwner={p.is_ten_percent_owner}
-                    officerTitle={p.officer_title}
-                  />
-                  <div className="flex-1" />
-                  <span className="tabular text-xs text-muted-foreground">
-                    {p.buys} buy / {p.sells} sell
-                  </span>
-                  <span className="tabular w-24 text-right text-xs">
-                    {p.bought ? `+${usd(p.bought)}` : ""}
-                    {p.bought && p.sold ? " " : ""}
-                    {p.sold ? `−${usd(p.sold)}` : ""}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <Disclosure
-              size="sm"
-              className="mt-3"
-              lead="Values are shares × the price as filed, not a disclosed range. Kept apart from the member figures above — nothing here enters them."
-            >
-              <p>Primary reporting owners from stored Form 4s.</p>
-            </Disclosure>
-            <a
-              href={href}
-              className="mt-2 inline-block text-[12px] text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
-            >
-              every stored insider trade in {ticker} →
-            </a>
-          </>
-        ) : (
+          }
+          footer={
+            <>
+              <Disclosure
+                size="sm"
+                lead="Values are shares × the price as filed, not a disclosed range. Kept apart from the member figures above — nothing here enters them."
+              >
+                <p>Primary reporting owners from stored Form 4s.</p>
+              </Disclosure>
+              <a href={href} className={LIST_FOOT_LINK}>
+                Every stored insider trade in {ticker}
+                <ChevronRight aria-hidden className="size-3.5" strokeWidth={2.25} />
+              </a>
+            </>
+          }
+        >
+          {owners.map((p) => (
+            <li key={p.cik} className={GROUPED_ROW}>
+              <a href={`/insiders?cik=${encodeURIComponent(p.cik)}`} className={ROW_LINK}>
+                {p.name}
+              </a>
+              <RoleTag
+                isDirector={p.is_director}
+                isOfficer={p.is_officer}
+                isTenPercentOwner={p.is_ten_percent_owner}
+                officerTitle={p.officer_title}
+              />
+              <div className="flex-1" />
+              <span className="tabular text-[13px] text-muted-foreground">
+                {p.buys} buy / {p.sells} sell
+              </span>
+              <span className="tabular min-w-24 text-right text-[13px]">
+                {p.bought ? `+${usd(p.bought)}` : ""}
+                {p.bought && p.sold ? " " : ""}
+                {p.sold ? `−${usd(p.sold)}` : ""}
+              </span>
+            </li>
+          ))}
+        </GroupedList>
+      ) : (
+        <Card>
           <Quiet>
             No stored Form 4 trade in {ticker} in the last {CROSS_WINDOW_DAYS} days.{" "}
             {allTime ? (
               <>
                 {plural(allTime.trades, "trade")} stored all-time —{" "}
-                <a href={href} className="underline-offset-2 hover:text-primary hover:underline">
+                <a href={href} className="ink-link">
                   see the issuer
                 </a>
                 .
@@ -402,8 +369,8 @@ async function InsidersInIssuer({ ticker }: { ticker: string }) {
               "No stored filing carries this symbol."
             )}
           </Quiet>
-        )}
-      </Card>
+        </Card>
+      )}
     </section>
   );
 }
