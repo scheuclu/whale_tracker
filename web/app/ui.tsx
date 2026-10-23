@@ -54,16 +54,17 @@ export function ResponsiveTable({
   // globals.css): the cells keep a 16px inset from the tile's edge, the row
   // separators stop at that inset, and the tile clips (overflow: clip, not
   // hidden, so a sticky header can still reach the page) to its rounded
-  // corners. On a phone a table wider than the tile says so under its rows.
+  // corners. On a phone a table wider than the tile says so above its rows.
   return (
     <Card className={cn("grouped-table overflow-clip p-0 sm:p-0", className)}>
-      <ScrollX className={wrap ? undefined : "whitespace-nowrap"} stickyFirstColumn={stickyFirstColumn}>
-        {children}
-      </ScrollX>
-      <p aria-hidden className="scroll-hint items-center justify-end gap-1 px-4 pb-2.5 pt-0.5 text-[12px] text-muted-foreground">
+      {/* Above the rows, so a long table says it scrolls before the reader has passed it. */}
+      <p aria-hidden className="scroll-hint items-center justify-end gap-0.5 px-4 pt-2.5 text-[12px] text-muted-foreground">
         Swipe for more columns
         <ChevronRight className="size-3.5" strokeWidth={2.25} />
       </p>
+      <ScrollX className={wrap ? undefined : "whitespace-nowrap"} stickyFirstColumn={stickyFirstColumn}>
+        {children}
+      </ScrollX>
     </Card>
   );
 }

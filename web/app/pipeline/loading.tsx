@@ -7,11 +7,10 @@ export default function Loading() {
       <TilesSkeleton wrap={false} />
       <section>
         <SectionTitleSkeleton width="w-20" />
-        <div className="glass space-y-5 rounded-2xl border border-border bg-card p-5">
+        <div className="tile inset-rows py-1 [--sep-inset:1rem] sm:[--sep-inset:1.5rem]">
           {/* Three sources: a line of prose each, then the run's status lines. */}
           {[1, 2, 4].map((lines, i) => (
-            <div key={i} className="flex gap-3">
-              <Bone className="mt-1.5 size-2 shrink-0 rounded-full" />
+            <div key={i} className="flex gap-3 px-4 py-4 sm:px-6">
               <div className="flex-1">
                 <span className="flex h-[22px] items-center">
                   <Bone className={["h-3.5 w-44", "h-3.5 w-32", "h-3.5 w-48"][i]} />

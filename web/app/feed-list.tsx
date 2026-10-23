@@ -116,24 +116,27 @@ function DaySection({ day, today, index }: { day: DayGroup<TransactionRow>; toda
         id={id}
         className="feed-day-head sticky z-20 -mx-1 flex h-12 items-end gap-2 px-1 pb-2 text-[13px] sm:-mx-2 sm:px-2"
       >
-        <span className="font-display text-[17px] font-semibold leading-tight tracking-[-0.018em] text-foreground">{day.label}</span>
+        <span className="whitespace-nowrap font-display text-[17px] font-semibold leading-tight tracking-[-0.018em] text-foreground">{day.label}</span>
         {day.date ? <span className="tabular leading-tight text-muted-foreground">{day.date}</span> : null}
         {day.future ? (
           <span
-            className="rounded-full bg-attention-soft px-2 py-px text-[12px] font-medium leading-tight text-attention"
+            className="whitespace-nowrap rounded-full bg-attention-soft px-2 py-px text-[12px] font-medium leading-tight text-attention"
             title="This trade date is later than today: the filing's own date, reproduced as filed rather than corrected"
           >
-            future date as filed
+            {/* A phone keeps the header on one line: the flag shortens, its title keeps the whole reason. */}
+            future date<span className="hidden sm:inline"> as filed</span>
           </span>
         ) : null}
         {day.key === null ? null : (
           <span className="hidden leading-tight text-muted-foreground sm:inline">traded</span>
         )}
         <span className="flex-1" />
-        <span className="tabular leading-tight text-muted-foreground">
+        <span className="tabular whitespace-nowrap leading-tight text-muted-foreground">
           {day.trades} {day.trades === 1 ? "trade" : "trades"}
-          <span aria-hidden> · </span>
-          {day.filings} {day.filings === 1 ? "filing" : "filings"}
+          <span className={day.future ? "max-[379px]:hidden" : undefined}>
+            <span aria-hidden> · </span>
+            {day.filings} {day.filings === 1 ? "filing" : "filings"}
+          </span>
         </span>
       </h3>
       {/* One grouped tile per day; filings separated by hairlines that start

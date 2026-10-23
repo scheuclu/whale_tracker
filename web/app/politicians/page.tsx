@@ -296,11 +296,16 @@ export default async function PoliticiansPage({
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2">
                       <MemberAvatar name={r.member_name} bioguideId={r.bioguide_id} size="sm" />
-                      <a href={memberHref(r.member_name, r.bioguide_id)} className="row-name font-medium hover:text-primary">
+                      <a
+                        href={memberHref(r.member_name, r.bioguide_id)}
+                        className="row-name block max-w-[9.5rem] truncate font-medium sm:max-w-none"
+                        title={r.member_name}
+                      >
                         {r.member_name}
                       </a>
                       <PartyBadge party={r.party} />
-                      <span className="text-[11px] text-muted-foreground">
+                      {/* The seat is in the member's page; a phone gives its width to the figures. */}
+                      <span className="hidden text-[12px] text-muted-foreground sm:inline">
                         {r.state}
                         {r.district && r.district !== "0" ? r.district : ""}
                       </span>

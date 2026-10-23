@@ -227,15 +227,16 @@ export default async function ScanDetailPage({
             </Card>
             <ResponsiveTable wrap>
               {rows.length ? (
-                <table className="w-full text-[12px]">
+                <table className="w-full text-[13px]">
                   <thead>
-                    <tr className="border-b border-border text-left text-[12px] font-medium text-muted-foreground">
+                    <tr className="text-left text-[12px] font-medium text-muted-foreground">
                       <th className="px-3 py-2 font-medium">#</th>
                       <th className="px-3 py-2 font-medium">Amount</th>
                       <th className="px-3 py-2 text-right font-medium">margin</th>
                       <th className="px-3 py-2 font-medium">Type</th>
                       <th className="px-3 py-2 text-right font-medium">margin</th>
-                      <th className="px-3 py-2 font-medium">Transcription</th>
+                      {/* A floor on the prose column: squeezed on a phone it wrapped a word a line. */}
+                      <th className="min-w-[13rem] px-3 py-2 font-medium">Transcription</th>
                     </tr>
                   </thead>
                   <tbody>

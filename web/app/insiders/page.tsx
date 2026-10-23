@@ -20,7 +20,7 @@ import { MemberAvatar } from "../avatar";
 import { Disclosure } from "../disclosure";
 import { PriceOverlay } from "../price-overlay";
 import { BackLink, DataError, PAGE_STACK, PageHeader, PillLinks, Quiet } from "../page-header";
-import { GROUPED_ROW, GroupedList, LIST_FOOT_LINK, ROW_LINK } from "../grouped-list";
+import { GroupedList, LIST_FOOT_LINK, ROW_LINK, ValueRow } from "../grouped-list";
 import { SymbolHero } from "../symbol-hero";
 import { DirectionSplit, GlanceTile } from "../politicians/member-hero";
 import { longDate, tradeSummary } from "@/lib/members";
@@ -580,14 +580,15 @@ function TradeList({ trades, showIssuer }: { trades: InsiderTradeRow[]; showIssu
               <SectorTag group={r.industry_group} sic={r.sic} description={r.sic_description} />
             ) : null}
             <PlanTag value={r.aff_10b5_one} />
-            <div className="flex-1" />
-            <span
-              className="tabular text-[13px] text-muted-foreground"
-              title={r.tx_date_as_filed ? `filed as "${r.tx_date_as_filed}"` : undefined}
-            >
-              {shortDate(r.tx_date)}
+            <span className="ml-auto inline-flex items-center gap-2 whitespace-nowrap">
+              <span
+                className="tabular text-[13px] text-muted-foreground"
+                title={r.tx_date_as_filed ? `filed as "${r.tx_date_as_filed}"` : undefined}
+              >
+                {shortDate(r.tx_date)}
+              </span>
+              <InsiderDelayTag days={r.delay_days} late={r.late} timeliness={r.timeliness} />
             </span>
-            <InsiderDelayTag days={r.delay_days} late={r.late} timeliness={r.timeliness} />
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px]">
             {r.insider_cik ? (
@@ -719,26 +720,30 @@ async function IssuerDetail({ ticker }: { ticker: string }) {
         <SectionTitle right={<span>{plural(insiders.length, "insider")} · shares × reported price</span>}>Who traded</SectionTitle>
         <GroupedList>
           {insiders.map((p) => (
-            <li key={p.cik} className={GROUPED_ROW}>
-              <a href={`/insiders?cik=${encodeURIComponent(p.cik)}`} className={ROW_LINK}>
-                {p.name}
-              </a>
-              <RoleTag
-                isDirector={p.is_director}
-                isOfficer={p.is_officer}
-                isTenPercentOwner={p.is_ten_percent_owner}
-                officerTitle={p.officer_title}
-              />
-              <div className="flex-1" />
-              <span className="tabular text-[13px] text-muted-foreground">
-                {p.buys} buy / {p.sells} sell
-              </span>
-              <span className="tabular min-w-24 text-right text-[14px]">
-                {p.bought ? `+${usd(p.bought)}` : ""}
-                {p.bought && p.sold ? " " : ""}
-                {p.sold ? `−${usd(p.sold)}` : ""}
-              </span>
-            </li>
+            <ValueRow
+              key={p.cik}
+              name={
+                <a href={`/insiders?cik=${encodeURIComponent(p.cik)}`} className={ROW_LINK}>
+                  {p.name}
+                </a>
+              }
+              tags={
+                <RoleTag
+                  isDirector={p.is_director}
+                  isOfficer={p.is_officer}
+                  isTenPercentOwner={p.is_ten_percent_owner}
+                  officerTitle={p.officer_title}
+                />
+              }
+              value={
+                <>
+                  {p.bought ? `+${usd(p.bought)}` : ""}
+                  {p.bought && p.sold ? " " : ""}
+                  {p.sold ? `−${usd(p.sold)}` : ""}
+                </>
+              }
+              meta={`${p.buys} buy / ${p.sells} sell`}
+            />
           ))}
         </GroupedList>
       </section>
@@ -835,21 +840,18 @@ async function MembersInTicker({ ticker }: { ticker: string }) {
           }
         >
           {members.map((m) => (
-            <li key={m.member_name} className={GROUPED_ROW}>
-              <a href={memberHref(m.member_name, m.bioguide_id)} className={cn(ROW_LINK, "inline-flex items-center gap-2.5")}>
-                <MemberAvatar name={m.member_name} bioguideId={m.bioguide_id} size="md" />
-                {memberLabel(m.member_name, null, m.state, m.district, m.chamber)}
-              </a>
-              <PartyBadge party={m.party} />
-              <div className="flex-1" />
-              <span className="tabular text-[13px] text-muted-foreground">
-                {m.buys} buy / {m.sells} sell
-              </span>
-              <span className="tabular min-w-28 text-right text-[14px]">
-                <MoneyText value={range(m.volume_min, m.volume_max)} />
-              </span>
-              <span className="tabular w-16 text-right text-[13px] text-muted-foreground">{shortDate(m.last_tx_date)}</span>
-            </li>
+            <ValueRow
+              key={m.member_name}
+              name={
+                <a href={memberHref(m.member_name, m.bioguide_id)} className={cn(ROW_LINK, "inline-flex min-w-0 items-center gap-2.5")}>
+                  <MemberAvatar name={m.member_name} bioguideId={m.bioguide_id} size="md" />
+                  <span className="min-w-0 truncate">{memberLabel(m.member_name, null, m.state, m.district, m.chamber)}</span>
+                </a>
+              }
+              tags={<PartyBadge party={m.party} />}
+              value={<MoneyText value={range(m.volume_min, m.volume_max)} />}
+              meta={`${m.buys} buy / ${m.sells} sell · last ${shortDate(m.last_tx_date)}`}
+            />
           ))}
         </GroupedList>
       ) : (

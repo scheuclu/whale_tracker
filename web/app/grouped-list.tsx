@@ -41,6 +41,39 @@ export function GroupedList({
 export const GROUPED_ROW =
   "flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-[14px] sm:px-5";
 
+/**
+ * A two-column row of a `GroupedList`, Settings-style: the name (and its
+ * tags beneath it) on the left, the figure over its context on the right.
+ * Two fixed columns rather than one wrapping line, so a long name never
+ * pushes the figures onto a ragged second line on a phone.
+ */
+export function ValueRow({
+  name,
+  tags,
+  value,
+  meta,
+  className,
+}: {
+  name: React.ReactNode;
+  tags?: React.ReactNode;
+  value?: React.ReactNode;
+  meta?: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <li className={cn("grid min-h-11 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 px-4 py-2.5 sm:px-5", className)}>
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-[14px]">
+        {name}
+        {tags}
+      </div>
+      <div className="flex flex-col items-end text-right sm:flex-row-reverse sm:items-baseline sm:gap-4">
+        {value ? <span className="tabular whitespace-nowrap text-[14px] text-foreground">{value}</span> : null}
+        {meta ? <span className="tabular whitespace-nowrap text-[12px] text-muted-foreground sm:text-[13px]">{meta}</span> : null}
+      </div>
+    </li>
+  );
+}
+
 /** A row's name link: ink, underlined only on hover (the row is the target). */
 export const ROW_LINK =
   "rounded-sm font-semibold text-foreground underline decoration-transparent underline-offset-[3px] transition-[text-decoration-color] duration-(--dur-fast) hover:decoration-border-strong";

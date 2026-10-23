@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 import { MemberAvatar } from "../../avatar";
 import { DirectionSplit, GlanceTile } from "../../politicians/member-hero";
 import { SymbolHero } from "../../symbol-hero";
-import { GROUPED_ROW, GroupedList, LIST_FOOT_LINK, ROW_LINK } from "../../grouped-list";
+import { GroupedList, LIST_FOOT_LINK, ROW_LINK, ValueRow } from "../../grouped-list";
 import { ChevronRight } from "lucide-react";
 
 /*
@@ -331,26 +331,30 @@ async function InsidersInIssuer({ ticker }: { ticker: string }) {
           }
         >
           {owners.map((p) => (
-            <li key={p.cik} className={GROUPED_ROW}>
-              <a href={`/insiders?cik=${encodeURIComponent(p.cik)}`} className={ROW_LINK}>
-                {p.name}
-              </a>
-              <RoleTag
-                isDirector={p.is_director}
-                isOfficer={p.is_officer}
-                isTenPercentOwner={p.is_ten_percent_owner}
-                officerTitle={p.officer_title}
-              />
-              <div className="flex-1" />
-              <span className="tabular text-[13px] text-muted-foreground">
-                {p.buys} buy / {p.sells} sell
-              </span>
-              <span className="tabular min-w-24 text-right text-[13px]">
-                {p.bought ? `+${usd(p.bought)}` : ""}
-                {p.bought && p.sold ? " " : ""}
-                {p.sold ? `−${usd(p.sold)}` : ""}
-              </span>
-            </li>
+            <ValueRow
+              key={p.cik}
+              name={
+                <a href={`/insiders?cik=${encodeURIComponent(p.cik)}`} className={ROW_LINK}>
+                  {p.name}
+                </a>
+              }
+              tags={
+                <RoleTag
+                  isDirector={p.is_director}
+                  isOfficer={p.is_officer}
+                  isTenPercentOwner={p.is_ten_percent_owner}
+                  officerTitle={p.officer_title}
+                />
+              }
+              value={
+                <>
+                  {p.bought ? `+${usd(p.bought)}` : ""}
+                  {p.bought && p.sold ? " " : ""}
+                  {p.sold ? `−${usd(p.sold)}` : ""}
+                </>
+              }
+              meta={`${p.buys} buy / ${p.sells} sell`}
+            />
           ))}
         </GroupedList>
       ) : (

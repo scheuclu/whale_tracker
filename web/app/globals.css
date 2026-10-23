@@ -870,13 +870,13 @@
 }
 
 /* "Swipe for more": a phone's table that is wider than its tile says so in
-   words under the rows, besides the edge fade. Shown once ScrollX has
+   words above the rows, besides the edge fade. Shown once ScrollX has
    measured an overflow (no-script.tsx shows it on every phone table). */
 .scroll-hint {
   display: none;
 }
 @media (max-width: 639px) {
-  .scroll-x[data-overflow="true"] + .scroll-hint {
+  .grouped-table:has(> .scroll-x[data-overflow="true"]) > .scroll-hint {
     display: flex;
   }
 }
