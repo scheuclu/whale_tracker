@@ -155,7 +155,7 @@ export const POLITICIAN_SORT = defineSort({
  */
 export const TICKER_SORT = defineSort({
   columns: {
-    ticker: { expr: "ticker", first: "asc" },
+    ticker: { expr: "ticker COLLATE NOCASE", first: "asc" },
     asset: { expr: "asset_name COLLATE NOCASE", first: "asc", nullable: true },
     members: { expr: "politicians", first: "desc" },
     trades: { expr: "trades", first: "desc" },
@@ -177,7 +177,7 @@ export const TICKER_SORT = defineSort({
 export const ISSUER_SORT = defineSort({
   columns: {
     value: { expr: "buy_value + sell_value", first: "desc" },
-    ticker: { expr: "ticker", first: "asc", nullable: true },
+    ticker: { expr: "ticker COLLATE NOCASE", first: "asc", nullable: true },
     issuer: { expr: "issuer_name COLLATE NOCASE", first: "asc", nullable: true },
     insiders: { expr: "insiders", first: "desc" },
     filings: { expr: "filings", first: "desc" },
