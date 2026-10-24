@@ -110,6 +110,9 @@ export function SortLink({
   return (
     <a
       href={href}
+      // Every SortLink is a view of the page it sits on (a sort, a row count),
+      // never a page of its own: crawlers needn't follow it (see robots.ts).
+      rel="nofollow"
       className={className}
       {...rest}
       onClick={(e) => {
