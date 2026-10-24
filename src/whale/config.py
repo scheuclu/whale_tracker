@@ -388,6 +388,56 @@ class PricesSettings:
     budget_seconds: float = 60
 
 
+# What `track_record` may say. An unknown key is a typo, and a typo'd
+# budget or minimum would sit in config.yaml looking tuned while doing nothing.
+TRACK_RECORD_KEYS = frozenset({"enabled", "budget_seconds", "min_decisions", "min_filings"})
+
+
+@dataclass
+class TrackRecordSettings:
+    """The members' track record (track.py): how the stock moved after each
+    decision, against SPY. See config.yaml."""
+
+    enabled: bool = True
+    # Seconds one poll run may spend fetching price series; 0 = no limit.
+    # What the budget leaves behind waits for the next run.
+    budget_seconds: float = 300
+    # Matured decisions a member needs before they are ranked, and how many
+    # filings they must be spread over.
+    min_decisions: int = 8
+    min_filings: int = 3
+
+
+def _parse_track_record(raw) -> TrackRecordSettings:
+    raw = raw or {}
+    if not isinstance(raw, dict):
+        raise ConfigError(f"track_record must be a mapping, not {raw!r}")
+    unknown = set(raw) - TRACK_RECORD_KEYS
+    if unknown:
+        raise ConfigError(f"track_record has unknown key(s) {sorted(unknown)}; "
+                          f"allowed: {sorted(TRACK_RECORD_KEYS)}")
+    try:
+        minimum = int(raw.get("min_decisions", 8))
+    except (TypeError, ValueError):
+        raise ConfigError("track_record.min_decisions must be a whole number, "
+                          f"not {raw.get('min_decisions')!r}") from None
+    if minimum < 2:
+        raise ConfigError(f"track_record.min_decisions is {minimum}; it must be at least 2")
+    try:
+        filings = int(raw.get("min_filings", 3))
+    except (TypeError, ValueError):
+        raise ConfigError("track_record.min_filings must be a whole number, "
+                          f"not {raw.get('min_filings')!r}") from None
+    if filings < 1:
+        raise ConfigError(f"track_record.min_filings is {filings}; it must be at least 1")
+    return TrackRecordSettings(
+        enabled=_flag(raw.get("enabled", True), "track_record.enabled"),
+        budget_seconds=_seconds(raw.get("budget_seconds", 300), "track_record.budget_seconds"),
+        min_decisions=minimum,
+        min_filings=filings,
+    )
+
+
 # What a watchlist entry may say. Same contract as the insider rules: an
 # unrecognised key is a typo, and a typo here would silently watch nobody.
 WATCH_KEYS = frozenset({"name", "bioguide_id", "every_trade"})
@@ -506,6 +556,7 @@ class Config:
     watchlist: WatchlistSettings = field(default_factory=WatchlistSettings)
     telegram: TelegramSettings = field(default_factory=TelegramSettings)
     prices: PricesSettings = field(default_factory=PricesSettings)
+    track_record: TrackRecordSettings = field(default_factory=TrackRecordSettings)
     senate_enabled: bool = True
     # Scanned-PDF transcription; see config.yaml for the measured accuracy
     # and the quarantine that lets it be on.
@@ -625,6 +676,7 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
         watchlist=watchlist,
         telegram=_parse_telegram(raw.get("telegram")),
         prices=prices,
+        track_record=_parse_track_record(raw.get("track_record")),
         senate_enabled=bool((raw.get("senate") or {}).get("enabled", True)),
         vision_enabled=bool((raw.get("vision") or {}).get("enabled", False)),
         vision_budget_seconds=_seconds((raw.get("vision") or {}).get("budget_seconds", 480),

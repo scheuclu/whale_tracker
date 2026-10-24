@@ -1047,3 +1047,468 @@ def outcome_summary(conn: sqlite3.Connection, min_sample: int = MIN_OUTCOME_SAMP
                 hit_rate=sum(1 for s in signed if s > 0) / len(signed) if signed else None,
                 min_sample=min_sample))
     return out
+
+
+# --- track record (how the stock moved after each member's decisions) -------
+#
+# "Whose trades were followed by the biggest market-beating moves." The unit
+# is a *decision*: one member, one ticker, one direction, one filing. Thirty
+# rows for one ticker in one filing are one decision; thirty tickers are
+# thirty. Each decision is measured as the ticker's own move after it, close
+# to close, minus SPY's over the same sessions, at 30/90/180 trading days,
+# read the way the trade pointed (a sale followed by a fall scores positive),
+# on two clocks: from the trade date (the member's timing) and from the
+# disclosure (what a member of the public could have copied).
+#
+# No dollar figure enters any of it. Brackets are not amounts, so every
+# decision has weight one and the bracket rules are untouched. It is the
+# stock's move, not anyone's profit: the exit, the position size and
+# dividends are all unknown (closes are split-adjusted, dividends ignored on
+# both sides). Derived once here and stored by track.sync; SQL reads the
+# stored columns and never re-derives a score.
+
+TRACK_HORIZONS = (30, 90, 180)
+TRACK_DEFAULT_HORIZON = 90
+TRACK_CLOCKS = ("trade", "disclosure")
+# Stocks and exchange-traded funds/notes: a linear position in a listed
+# symbol. Options (non-linear), bonds, Treasuries, funds, crypto, RSUs and
+# rows with no asset type are not decisions this can price fairly.
+TRACK_ASSET_TYPES = ("ST", "EF", "ET")
+# Fewer matured decisions than this and a member is listed as "not enough
+# matured trades yet", never ranked.
+TRACK_MIN_DECISIONS = 8
+# ... spread over at least this many filings. A filing is one moment in the
+# market: nine tickers bought on one day are one bet on that day, and a
+# bootstrap over one or two filings has nothing to re-draw (a one-filing
+# member's interval came out narrow and away from zero on the real data).
+TRACK_MIN_FILINGS = 3
+# Members need this many decisions to inform the shrinkage fit (shrinkage_k).
+TRACK_FIT_MIN_DECISIONS = 5
+TRACK_BOOTSTRAP_DRAWS = 1000
+TRACK_LUCK_DRAWS = 1000
+TRACK_SEED = 20261024
+TRACK_INTERVAL = 0.90
+# The luck check draws, for each of a member's decisions, a ticker move from
+# other members' decisions that started within this many calendar days; a
+# thinner neighbourhood is widened to the nearest TRACK_LUCK_MIN_POOL.
+TRACK_LUCK_WINDOW_DAYS = 7
+TRACK_LUCK_MIN_POOL = 20
+# ... but never past this many days, and only where at least this many other
+# members traded: otherwise there is no comparable universe on that date.
+TRACK_LUCK_MAX_DAYS = 30
+TRACK_LUCK_MIN_MEMBERS = 3
+
+# Why a row (or a decision) is not measured, in the order they are tested:
+# the first that applies is the one counted.
+TRACK_EXCLUSIONS = (
+    "transcribed",      # read off a scanned form: quarantined from every statistic
+    "exchange",         # no direction (exchanges, unknown actions)
+    "no_ticker",        # nothing to price
+    "option",           # non-linear payoff: option_kind set, or asset type OP
+    "non_equity",       # bonds, Treasuries, funds, crypto, no asset type ...
+    "date_as_filed",    # missing, contradictory or future dates, reproduced as filed
+    "no_price_series",  # the price source carries no series for the ticker
+)
+
+
+def track_row_exclusion(row, today: date) -> str | None:
+    """Why a counted transaction row cannot join a measured decision, or None.
+
+    `row` needs action, ticker, asset_type, option_kind, parse_method,
+    tx_date, notification_date and filing_date. Dates are never corrected:
+    a row whose trade date is missing, in the future, after its own filing
+    date or after its notification date is excluded and counted instead.
+    """
+    if not counts_toward_volume(row["parse_method"]):
+        return "transcribed"
+    if trade_direction(row["action"]) is None:
+        return "exchange"
+    if not (row["ticker"] or "").strip():
+        return "no_ticker"
+    if row["option_kind"] or row["asset_type"] == "OP":
+        return "option"
+    if row["asset_type"] not in TRACK_ASSET_TYPES:
+        return "non_equity"
+    try:
+        traded = date.fromisoformat(row["tx_date"] or "")
+        filed = date.fromisoformat(row["filing_date"] or "")
+    except ValueError:
+        return "date_as_filed"
+    if traded > today or filed < traded or dates_inconsistent(row["tx_date"],
+                                                              row["notification_date"]):
+        return "date_as_filed"
+    return None
+
+
+@dataclass
+class TrackDecision:
+    """One (member, ticker, direction, filing) group of counted rows."""
+
+    filing_id: int
+    member_name: str
+    politician_id: int | None
+    ticker: str
+    direction: str
+    # Earliest trade date among the group's rows (as filed), and the filing date.
+    tx_date: str | None
+    filing_date: str | None
+    rows: int
+    # None when measured; otherwise the TRACK_EXCLUSIONS reason.
+    exclusion: str | None = None
+
+
+def group_track_decisions(rows, today: date) -> tuple[list[TrackDecision], dict[str, int]]:
+    """Fold counted rows into decisions; returns them and rows per outcome.
+
+    Rows that pass `track_row_exclusion` group into one decision per
+    (filing, ticker, direction), dated by the group's earliest trade. A
+    group with no eligible row but a ticker and a direction is kept as an
+    excluded decision (reason: its rows' first in `TRACK_EXCLUSIONS` order)
+    so coverage can be counted in decisions as well as rows; if the same key
+    also has eligible rows, the excluded rows are counted but form nothing.
+    The row tally is keyed by reason, plus "included".
+    """
+    tally: dict[str, int] = {}
+    eligible: dict[tuple, TrackDecision] = {}
+    excluded: dict[tuple, TrackDecision] = {}
+    for r in rows:
+        reason = track_row_exclusion(r, today)
+        tally[reason or "included"] = tally.get(reason or "included", 0) + 1
+        direction = trade_direction(r["action"])
+        ticker = (r["ticker"] or "").strip().upper()
+        if direction is None or not ticker:
+            continue
+        key = (r["filing_id"], ticker, direction)
+        bucket = excluded if reason else eligible
+        d = bucket.get(key)
+        if d is None:
+            bucket[key] = TrackDecision(
+                filing_id=r["filing_id"], member_name=r["member_name"] or "unknown",
+                politician_id=r["politician_id"], ticker=ticker, direction=direction,
+                tx_date=r["tx_date"], filing_date=r["filing_date"], rows=1, exclusion=reason)
+            continue
+        d.rows += 1
+        if reason is None:
+            if r["tx_date"] < d.tx_date:
+                d.tx_date = r["tx_date"]
+        elif TRACK_EXCLUSIONS.index(reason) < TRACK_EXCLUSIONS.index(d.exclusion):
+            d.exclusion = reason
+    out = list(eligible.values())
+    out += [d for key, d in excluded.items() if key not in eligible]
+    out.sort(key=lambda d: (d.filing_id, d.ticker, d.direction))
+    return out, tally
+
+
+def session_on_or_after(calendar: list[str], day: str) -> int | None:
+    """Index of the first session on or after `day` (the trade clock's t0)."""
+    i = bisect.bisect_left(calendar, day)
+    return i if i < len(calendar) else None
+
+
+def session_after(calendar: list[str], day: str) -> int | None:
+    """Index of the first session strictly after `day` (the disclosure clock's
+    t0): the public sees a filing on its filing date, so the earliest close
+    anyone could have acted on is the next session's."""
+    i = bisect.bisect_right(calendar, day)
+    return i if i < len(calendar) else None
+
+
+def track_excess(calendar: list[str], bench: dict[str, float], closes: dict[str, float],
+                 i0: int | None, horizon: int) -> float | None:
+    """The ticker's move from session i0 to i0 + horizon minus the benchmark's.
+
+    None when the horizon is past the calendar (pending) or the ticker has
+    no close on either session (a series that ended or starts later).
+    """
+    if i0 is None or i0 + horizon >= len(calendar):
+        return None
+    t0, th = calendar[i0], calendar[i0 + horizon]
+    c0, ch = closes.get(t0), closes.get(th)
+    b0, bh = bench.get(t0), bench.get(th)
+    if not c0 or not ch or not b0 or not bh:
+        return None
+    return (ch / c0 - 1) - (bh / b0 - 1)
+
+
+# A ticker whose newest close is more than this many sessions older than the
+# benchmark's has stopped trading (delisted, acquired, renamed), not lagged.
+TRACK_SERIES_END_GRACE = 5
+
+
+def series_ended(calendar: list[str], closes: dict[str, float],
+                 grace: int = TRACK_SERIES_END_GRACE) -> str | None:
+    """The ticker's last close when its series stopped before the calendar did.
+
+    A horizon that falls after that date can never be measured, so the
+    decision is not "waiting for the horizon" but done: counted apart in the
+    coverage and out of every pending figure. None for a series that is
+    current (within `grace` sessions of the calendar's end) or empty.
+    """
+    if not closes or not calendar:
+        return None
+    last = max(closes)
+    behind = len(calendar) - bisect.bisect_right(calendar, last)
+    return last if behind > grace else None
+
+
+def shrinkage_k(groups, min_n: int = TRACK_FIT_MIN_DECISIONS) -> dict | None:
+    """Empirical-Bayes prior strength from per-member signed excesses.
+
+    Model: decision j of member i scores x_ij = θ_i + ε_ij, and the members'
+    true θ_i spread with variance τ². The posterior mean of θ_i under a
+    prior centred on zero is n_i / (n_i + k) × mean_i, with k = σ²/τ².
+
+    Estimated by the method of moments with each member's own noise
+    (DerSimonian–Laird style): τ² = Var(member means) − mean(s_i² / n_i),
+    and σ² = the mean of the members' own variances s_i². Each member counts
+    once on both sides. A pooled, decision-weighted σ² was tried first and
+    rejected: one member with 584 decisions in volatile chip stocks set the
+    noise level for everyone, the low-variance members' noise was
+    overstated, and τ² came out negative (k infinite) at 90 days while the
+    same data gave k ≈ 17 every other way it was cut. Only members with at
+    least `min_n` decisions inform the fit: a variance from two or three
+    decisions is too noisy to subtract.
+
+    Returns {k, sigma2, tau2, members}, with k None when no between-member
+    spread is detectable (τ² ≤ 0): every score then shrinks to zero. None
+    when fewer than three members can inform the estimate.
+    """
+    usable = [list(g) for g in groups if len(g) >= max(2, min_n)]
+    if len(usable) < 3:
+        return None
+    means = [sum(g) / len(g) for g in usable]
+    variances = [sum((x - m) ** 2 for x in g) / (len(g) - 1) for g, m in zip(usable, means)]
+    sigma2 = sum(variances) / len(variances)
+    grand = sum(means) / len(means)
+    var_means = sum((m - grand) ** 2 for m in means) / (len(means) - 1)
+    noise = sum(v / len(g) for v, g in zip(variances, usable)) / len(usable)
+    tau2 = var_means - noise
+    k = sigma2 / tau2 if tau2 > 0 and sigma2 > 0 else None
+    return {"k": k, "sigma2": sigma2, "tau2": tau2, "members": len(usable)}
+
+
+def shrink(mean: float, n: int, k: float | None) -> float:
+    """n / (n + k) × mean: no decisions → 0, many → the member's own mean.
+    k None (no detectable spread between members) shrinks everything to 0."""
+    if n <= 0 or k is None:
+        return 0.0
+    return n / (n + k) * mean
+
+
+def _quantile(sorted_values: list[float], q: float) -> float:
+    """Linear-interpolation quantile of an already sorted list."""
+    pos = q * (len(sorted_values) - 1)
+    lo = math.floor(pos)
+    hi = min(lo + 1, len(sorted_values) - 1)
+    return sorted_values[lo] + (sorted_values[hi] - sorted_values[lo]) * (pos - lo)
+
+
+def bootstrap_interval(clusters, k: float | None, rng, draws: int = TRACK_BOOTSTRAP_DRAWS,
+                       level: float = TRACK_INTERVAL) -> tuple[float, float] | None:
+    """A percentile bootstrap interval for the shrunk score.
+
+    Two-stage: filings are re-drawn with replacement, then the decisions
+    inside each drawn filing, and the shrunk mean of the result recorded.
+    Re-drawing filings rather than decisions keeps a 30-ticker filing on one
+    day from counting as 30 independent pieces of evidence; re-drawing
+    inside them keeps a member with a single filing from a zero-width
+    interval. `clusters` is one list of signed excesses per filing.
+    """
+    clusters = [list(c) for c in clusters if c]
+    if not clusters:
+        return None
+    m = len(clusters)
+    stats = []
+    for _ in range(draws):
+        total, n = 0.0, 0
+        for _ in range(m):
+            c = clusters[rng.randrange(m)]
+            size = len(c)
+            for _ in range(size):
+                total += c[rng.randrange(size)]
+            n += size
+        stats.append(shrink(total / n, n, k))
+    stats.sort()
+    tail = (1 - level) / 2
+    return _quantile(stats, tail), _quantile(stats, 1 - tail)
+
+
+def luck_percentile(decisions, pool, member: str, rng, draws: int = TRACK_LUCK_DRAWS,
+                    window_days: int = TRACK_LUCK_WINDOW_DAYS,
+                    min_pool: int = TRACK_LUCK_MIN_POOL,
+                    max_days: int = TRACK_LUCK_MAX_DAYS,
+                    min_members: int = TRACK_LUCK_MIN_MEMBERS) -> float | None:
+    """Share of random portfolios on the same dates this member's mean beats.
+
+    `decisions` is the member's [(t0 ISO date, direction, signed excess)];
+    `pool` every measured decision [(t0 ISO date, member, unsigned excess)]
+    sorted by date. Each random portfolio keeps the member's dates and
+    directions and swaps each ticker for one another member traded within
+    `window_days` of that date (widened, nearest first, to `min_pool`
+    candidates but never past `max_days`), so the market's direction at the
+    time and the member's buy/sell mix are held fixed and only the choice of
+    ticker is random. Ties count half.
+
+    A decision whose neighbourhood is thinner than `min_pool` moves by fewer
+    than `min_members` other members has no comparable universe — a 2024
+    catch-up filing when nobody else was filing — and is left out of the
+    check (from the member's own mean too, so like is compared with like).
+    None when that leaves fewer than four in five of the member's decisions:
+    without the old filings bounded, one member's 2024 sales were "luckier
+    than 0%" of portfolios drawn from other members' 2026 trades.
+    """
+    if not decisions:
+        return None
+    others = [(date.fromisoformat(d).toordinal(), x, who) for d, who, x in pool if who != member]
+    if not others:
+        return None
+    days = [o[0] for o in others]
+    candidates, signs, kept = [], [], []
+    for t0, direction, value in decisions:
+        day = date.fromisoformat(t0).toordinal()
+        lo = bisect.bisect_left(days, day - window_days)
+        hi = bisect.bisect_right(days, day + window_days)
+        if hi - lo < min_pool:
+            # Widen around the date, nearest first, inside max_days.
+            lo = hi = bisect.bisect_left(days, day)
+            while hi - lo < min_pool:
+                left = day - days[lo - 1] if lo > 0 else math.inf
+                right = days[hi] - day if hi < len(days) else math.inf
+                if min(left, right) > max_days:
+                    break
+                if left <= right:
+                    lo -= 1
+                else:
+                    hi += 1
+        near = others[lo:hi]
+        if len(near) < min_pool or len({who for _, _, who in near}) < min_members:
+            continue
+        candidates.append([x for _, x, _ in near])
+        signs.append(-1.0 if direction == "sell" else 1.0)
+        kept.append(value)
+    if not kept or len(kept) * 5 < len(decisions) * 4:
+        return None
+    observed = sum(kept) / len(kept)
+    n = len(kept)
+    below = ties = 0
+    for _ in range(draws):
+        total = 0.0
+        for values, sign in zip(candidates, signs):
+            total += sign * values[rng.randrange(len(values))]
+        mean = total / n
+        if mean < observed - 1e-12:
+            below += 1
+        elif mean <= observed + 1e-12:
+            ties += 1
+    return (below + 0.5 * ties) / draws
+
+
+@dataclass
+class TrackClockScore:
+    mean: float
+    score: float               # the shrunk mean: what the ranking orders by
+    lo: float | None           # bootstrap interval of the score; ranked members only
+    hi: float | None
+    hit_rate: float
+    luck: float | None         # luck_percentile; ranked members only
+
+
+@dataclass
+class TrackScore:
+    member_name: str
+    politician_id: int | None
+    horizon: int
+    n: int                     # decisions measured on both clocks at this horizon
+    filings: int
+    min_decisions: int
+    min_filings: int
+    trade: TrackClockScore
+    disclosure: TrackClockScore
+    qualifies: bool = False
+    rank: int | None = None
+
+
+def track_scores(decisions, horizons: tuple[int, ...] = TRACK_HORIZONS,
+                 min_decisions: int = TRACK_MIN_DECISIONS,
+                 min_filings: int = TRACK_MIN_FILINGS,
+                 draws: int = TRACK_BOOTSTRAP_DRAWS, luck_draws: int = TRACK_LUCK_DRAWS,
+                 seed: int = TRACK_SEED) -> tuple[list[TrackScore], list[dict]]:
+    """Per member and horizon, both clocks scored on the same decisions.
+
+    `decisions` are mappings with member_name, politician_id, filing_id,
+    direction, t0_trade, t0_disclosure and signed_<clock>_<h>. A decision
+    counts at horizon h only when it has a value on *both* clocks, so the
+    two scores describe the same trades and their gap is the timing lost to
+    the disclosure delay rather than a difference in which trades matured.
+
+    Returns the scores and one model row per (clock, horizon): the
+    shrinkage estimate and how many members were measured and ranked.
+    Members with at least `min_decisions` over `min_filings` filings are
+    ranked by the trade-clock
+    score (ties: more decisions first, then name); only they get an
+    interval and a luck percentile — the rest are "not enough yet".
+    Deterministic for a given seed: every member's draws are seeded from
+    (seed, member, clock, horizon).
+    """
+    import random
+
+    scores: list[TrackScore] = []
+    models: list[dict] = []
+    for h in horizons:
+        paired = [d for d in decisions
+                  if d[f"signed_trade_{h}"] is not None and d[f"signed_disclosure_{h}"] is not None]
+        by_member: dict[str, list] = {}
+        for d in paired:
+            by_member.setdefault(d["member_name"], []).append(d)
+        fits = {clock: shrinkage_k([[d[f"signed_{clock}_{h}"] for d in ds]
+                                    for ds in by_member.values()])
+                for clock in TRACK_CLOCKS}
+        # The luck check's universe: every measured decision's unsigned move.
+        pools = {clock: sorted((d[f"t0_{clock}"], d["member_name"],
+                                -d[f"signed_{clock}_{h}"] if d["direction"] == "sell"
+                                else d[f"signed_{clock}_{h}"])
+                               for d in paired) for clock in TRACK_CLOCKS}
+        rows: list[TrackScore] = []
+        for member in sorted(by_member):
+            ds = by_member[member]
+            n = len(ds)
+            filings = len({d["filing_id"] for d in ds})
+            qualifies = n >= min_decisions and filings >= min_filings
+            clocks = {}
+            for clock in TRACK_CLOCKS:
+                col = f"signed_{clock}_{h}"
+                values = [d[col] for d in ds]
+                mean = sum(values) / n
+                k = fits[clock]["k"] if fits[clock] else None
+                lo = hi = luck = None
+                if qualifies:
+                    rng = random.Random(f"{seed}:{member}:{clock}:{h}")
+                    clusters: dict[int, list[float]] = {}
+                    for d in ds:
+                        clusters.setdefault(d["filing_id"], []).append(d[col])
+                    lo, hi = bootstrap_interval(list(clusters.values()), k, rng, draws)
+                    luck = luck_percentile([(d[f"t0_{clock}"], d["direction"], d[col]) for d in ds],
+                                           pools[clock], member, rng, luck_draws)
+                clocks[clock] = TrackClockScore(
+                    mean=mean, score=shrink(mean, n, k), lo=lo, hi=hi,
+                    hit_rate=sum(1 for v in values if v > 0) / n, luck=luck)
+            rows.append(TrackScore(
+                member_name=member, politician_id=ds[0]["politician_id"], horizon=h, n=n,
+                filings=filings, min_decisions=min_decisions, min_filings=min_filings,
+                trade=clocks["trade"], disclosure=clocks["disclosure"], qualifies=qualifies))
+        ranked = sorted((r for r in rows if r.qualifies),
+                        key=lambda r: (-r.trade.score, -r.n, r.member_name))
+        for i, r in enumerate(ranked, 1):
+            r.rank = i
+        scores += rows
+        for clock in TRACK_CLOCKS:
+            fit = fits[clock] or {}
+            values = [d[f"signed_{clock}_{h}"] for d in paired]
+            models.append({
+                "clock": clock, "horizon": h, "k": fit.get("k"), "sigma2": fit.get("sigma2"),
+                "tau2": fit.get("tau2"), "mean": sum(values) / len(values) if values else None,
+                "members_fit": fit.get("members", 0),
+                "decisions": len(paired), "members": len(rows), "ranked": len(ranked),
+                "min_decisions": min_decisions, "min_filings": min_filings,
+            })
+    return scores, models

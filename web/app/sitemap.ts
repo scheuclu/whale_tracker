@@ -44,6 +44,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     section("/tickers", 0.9),
     section("/insiders", 0.8),
     section("/politicians?view=late", 0.7),
+    section("/politicians?view=track", 0.7),
     section("/trends", 0.6),
     section("/methodology", 0.6),
     section("/alerts", 0.5),

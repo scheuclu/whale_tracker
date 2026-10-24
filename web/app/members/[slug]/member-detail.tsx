@@ -14,6 +14,7 @@ import { BackLink, DataError, PAGE_STACK, Quiet } from "../../page-header";
 import { ShareControl } from "../../share-control";
 import { absoluteUrl } from "@/lib/site";
 import { Segmented } from "../../ui";
+import { MemberTrack } from "./member-track";
 
 /*
  * One member's page, `/members/<slug>`. Moved out of app/politicians/page.tsx
@@ -136,6 +137,8 @@ export async function MemberDetail({
           <RangeCaption />
         </Card>
       </section>
+
+      <MemberTrack member={member} />
 
       {committees.length ? <MemberCommittees seats={committees} /> : null}
 

@@ -105,6 +105,16 @@ def main(argv: list[str] | None = None) -> int:
     p_classify.add_argument("--budget-seconds", type=float, default=600,
                             help="stop after this long; the next run continues (default 600)")
 
+    p_track = sub.add_parser(
+        "track-record",
+        help="measure how the stock moved after each member's trades, against SPY, and "
+             "rebuild the track-record scores (resumable; the first fill takes a while)")
+    p_track.add_argument("--budget-seconds", type=float, default=0,
+                         help="stop fetching after this long; the next run continues "
+                              "(default 0 = until done)")
+    p_track.add_argument("--rescore", action="store_true",
+                         help="rebuild the scores even if no measurement changed")
+
     p_ins = sub.add_parser("insiders", help="issuer leaderboard for insider trades")
     p_ins.add_argument("--since", type=_parse_since, default=None, metavar="30d")
     p_ins.add_argument("--by", choices=("value", "insiders"), default="value")
@@ -265,6 +275,18 @@ def main(argv: list[str] | None = None) -> int:
             conn.close()
         print(f"issuers: {result.summary()}")
         return 0
+
+    if args.command == "track-record":
+        from . import track
+
+        conn = db.connect(config.db_path)
+        try:
+            result = track.sync(conn, config, budget_seconds=args.budget_seconds,
+                                rescore=args.rescore)
+        finally:
+            conn.close()
+        print(f"track record: {result.summary()}")
+        return 0 if not result.status.startswith(("error", "blocked", "throttled")) else 1
 
     from . import query
 

@@ -53,6 +53,18 @@ import {
 } from "./queries";
 import { POLITICIAN_SORT, TICKER_SORT, type PoliticianSortKey, type TickerSortKey } from "./table-sort";
 import { publicErrorMessage } from "./public-error";
+import {
+  ALL_TRACK_HORIZONS,
+  DEFAULT_TRACK_HORIZON,
+  OUTCOME_LABEL,
+  TRACK_BENCHMARK,
+  getMemberTrack,
+  getTrackLeaderboard,
+  type ClockScore,
+  type MemberTrack,
+  type TrackHorizon,
+  type TrackScoreRow,
+} from "./track-queries";
 
 export const MAX_LIMIT = 500;
 const MAX_OFFSET = 1_000_000;
@@ -97,6 +109,7 @@ export const PARAMS = {
   },
   ticker: { limit: LIMIT },
   insiders: { limit: LIMIT },
+  track: { horizon: { kind: "enum", values: ALL_TRACK_HORIZONS.map(String), default: String(DEFAULT_TRACK_HORIZON) } },
   index: {},
 } satisfies Record<string, Record<string, ParamSpec>>;
 
@@ -400,6 +413,7 @@ export type MemberResult = {
   member: ReturnType<typeof memberDetailJson>;
   top_tickers: ReturnType<typeof memberTickerJson>[];
   recent_trades: TradeJson[];
+  track_record: ReturnType<typeof memberTrackJson>;
 };
 
 function memberTickerJson(
@@ -429,15 +443,17 @@ export async function buildMember(origin: string, id: string, search: URLSearchP
     const detail = who ? await getPoliticianDetail(who.member_name) : null;
     if (!who || !detail) return apiError(origin, 404, `no disclosed trades for bioguide_id ${bioguide}`);
     const limit = p.values.limit as number;
-    const [tickers, trades, asOf] = await Promise.all([
+    const [tickers, trades, asOf, track] = await Promise.all([
       getPoliticianTickers(who.member_name, 20),
       getTransactions({ member: who.member_name, limit }),
       getDataAsOf(),
+      getMemberTrack(who.member_name),
     ]);
     const data: MemberResult = {
       member: memberDetailJson(detail, origin),
       top_tickers: tickers.map((t) => memberTickerJson(t, origin)),
       recent_trades: trades.map((t) => tradeJson(t, origin)),
+      track_record: memberTrackJson(track, origin),
     };
     return {
       status: 200,
@@ -580,6 +596,131 @@ export async function buildInsiders(origin: string, symbol: string, search: URLS
             "SEC Form 4 corporate-insider data. Never combine with congressional figures. Values are shares × reported price; " +
             "bought_priced_usd / sold_priced_usd sum only rows with a usable price (see issuer.bought.unpriced_trades).",
           recent_trades_returned: trades.length,
+        }),
+      },
+    };
+  });
+}
+
+/* -------------------------------------------------------------- track record */
+
+/**
+ * The track record's JSON: every figure as stored by the pipeline
+ * (`stats.track_scores`), in percentage points, with field names that say
+ * what they are — a stock's move against SPY after a disclosed trade, never
+ * a profit or a return. Nothing is re-derived here.
+ */
+export const TRACK_MEASURE =
+  "Stock's close-to-close move minus SPY's over the same trading days, signed by the trade's direction " +
+  "(a sale followed by a fall is positive), in percentage points. The stock's move, not the member's profit: " +
+  "exit, position size and dividends are unknown, and no dollar amount enters it. Not investment advice; " +
+  "a disclosed trade is not evidence of wrongdoing.";
+
+function pts(v: number | null): number | null {
+  return v == null ? null : Math.round(v * 1000) / 10;
+}
+
+function clockJson(c: ClockScore) {
+  return {
+    shrunk_excess_move_pts: pts(c.score),
+    unshrunk_mean_excess_move_pts: pts(c.mean),
+    interval_90_pts: c.lo == null || c.hi == null ? null : [pts(c.lo), pts(c.hi)],
+    hit_rate: c.hit_rate == null ? null : Math.round(c.hit_rate * 1000) / 1000,
+    share_of_same_date_random_portfolios_beaten: c.luck == null ? null : Math.round(c.luck * 1000) / 1000,
+  };
+}
+
+function trackEntryJson(r: TrackScoreRow, origin: string) {
+  return {
+    rank: r.rank,
+    member: {
+      name: r.member_name,
+      bioguide_id: r.bioguide_id,
+      party: r.party,
+      state: r.state,
+      chamber: r.chamber,
+      url: absolute(origin, memberHref(r.member_name, r.bioguide_id)),
+      api_url: memberApi(origin, r.bioguide_id),
+    },
+    horizon_trading_days: r.horizon,
+    decisions_measured: r.n,
+    filings: r.filings,
+    ranked: r.qualifies,
+    after_trade: clockJson(r.trade),
+    after_disclosure: clockJson(r.disclosure),
+    timing_lost_to_disclosure_delay_pts: pts(r.trade.score - r.disclosure.score),
+  };
+}
+
+function memberTrackJson(t: MemberTrack, origin: string) {
+  if (!t.available || t.min_decisions == null) return { available: false, note: "The track record is being computed by the pipeline." };
+  return {
+    available: true,
+    measure: TRACK_MEASURE,
+    minimum_decisions_to_rank: t.min_decisions,
+    by_horizon: t.scores.map((s) => ({ ...trackEntryJson(s, origin), ranked_members: t.ranked_count[s.horizon] ?? null })),
+    decisions_waiting_for_horizon: t.pending,
+    decisions_whose_price_series_ended: t.ended,
+    excluded_decisions: t.excluded,
+    url: absolute(origin, "/politicians?view=track"),
+  };
+}
+
+export async function buildTrackRecord(origin: string, search: URLSearchParams): Promise<ApiResult> {
+  const p = parseParams(search, PARAMS.track);
+  if (p.errors.length) return badRequest(origin, p.errors);
+  return guard(origin, async () => {
+    const horizon = Number(p.values.horizon ?? DEFAULT_TRACK_HORIZON) as TrackHorizon;
+    const [board, asOf] = await Promise.all([getTrackLeaderboard(horizon), getDataAsOf()]);
+    const notices = [
+      ...p.notices,
+      ...(board.available && board.model.trade ? [] : ["The track record is being computed by the pipeline; no scores yet."]),
+    ];
+    const model = (clock: "trade" | "disclosure") => {
+      const m = board.model[clock];
+      return m
+        ? {
+            shrinkage_k: m.k == null ? null : Math.round(m.k * 10) / 10,
+            all_decisions_mean_excess_move_pts: pts(m.mean),
+            decisions_measured: m.decisions,
+            members_measured: m.members,
+            members_ranked: m.ranked,
+          }
+        : null;
+    };
+    return {
+      status: 200,
+      body: {
+        data: {
+          dataset: "congress",
+          available: board.available,
+          horizon_trading_days: horizon,
+          benchmark: TRACK_BENCHMARK,
+          measure: TRACK_MEASURE,
+          ranking:
+            "Ranked by the shrunk after-trade score: a member's mean multiplied by n / (n + k), k estimated from " +
+            "how much members differ beyond chance. Only members with the minimum number of measured decisions " +
+            "over the minimum number of filings are ranked; the interval is a 90% bootstrap over their filings.",
+          minimum_decisions_to_rank: board.min_decisions,
+          model: { after_trade: model("trade"), after_disclosure: model("disclosure") },
+          ranked: board.ranked.map((r) => trackEntryJson(r, origin)),
+          not_enough_matured_decisions: board.unranked.map((r) => ({
+            member: trackEntryJson(r, origin).member,
+            decisions_measured: r.n,
+            filings: r.filings,
+          })),
+          coverage: board.coverage.map((c) => ({
+            outcome: c.outcome,
+            description: OUTCOME_LABEL[c.outcome] ?? c.outcome,
+            rows: c.rows,
+            decisions: c.decisions,
+          })),
+          computed_at: board.computed_at,
+          status: board.status,
+        },
+        meta: meta(origin, asOf, {
+          ...(notices.length ? { notices } : {}),
+          page: absolute(origin, horizon === 90 ? "/politicians?view=track" : `/politicians?view=track&h=${horizon}`),
         }),
       },
     };

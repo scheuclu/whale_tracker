@@ -22,6 +22,8 @@ export const PAGES: PageCase[] = [
   { path: "/" },
   { path: "/politicians" },
   { path: "/politicians?view=late" },
+  { path: "/politicians?view=track" },
+  { path: "/politicians?view=track&h=30", canonical: "/politicians?view=track" },
   { path: "/politicians?sort=trades&dir=asc", canonical: "/politicians" },
   { path: "/members/nancy-pelosi-p000197" },
   { path: "/tickers" },
@@ -57,6 +59,7 @@ export const DOCUMENTS: { path: string; type: RegExp }[] = [
   { path: "/llms-full.txt", type: /^text\/plain/ },
   { path: "/openapi.json", type: /json/ },
   { path: "/api/v1", type: /json/ },
+  { path: "/api/v1/track-record", type: /json/ },
 ];
 
 /**
