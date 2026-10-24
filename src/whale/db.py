@@ -463,6 +463,9 @@ CREATE TABLE IF NOT EXISTS track_decisions (
   signed_trade_30 REAL, signed_trade_90 REAL, signed_trade_180 REAL,
   signed_disclosure_30 REAL, signed_disclosure_90 REAL, signed_disclosure_180 REAL,
   checked_through TEXT,                -- last session the ticker's series was read through
+  series_ended TEXT,                   -- the ticker's last close, when its series stopped before
+                                       -- the calendar did (delisted, acquired): a horizon after it
+                                       -- never matures; NULL for a current series
   UNIQUE (filing_id, ticker, direction)
 );
 -- No index on member_name: ~3,500 rows scan in well under a millisecond, and

@@ -870,8 +870,8 @@ def check_track_record(conn, today: date | None = None) -> list[Finding]:
     from .db import get_state
     from .stats import business_days_between
 
-    decisions = _rows(conn, "SELECT exclusion, tx_date, checked_through, signed_trade_30, "
-                            "signed_trade_90 FROM track_decisions")
+    decisions = _rows(conn, "SELECT ticker, member_name, exclusion, tx_date, checked_through, "
+                            "series_ended, signed_trade_30, signed_trade_90 FROM track_decisions")
     if not decisions:
         return []
     today = today or date.today()
@@ -907,12 +907,13 @@ def check_track_record(conn, today: date | None = None) -> list[Finding]:
             continue
         if business_days_between(traded, today) <= TRACK_OVERDUE_BUSINESS_DAYS:
             continue
-        if d["signed_trade_30"] is not None:
+        if d["signed_trade_30"] is not None or d["series_ended"]:
             continue
         checked = d["checked_through"]
         if checked and business_days_between(traded, date.fromisoformat(checked)) >= 28:
             continue  # read past the horizon: the series has no close there (ended)
-        stale.append(f"traded {d['tx_date']}  series read through {checked or 'never'}")
+        stale.append(f"{d['ticker']} ({d['member_name']}): traded {d['tx_date']}  "
+                     f"series read through {checked or 'never'}")
     if stale:
         findings.append(Finding(
             WARN, "track_record_stale",

@@ -153,7 +153,7 @@ def reconcile(conn: sqlite3.Connection, decisions: list[stats.TrackDecision],
             conn.execute(
                 f"UPDATE track_decisions SET politician_id = ?, member_name = ?, tx_date = ?, "
                 f"rows = ?, exclusion = ?, t0_trade = NULL, t0_disclosure = NULL, "
-                f"checked_through = NULL, {reset} WHERE id = ?",
+                f"checked_through = NULL, series_ended = NULL, {reset} WHERE id = ?",
                 (d.politician_id, d.member_name, d.tx_date, d.rows, exclusion, old["id"]))
             changed += 1
         elif (old["politician_id"], old["member_name"], old["rows"]) != (
@@ -174,21 +174,29 @@ def write_coverage(conn: sqlite3.Connection, tally: dict[str, int]) -> None:
 
     Row counts come from the grouping's tally; a decision excluded for want
     of a price series moves its rows from "included" to that reason.
+    `series_ended` is a subset of "included", not a reason: those decisions
+    are measured at every horizon their series reached and are never
+    pending again (stats.series_ended).
     """
     decisions: dict[str, int] = {}
     moved = 0
-    for r in conn.execute("SELECT exclusion, rows FROM track_decisions"):
+    ended_rows = 0
+    for r in conn.execute("SELECT exclusion, rows, series_ended FROM track_decisions"):
         outcome = r["exclusion"] or "included"
         decisions[outcome] = decisions.get(outcome, 0) + 1
         if r["exclusion"] == "no_price_series":
             moved += r["rows"]
+        if r["exclusion"] is None and r["series_ended"]:
+            decisions["series_ended"] = decisions.get("series_ended", 0) + 1
+            ended_rows += r["rows"]
     rows = dict(tally)
     if moved:
         rows["included"] = rows.get("included", 0) - moved
         rows["no_price_series"] = rows.get("no_price_series", 0) + moved
+    rows["series_ended"] = ended_rows
     stamp = db.now_iso()
     conn.execute("DELETE FROM track_coverage")
-    for outcome in ("included",) + stats.TRACK_EXCLUSIONS:
+    for outcome in ("included", "series_ended") + stats.TRACK_EXCLUSIONS:
         if rows.get(outcome) or decisions.get(outcome):
             conn.execute("INSERT INTO track_coverage (outcome, rows, decisions, computed_at) "
                          "VALUES (?,?,?,?)",
@@ -378,11 +386,12 @@ def _fetch_and_measure(conn, client, eligible, fetches, today: date, final: str,
             result.no_data += 1
             reset = ", ".join(f"{c} = NULL" for c in SIGNED_COLUMNS)
             conn.execute(f"UPDATE track_decisions SET exclusion = 'no_price_series', "
-                         f"checked_through = NULL, {reset} "
+                         f"checked_through = NULL, series_ended = NULL, {reset} "
                          f"WHERE ticker = ? AND exclusion IS NULL", (ticker,))
             conn.commit()
             continue
         closes = {b.date: b.close for b in series}
+        ended = stats.series_ended(calendar, closes)
         for r, i_trade, i_disc in work:
             values = _measure(calendar, bench, closes, i_trade, i_disc)
             sign = -1.0 if r["direction"] == "sell" else 1.0
@@ -390,8 +399,8 @@ def _fetch_and_measure(conn, client, eligible, fetches, today: date, final: str,
                       (values[c] for c in SIGNED_COLUMNS)]
             conn.execute(
                 f"UPDATE track_decisions SET exclusion = NULL, checked_through = ?, "
-                f"{', '.join(f'{c} = ?' for c in SIGNED_COLUMNS)} WHERE id = ?",
-                (calendar[-1], *signed, r["id"]))
+                f"series_ended = ?, {', '.join(f'{c} = ?' for c in SIGNED_COLUMNS)} WHERE id = ?",
+                (calendar[-1], ended, *signed, r["id"]))
             result.measured += 1
         conn.commit()
     return None

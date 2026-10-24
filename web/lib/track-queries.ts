@@ -166,6 +166,7 @@ export type TrackCoverageRow = { outcome: string; rows: number; decisions: numbe
 /** Plain-language names for the coverage outcomes (stats.TRACK_EXCLUSIONS). */
 export const OUTCOME_LABEL: Record<string, string> = {
   included: "Measured or waiting for its horizon",
+  series_ended: "… of which the price series ended before every horizon passed (delisted, acquired)",
   transcribed: "Transcribed from a scanned filing (kept out of every statistic)",
   exchange: "Exchanges (no buy or sell direction)",
   no_ticker: "No ticker (Treasuries, funds, private holdings …)",
@@ -254,7 +255,12 @@ export async function getTrackLeaderboard(horizon: TrackHorizon = DEFAULT_TRACK_
   };
 }
 
+/** Coverage outcomes that are a subset of another row, not a separate share. */
+export const COVERAGE_SUBSETS = new Set(["series_ended"]);
+
 export type TrackDecisionRow = {
+  /** `track_decisions.id`: unique per decision, the list key. */
+  id: number;
   ticker: string;
   direction: "buy" | "sell";
   tx_date: string;
@@ -278,6 +284,8 @@ export type MemberTrack = {
   decisions: TrackDecisionRow[];
   /** Eligible decisions still waiting for the default horizon to pass. */
   pending: number;
+  /** Eligible decisions whose price series ended before that horizon (delisted, acquired). */
+  ended: number;
   /** The member's decisions that are excluded, by reason. */
   excluded: { outcome: string; decisions: number }[];
 };
@@ -286,7 +294,17 @@ export type MemberTrack = {
 export async function getMemberTrack(member: string, horizon: TrackHorizon = DEFAULT_TRACK_HORIZON): Promise<MemberTrack> {
   const db = await getDb();
   if (!hasTrackTables(db)) {
-    return { available: false, status: null, scores: [], ranked_count: {}, min_decisions: null, decisions: [], pending: 0, excluded: [] };
+    return {
+      available: false,
+      status: null,
+      scores: [],
+      ranked_count: {},
+      min_decisions: null,
+      decisions: [],
+      pending: 0,
+      ended: 0,
+      excluded: [],
+    };
   }
   const scores = (db.prepare(`${SCORE_SELECT} WHERE s.member_name = ? ORDER BY s.horizon`).all(member) as RawScore[]).map(toRow);
   const ranked = db
@@ -294,21 +312,24 @@ export async function getMemberTrack(member: string, horizon: TrackHorizon = DEF
     .all() as { horizon: TrackHorizon; ranked: number; min_decisions: number }[];
   const decisions = db
     .prepare(
-      `SELECT d.ticker, d.direction, d.tx_date, f.filing_date, d.t0_trade, d.t0_disclosure,
+      `SELECT d.id, d.ticker, d.direction, d.tx_date, f.filing_date, d.t0_trade, d.t0_disclosure,
               d.signed_trade_${horizon} AS trade, d.signed_disclosure_${horizon} AS disclosure
        FROM track_decisions d JOIN filings f ON f.id = d.filing_id
        WHERE d.member_name = ? AND d.exclusion IS NULL
          AND d.signed_trade_${horizon} IS NOT NULL AND d.signed_disclosure_${horizon} IS NOT NULL
-       ORDER BY trade DESC, d.tx_date, d.ticker`
+       ORDER BY trade DESC, d.tx_date, d.ticker, d.id`
     )
     .all(member) as TrackDecisionRow[];
-  const pending = db
+  // Not measured at this horizon: still waiting, or never (the series ended).
+  const unmeasured = db
     .prepare(
-      `SELECT COUNT(*) AS n FROM track_decisions
+      `SELECT COUNT(*) FILTER (WHERE series_ended IS NULL) AS pending,
+              COUNT(*) FILTER (WHERE series_ended IS NOT NULL) AS ended
+       FROM track_decisions
        WHERE member_name = ? AND exclusion IS NULL
          AND (signed_trade_${horizon} IS NULL OR signed_disclosure_${horizon} IS NULL)`
     )
-    .get(member) as { n: number };
+    .get(member) as { pending: number; ended: number };
   const excluded = db
     .prepare(
       `SELECT exclusion AS outcome, COUNT(*) AS decisions FROM track_decisions
@@ -322,7 +343,8 @@ export async function getMemberTrack(member: string, horizon: TrackHorizon = DEF
     ranked_count: Object.fromEntries(ranked.map((r) => [r.horizon, r.ranked])),
     min_decisions: ranked[0]?.min_decisions ?? scores[0]?.min_decisions ?? null,
     decisions,
-    pending: pending.n,
+    pending: unmeasured.pending,
+    ended: unmeasured.ended,
     excluded,
   };
 }
@@ -342,6 +364,34 @@ export function shortfall(r: Pick<TrackScoreRow, "n" | "filings" | "min_decision
   if (r.n < r.min_decisions) parts.push(`${r.n} of ${r.min_decisions} decisions`);
   if (r.filings < r.min_filings) parts.push(`${r.filings} of ${r.min_filings} filings`);
   return parts.join(" · ") || `${r.n} decisions`;
+}
+
+/**
+ * Which state a member's track-record section is in. "computing" covers both
+ * a database without the tables and a migrated one the pipeline has not
+ * scored yet (no `track_model` rows, so no minimum): neither may read as
+ * "0 of 0 decisions".
+ */
+export function memberTrackState(t: Pick<MemberTrack, "available" | "min_decisions" | "scores">): "computing" | "below" | "ranked" {
+  if (!t.available || t.min_decisions == null) return "computing";
+  const main = t.scores.find((s) => s.horizon === DEFAULT_TRACK_HORIZON);
+  return main?.qualifies ? "ranked" : "below";
+}
+
+/**
+ * The best- and worst-timed lists: best are the top `n` decisions that beat
+ * SPY in the trade's direction, worst the bottom `n` that lagged it. Split by
+ * sign, so no decision is in both and "worst-timed" never lists a decision
+ * that came out ahead. `decisions` arrive sorted best first.
+ */
+export function bestAndWorst(decisions: TrackDecisionRow[], n = 5): { best: TrackDecisionRow[]; worst: TrackDecisionRow[] } {
+  return {
+    best: decisions.filter((d) => d.trade > 0).slice(0, n),
+    worst: decisions
+      .filter((d) => d.trade < 0)
+      .slice(-n)
+      .reverse(),
+  };
 }
 
 /** A fraction as signed percentage points: +4.2, −1.0, 0.0. */

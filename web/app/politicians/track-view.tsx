@@ -1,6 +1,7 @@
 import { memberHref } from "@/lib/format";
 import { absoluteUrl, plural } from "@/lib/site";
 import {
+  COVERAGE_SUBSETS,
   OUTCOME_LABEL,
   TRACK_BENCHMARK,
   TRACK_HORIZONS,
@@ -180,7 +181,7 @@ function TrackTiles({ board }: { board: TrackLeaderboard }) {
   const t = board.model.trade!;
   const d = board.model.disclosure;
   const measured = board.coverage.find((c) => c.outcome === "included")?.decisions ?? 0;
-  const candidates = board.coverage.reduce((s, c) => s + c.decisions, 0);
+  const candidates = board.coverage.filter((c) => !COVERAGE_SUBSETS.has(c.outcome)).reduce((s, c) => s + c.decisions, 0);
   return (
     <section aria-label="Track record totals" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
       <StatTile label="Members ranked" value={String(t.ranked)} hint={`of ${t.members} with a measured decision`} />
@@ -329,7 +330,7 @@ function UnrankedList({
 
 function CoverageSection({ board }: { board: TrackLeaderboard }) {
   if (!board.coverage.length) return null;
-  const totalRows = board.coverage.reduce((s, c) => s + c.rows, 0);
+  const totalRows = board.coverage.filter((c) => !COVERAGE_SUBSETS.has(c.outcome)).reduce((s, c) => s + c.rows, 0);
   const included = board.coverage.find((c) => c.outcome === "included");
   return (
     <section aria-labelledby="coverage-title">
@@ -360,7 +361,10 @@ function CoverageSection({ board }: { board: TrackLeaderboard }) {
           <tbody>
             {board.coverage.map((c) => (
               <tr key={c.outcome} className="border-t border-border">
-                <th scope="row" className="px-4 py-2 text-left font-normal text-ink-2">
+                <th
+                  scope="row"
+                  className={`px-4 py-2 text-left font-normal ${COVERAGE_SUBSETS.has(c.outcome) ? "pl-8 text-muted-foreground" : "text-ink-2"}`}
+                >
                   {OUTCOME_LABEL[c.outcome] ?? c.outcome}
                 </th>
                 <td className="tabular px-4 py-2 text-right">{c.rows.toLocaleString()}</td>

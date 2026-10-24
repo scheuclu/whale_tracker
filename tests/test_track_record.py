@@ -579,3 +579,42 @@ def test_luck_needs_a_comparable_universe_on_the_same_dates():
     # A single stray old decision among recent ones is dropped, not fatal.
     recent = [(f"2026-02-{day:02d}", "buy", 0.10) for day in range(1, 11)]
     assert stats.luck_percentile(recent + old[:1], pool, "me", random.Random(0), draws=100) == 1.0
+
+
+# --- review follow-ups: ended series, audit evidence ----------------------------
+
+
+def test_a_series_that_stopped_before_the_calendar_is_ended_not_lagging():
+    closes = {d: 10.0 for d in CAL[:100]}
+    assert stats.series_ended(CAL, closes) == CAL[99]
+    assert stats.series_ended(CAL, {d: 10.0 for d in CAL[:-3]}) is None, "a few sessions behind is a lag"
+    assert stats.series_ended(CAL, dict(UP)) is None
+    assert stats.series_ended(CAL, {}) is None
+
+
+def test_a_delisted_ticker_leaves_the_pending_count_and_never_warns(conn):
+    f = _filing(conn, "1", "2026-03-20")
+    _rows(conn, f, [{"ticker": "GONE", "tx_date": "2026-03-02"}])
+    i0 = CAL.index("2026-03-02")
+    # Trades for 45 sessions after the buy, then stops (an acquisition).
+    gone = {d: 20.0 + i for i, d in enumerate(CAL[: i0 + 45])}
+    client = FakeClient({"SPY": SPY, "GONE": gone})
+    track.sync(conn, _config(), client=client, now=_now("2026-10-23"))
+    row = conn.execute("SELECT * FROM track_decisions WHERE ticker = 'GONE'").fetchone()
+    assert row["exclusion"] is None and row["series_ended"] == CAL[i0 + 44]
+    assert row["signed_trade_30"] is not None and row["signed_trade_90"] is None
+    coverage = {r["outcome"]: (r["rows"], r["decisions"])
+                for r in conn.execute("SELECT * FROM track_coverage")}
+    assert coverage["series_ended"] == (1, 1) and coverage["included"] == (1, 1)
+    assert [f.code for f in audit.check_track_record(conn, date(2026, 10, 26))] == \
+        ["track_record_coverage"]
+
+
+def test_the_stale_warning_names_the_ticker_and_the_member(conn):
+    _seed(conn)
+    track.sync(conn, _config(), client=FakeClient({"SPY": SPY}, fail={"SPY": PricesBlocked("w")}),
+               now=_now("2026-10-23"))
+    found = {f.code: f for f in audit.check_track_record(conn, date(2026, 10, 26))}
+    stale = found["track_record_stale"]
+    assert any(e.startswith("UP (Jane Doe): traded 2026-03-02") for e in stale.evidence)
+    assert any(e.startswith("DOWN (John Roe): traded 2026-06-01") for e in stale.evidence)

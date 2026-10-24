@@ -1230,6 +1230,27 @@ def track_excess(calendar: list[str], bench: dict[str, float], closes: dict[str,
     return (ch / c0 - 1) - (bh / b0 - 1)
 
 
+# A ticker whose newest close is more than this many sessions older than the
+# benchmark's has stopped trading (delisted, acquired, renamed), not lagged.
+TRACK_SERIES_END_GRACE = 5
+
+
+def series_ended(calendar: list[str], closes: dict[str, float],
+                 grace: int = TRACK_SERIES_END_GRACE) -> str | None:
+    """The ticker's last close when its series stopped before the calendar did.
+
+    A horizon that falls after that date can never be measured, so the
+    decision is not "waiting for the horizon" but done: counted apart in the
+    coverage and out of every pending figure. None for a series that is
+    current (within `grace` sessions of the calendar's end) or empty.
+    """
+    if not closes or not calendar:
+        return None
+    last = max(closes)
+    behind = len(calendar) - bisect.bisect_right(calendar, last)
+    return last if behind > grace else None
+
+
 def shrinkage_k(groups, min_n: int = TRACK_FIT_MIN_DECISIONS) -> dict | None:
     """Empirical-Bayes prior strength from per-member signed excesses.
 

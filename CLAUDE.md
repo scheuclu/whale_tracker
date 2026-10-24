@@ -385,7 +385,10 @@ parser stays faithful to the PDF and the UI flags the row rather than
   `prices.PriceClient` (same source, User-Agent, pacing, `blocked`/`throttled`
   handling) only for tickers with a horizon that matured since the series was
   last read (`checked_through`) or a new decision; a ticker with no series is
-  re-asked after 30 days. It runs **last** in `pipeline.run`, never raises
+  re-asked after 30 days. A series that stopped more than 5 sessions before
+  SPY's (`stats.series_ended`: delisted, acquired) stamps `series_ended` on
+  its decisions: horizons past it never mature, so they leave every pending
+  count and show in coverage as a subset of "included". It runs **last** in `pipeline.run`, never raises
   (`pipeline._sync_track_record`), under `track_record.budget_seconds` (240)
   and a run-level cap (`TRACK_RUN_SOFT_LIMIT_S`, 900 s into the run) so the
   20-minute job reaches its commit. A run with nothing matured makes no

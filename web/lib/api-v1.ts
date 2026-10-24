@@ -653,13 +653,14 @@ function trackEntryJson(r: TrackScoreRow, origin: string) {
 }
 
 function memberTrackJson(t: MemberTrack, origin: string) {
-  if (!t.available) return { available: false, note: "The track record is being computed by the pipeline." };
+  if (!t.available || t.min_decisions == null) return { available: false, note: "The track record is being computed by the pipeline." };
   return {
     available: true,
     measure: TRACK_MEASURE,
     minimum_decisions_to_rank: t.min_decisions,
     by_horizon: t.scores.map((s) => ({ ...trackEntryJson(s, origin), ranked_members: t.ranked_count[s.horizon] ?? null })),
     decisions_waiting_for_horizon: t.pending,
+    decisions_whose_price_series_ended: t.ended,
     excluded_decisions: t.excluded,
     url: absolute(origin, "/politicians?view=track"),
   };
@@ -671,6 +672,10 @@ export async function buildTrackRecord(origin: string, search: URLSearchParams):
   return guard(origin, async () => {
     const horizon = Number(p.values.horizon ?? DEFAULT_TRACK_HORIZON) as TrackHorizon;
     const [board, asOf] = await Promise.all([getTrackLeaderboard(horizon), getDataAsOf()]);
+    const notices = [
+      ...p.notices,
+      ...(board.available && board.model.trade ? [] : ["The track record is being computed by the pipeline; no scores yet."]),
+    ];
     const model = (clock: "trade" | "disclosure") => {
       const m = board.model[clock];
       return m
@@ -714,8 +719,7 @@ export async function buildTrackRecord(origin: string, search: URLSearchParams):
           status: board.status,
         },
         meta: meta(origin, asOf, {
-          ...(p.notices.length ? { notices: p.notices } : {}),
-          ...(board.available ? {} : { notices: ["The track record is being computed by the pipeline; no scores yet."] }),
+          ...(notices.length ? { notices } : {}),
           page: absolute(origin, horizon === 90 ? "/politicians?view=track" : `/politicians?view=track&h=${horizon}`),
         }),
       },

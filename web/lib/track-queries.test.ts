@@ -6,7 +6,17 @@ import path from "node:path";
 import Database from "better-sqlite3";
 
 import { buildTrackRecord } from "./api-v1.ts";
-import { getMemberTrack, getTrackLeaderboard, parseTrackHorizon, percent, points } from "./track-queries.ts";
+import {
+  bestAndWorst,
+  getMemberTrack,
+  getTrackLeaderboard,
+  memberTrackState,
+  parseTrackHorizon,
+  percent,
+  points,
+  type TrackDecisionRow,
+  type TrackScoreRow,
+} from "./track-queries.ts";
 
 // The scores are derived once in Python (stats.track_scores) and only read
 // here: this fixture stores them the way track.rescore_all does and checks
@@ -39,7 +49,7 @@ const DDL = `
     member_name TEXT NOT NULL, ticker TEXT NOT NULL, direction TEXT NOT NULL, tx_date TEXT, rows INTEGER NOT NULL,
     exclusion TEXT, t0_trade TEXT, t0_disclosure TEXT,
     signed_trade_30 REAL, signed_trade_90 REAL, signed_trade_180 REAL,
-    signed_disclosure_30 REAL, signed_disclosure_90 REAL, signed_disclosure_180 REAL, checked_through TEXT);
+    signed_disclosure_30 REAL, signed_disclosure_90 REAL, signed_disclosure_180 REAL, checked_through TEXT, series_ended TEXT);
   CREATE TABLE track_scores (member_name TEXT NOT NULL, politician_id INTEGER, horizon INTEGER NOT NULL,
     n INTEGER NOT NULL, filings INTEGER NOT NULL, min_decisions INTEGER NOT NULL, min_filings INTEGER NOT NULL,
     qualifies INTEGER NOT NULL, rank INTEGER,
@@ -80,6 +90,9 @@ test("the leaderboard, a member's record and the API read the stored scores", as
       (10, 1, 'Ann Able', 'BBB', 'sell', '2026-03-03', 2, NULL, '2026-03-03', '2026-03-23', -0.05, -0.02),
       (10, 1, 'Ann Able', 'CCC', 'buy', '2026-03-04', 1, NULL, '2026-03-04', '2026-03-23', 0.07, NULL),
       (10, 1, 'Ann Able', 'DDD', 'buy', '2026-03-04', 1, 'option', NULL, NULL, NULL, NULL);
+    INSERT INTO track_decisions (filing_id, politician_id, member_name, ticker, direction, tx_date, rows, exclusion,
+      t0_trade, t0_disclosure, signed_trade_90, signed_disclosure_90, series_ended) VALUES
+      (10, 1, 'Ann Able', 'EEE', 'buy', '2026-03-04', 1, NULL, '2026-03-04', '2026-03-23', NULL, NULL, '2026-04-30');
   `);
   db.close();
 
@@ -99,6 +112,9 @@ test("the leaderboard, a member's record and the API read the stored scores", as
     assert.deepEqual(ann.scores.map((s) => s.horizon), [30, 90]);
     assert.deepEqual(ann.decisions.map((d) => d.ticker), ["AAA", "BBB"], "paired decisions only, best first");
     assert.equal(ann.pending, 1, "a decision missing one clock is still waiting");
+    assert.equal(ann.ended, 1, "a series that ended is never pending");
+    assert.equal(new Set(ann.decisions.map((d) => d.id)).size, ann.decisions.length, "every decision has its own id");
+    assert.equal(memberTrackState(ann), "ranked");
     assert.deepEqual(ann.excluded, [{ outcome: "option", decisions: 1 }]);
     assert.equal(ann.ranked_count[90], 2);
 
@@ -119,4 +135,35 @@ test("the leaderboard, a member's record and the API read the stored scores", as
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+const decision = (id: number, trade: number): TrackDecisionRow => ({
+  id,
+  ticker: `T${id}`,
+  direction: "buy",
+  tx_date: "2026-03-02",
+  filing_date: "2026-03-20",
+  t0_trade: "2026-03-02",
+  t0_disclosure: "2026-03-23",
+  trade,
+  disclosure: trade,
+});
+
+test("best and worst never share a decision and worst never lists a gain", () => {
+  // Eight decisions, sorted best first, only two of them below zero.
+  const rows = [0.4, 0.3, 0.2, 0.1, 0.05, 0.02, -0.01, -0.2].map((v, i) => decision(i + 1, v));
+  const { best, worst } = bestAndWorst(rows, 5);
+  assert.deepEqual(best.map((d) => d.id), [1, 2, 3, 4, 5]);
+  assert.deepEqual(worst.map((d) => d.id), [8, 7], "worst first, losses only");
+  assert.equal(best.filter((b) => worst.some((w) => w.id === b.id)).length, 0);
+  assert.deepEqual(bestAndWorst([decision(1, 0.1), decision(2, 0.05)]).worst, []);
+  assert.deepEqual(bestAndWorst([decision(1, 0), decision(2, -0.1)]).best, [], "a flat result is neither");
+});
+
+test("a migrated database the pipeline has not scored reads as computing, never 0 of 0", () => {
+  const score = { horizon: 90, qualifies: true } as TrackScoreRow;
+  assert.equal(memberTrackState({ available: false, min_decisions: null, scores: [] }), "computing");
+  assert.equal(memberTrackState({ available: true, min_decisions: null, scores: [] }), "computing");
+  assert.equal(memberTrackState({ available: true, min_decisions: 8, scores: [] }), "below");
+  assert.equal(memberTrackState({ available: true, min_decisions: 8, scores: [score] }), "ranked");
 });

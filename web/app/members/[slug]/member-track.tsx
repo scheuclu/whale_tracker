@@ -5,6 +5,8 @@ import {
   OUTCOME_SHORT,
   TRACK_BENCHMARK,
   getMemberTrack,
+  bestAndWorst,
+  memberTrackState,
   percent,
   points,
   shortfall,
@@ -46,7 +48,8 @@ export async function MemberTrack({ member }: { member: string }) {
       <span id="track-title">Track record</span>
     </SectionTitle>
   );
-  if (!data.available) {
+  const state = memberTrackState(data);
+  if (state === "computing") {
     return (
       <section aria-labelledby="track-title" data-track-member="computing">
         {title}
@@ -80,7 +83,7 @@ export async function MemberTrack({ member }: { member: string }) {
     />
   );
 
-  if (!main || !main.qualifies) {
+  if (!main || state === "below") {
     const n30 = data.scores.find((s) => s.horizon === 30);
     return (
       <section aria-labelledby="track-title" data-track-member="below-minimum" className="space-y-3 sm:space-y-4">
@@ -91,7 +94,8 @@ export async function MemberTrack({ member }: { member: string }) {
             Measured over {DEFAULT_TRACK_HORIZON} trading days: {main ? shortfall(main) : `0 of ${minimum} decisions`}{" "}
             needed to be ranked
             {n30 ? ` (${n30.n} decisions over 30 days${n30.qualifies && n30.rank ? `, ranked #${n30.rank} of ${data.ranked_count[30] ?? "?"}` : ""})` : ""}
-            {data.pending ? `; ${data.pending} more waiting for the horizon to pass` : ""}.
+            {data.pending ? `; ${data.pending} more waiting for the horizon to pass` : ""}
+            {data.ended ? `; ${data.ended} never will (the price series ended)` : ""}.
           </p>
           <Excluded data={data} />
           {lead}
@@ -101,8 +105,7 @@ export async function MemberTrack({ member }: { member: string }) {
     );
   }
 
-  const best = data.decisions.slice(0, LIST);
-  const worst = data.decisions.length > LIST ? data.decisions.slice(-LIST).reverse() : [];
+  const { best, worst } = bestAndWorst(data.decisions, LIST);
   const ranked = data.ranked_count[DEFAULT_TRACK_HORIZON];
 
   return (
@@ -129,11 +132,15 @@ export async function MemberTrack({ member }: { member: string }) {
         </div>
         <ScoreTable scores={data.scores} />
         <Card>
-          {best.length ? (
-            <div className="grid gap-6 lg:grid-cols-2">
-              <DecisionList title="Best-timed" rows={best} />
-              {worst.length ? <DecisionList title="Worst-timed" rows={worst} /> : null}
-            </div>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <DecisionList title="Best-timed" rows={best} empty="No decision was followed by a market-beating move." />
+            <DecisionList title="Worst-timed" rows={worst} empty="No decision was followed by a market-lagging move." />
+          </div>
+          {data.ended ? (
+            <p className="mt-4 text-[12px] text-muted-foreground">
+              {data.ended} decision{data.ended === 1 ? "" : "s"} cannot reach {DEFAULT_TRACK_HORIZON} trading days: the
+              price series ended first (delisted or acquired).
+            </p>
           ) : null}
           <Excluded data={data} />
           {lead}
@@ -230,16 +237,17 @@ function ScoreTable({ scores }: { scores: TrackScoreRow[] }) {
   );
 }
 
-function DecisionList({ title, rows }: { title: string; rows: TrackDecisionRow[] }) {
+function DecisionList({ title, rows, empty }: { title: string; rows: TrackDecisionRow[]; empty: string }) {
   return (
     <div>
       <h3 className="mb-2 text-[15px] font-semibold text-foreground">
         {title}{" "}
         <span className="text-[12px] font-normal text-muted-foreground">over {DEFAULT_TRACK_HORIZON} trading days</span>
       </h3>
+      {rows.length ? null : <Quiet className="text-[13px]">{empty}</Quiet>}
       <ul className="inset-rows text-[13px]" data-track-decisions={title}>
         {rows.map((r) => (
-          <li key={`${r.ticker}-${r.direction}-${r.tx_date}`} className="flex min-h-10 items-center justify-between gap-3 py-1.5">
+          <li key={r.id} className="flex min-h-10 items-center justify-between gap-3 py-1.5">
             <span className="flex min-w-0 items-center gap-2">
               <TickerChip ticker={r.ticker} href={tickerHref(r.ticker)} />
               <ActionBadge action={r.direction === "buy" ? "purchase" : "sale"} />
