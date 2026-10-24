@@ -27,8 +27,15 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 OPEN_MARKET_CODES = frozenset({"P", "S"})
 ACTION_BY_CODE = {"P": "purchase", "S": "sale"}
 
-# What filers type into issuerTradingSymbol when there is no ticker.
+# What filers type into issuerTradingSymbol when there is no ticker. Some
+# software wraps it in brackets ("[NONE]", "(N/A)"); `_bare` unwraps before
+# the check. No real symbol contains a bracket, so that cannot drop a ticker.
 TICKER_PLACEHOLDERS = frozenset({"", "NONE", "N/A", "NA", "-", "--", "NULL"})
+_BRACKETS = "[](){}<>"
+
+
+def _is_placeholder(sym: str) -> bool:
+    return sym.strip(_BRACKETS).strip() in TICKER_PLACEHOLDERS
 
 # Some filers list every share class in issuerTradingSymbol ("HEI, HEI.A",
 # "LEN, LEN.B", "GEF, GEF-B"). The first symbol is the ticker; the verbatim
@@ -334,11 +341,11 @@ def normalize_ticker(raw: str | None) -> str | None:
     Class-share punctuation within a symbol (BRK.B, GEF-B) is left as filed.
     """
     sym = (raw or "").strip().upper()
-    if sym in TICKER_PLACEHOLDERS:  # whole-string first: "N/A" must not split into "N"
+    if _is_placeholder(sym):  # whole-string first: "N/A" must not split into "N"
         return None
     parts = [p for p in _TICKER_SEPARATORS.split(sym) if p]
     first = parts[0] if parts else ""
-    return None if first in TICKER_PLACEHOLDERS else first
+    return None if _is_placeholder(first) else first
 
 
 def open_market(txs: list[Transaction]) -> list[Transaction]:

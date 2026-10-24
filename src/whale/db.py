@@ -59,7 +59,7 @@ from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 # The alerts table's columns, shared by the fresh-database DDL and the
 # version-13 rebuild so the two cannot drift.
@@ -522,6 +522,11 @@ def _migrate(conn: sqlite3.Connection) -> None:
         # runs; nothing to backfill at migration time. After the alerts
         # rebuild above, so alert_outcomes can reference the rebuilt table.
         conn.executescript(_PRICES_DDL)
+    if version < 15:
+        # Bracketed placeholder tickers ("[NONE]") were stored as symbols;
+        # normalize_ticker now unwraps them. Re-derive, as for #21, so the
+        # stored row reads as "no ticker" rather than sorting as "[NONE]".
+        _rederive_insider_tickers(conn)
     if version < SCHEMA_VERSION:
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         conn.commit()
