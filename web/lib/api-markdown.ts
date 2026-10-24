@@ -131,10 +131,30 @@ export function memberMarkdown(d: MemberResult, origin: string, dataAsOf: string
     }
   } else out.push("_No ticker-bearing trades._");
   out.push("");
+  out.push(...trackLines(d.track_record));
   out.push(`## Recent trades (${d.recent_trades.length} of ${m.trades})`, "");
   out.push(...tradesTable(d.recent_trades, false, true), "");
   out.push(...rulesFooter(origin));
   return out.join("\n");
+}
+
+/** The member's track record: the stock's move after their trades vs SPY, never a profit. */
+function trackLines(t: MemberResult["track_record"]): string[] {
+  if (!t.available || !t.by_horizon) return ["## Track record", "", "_Being computed by the pipeline._", ""];
+  const out = ["## Track record", "", `> ${t.measure}`, ""];
+  if (!t.by_horizon.length) return [...out, "_No measured decisions yet._", ""];
+  out.push(
+    "| Horizon (trading days) | Decisions | After trade (shrunk, pts) | 90% interval | After disclosure (shrunk, pts) | Hit rate | Ranked |",
+    "| --- | --- | --- | --- | --- | --- | --- |"
+  );
+  for (const h of t.by_horizon) {
+    const iv = h.after_trade.interval_90_pts;
+    out.push(
+      `| ${h.horizon_trading_days} | ${h.decisions_measured} in ${h.filings} filings | ${h.after_trade.shrunk_excess_move_pts ?? "—"} | ${iv ? `${iv[0]} to ${iv[1]}` : "—"} | ${h.after_disclosure.shrunk_excess_move_pts ?? "—"} | ${h.after_trade.hit_rate ?? "—"} | ${h.rank ? `#${h.rank} of ${h.ranked_members}` : "not enough matured decisions"} |`
+    );
+  }
+  out.push("");
+  return out;
 }
 
 export function tickerMarkdown(d: TickerResult, origin: string, dataAsOf: string | null): string {

@@ -180,6 +180,24 @@ export const QUOTING_RULES: QuotingRule[] = [
       "of trade dates are always incomplete. Compare periods by filing date, or leave a margin.",
   },
   {
+    id: "track-record",
+    title: "The track record is a stock's move, not a profit",
+    short:
+      "Track-record figures are how a stock moved after a member's trade minus SPY over the same trading days, signed by direction, in points: never the member's profit, return or skill, and shrunk toward zero for small samples.",
+    body:
+      "The track record (`/politicians?view=track`, `/api/v1/track-record`) measures, for each decision (one member, " +
+      "ticker, direction and filing), the stock's close-to-close move over 30, 90 or 180 trading days minus SPY's over " +
+      "the same days, read the way the trade pointed (a sale followed by a fall is positive). It starts from the first " +
+      "close on or after the trade date (`after_trade`) and from the first close after the filing date " +
+      "(`after_disclosure`, what a member of the public could have copied). It is not what the member earned: the exit, " +
+      "the position size and dividends are unknown, and no dollar amount enters it (brackets are not amounts, so every " +
+      "decision counts once). Member scores are shrunk toward zero by n / (n + k) and come with a 90% bootstrap interval; " +
+      "an interval that crosses zero cannot tell the record from no edge. Options, non-equity assets, exchanges, " +
+      "transcribed rows, rows with contradictory dates and tickers without a price series are excluded and counted. " +
+      "Say \"the stocks X traded beat the S&P 500 by N points on average over 90 trading days after the trade\", never " +
+      "\"X earned\", \"X's returns\", \"alpha\" or \"the best trader\". It is not evidence of wrongdoing.",
+  },
+  {
     id: "not-advice",
     title: "Not investment advice",
     short: "Public disclosures shown for information; not investment advice and not evidence of wrongdoing.",
@@ -208,6 +226,7 @@ export const KNOWN_GAPS = [
   "Option contracts (call/put, strike, expiry) are read only where the filing's text names them; a strike is never guessed.",
   "Industry groups come from the issuer's SEC SIC code; ETFs, funds and unlisted assets have none and stay unclassified.",
   "Members are grouped by their name on the official roster; a filing the roster could not match keeps the name printed on it.",
+  "The track record covers stocks and ETFs with a ticker and a price series from an unofficial source (Yahoo Finance's chart endpoint); delisted, renamed or acquired tickers drop out, and a decision counts only once its horizon has passed on both clocks, so recent months are missing. Corporate insiders have no track record yet.",
 ];
 
 /* ------------------------------------------------------------- data dictionary */
@@ -336,6 +355,29 @@ export const DATA_DICTIONARY: FieldGroup[] = [
       { name: "source_url", type: "string", description: "The filing index on SEC EDGAR." },
     ],
   },
+  {
+    object: "TrackRecordEntry",
+    summary:
+      "One member's track record at one horizon: how the stocks they traded moved afterwards against SPY. A stock's move, never a profit.",
+    fields: [
+      { name: "rank", type: "integer|null", description: "Rank by `after_trade.shrunk_excess_move_pts` among members with enough measured decisions; null when not ranked." },
+      { name: "horizon_trading_days", type: "integer", description: "30, 90 or 180 trading days after each clock's start." },
+      {
+        name: "decisions_measured",
+        type: "integer",
+        description: "Decisions (member, ticker, direction, filing) measured on both clocks at this horizon. Each counts once: no dollar amount weights it.",
+      },
+      { name: "filings", type: "integer", description: "Filings those decisions come from." },
+      {
+        name: "after_trade",
+        type: "object",
+        description:
+          "From the first close on or after the trade date: `shrunk_excess_move_pts` (the mean signed move vs SPY in percentage points, × n/(n+k)), `unshrunk_mean_excess_move_pts`, `interval_90_pts` (bootstrap over filings; null if not ranked), `hit_rate`, `share_of_same_date_random_portfolios_beaten` (null without a comparable universe).",
+      },
+      { name: "after_disclosure", type: "object", description: "The same, from the first close strictly after the filing date: what a member of the public could have copied." },
+      { name: "timing_lost_to_disclosure_delay_pts", type: "number", description: "after_trade minus after_disclosure (shrunk scores, same decisions)." },
+    ],
+  },
 ];
 
 /** A field's description, for the OpenAPI document. */
@@ -414,6 +456,12 @@ export const API_ENDPOINTS: Endpoint[] = [
     path: "/api/v1/insiders/{symbol}",
     summary: "SEC Form 4 insider activity for one issuer (separate from congressional data).",
     example: "/api/v1/insiders/LEN",
+  },
+  {
+    path: "/api/v1/track-record",
+    summary:
+      "Members ranked by how the stocks they traded moved afterwards against SPY (a stock's move, not a profit), from the trade and from the disclosure, with intervals, hit rates and a luck check. horizon = 30, 90 (default) or 180 trading days.",
+    example: "/api/v1/track-record?horizon=90",
   },
   { path: "/api/v1/feed.md", summary: "The latest congressional trades and coverage as Markdown.", example: "/api/v1/feed.md" },
 ];

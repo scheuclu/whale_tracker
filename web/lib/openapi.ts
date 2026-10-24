@@ -204,6 +204,10 @@ export function openApiDocument(origin: string): Schema {
                     member: ref("MemberDetail"),
                     top_tickers: { type: "array", items: ref("MemberTicker") },
                     recent_trades: { type: "array", items: ref("Trade") },
+                    track_record: {
+                      type: "object",
+                      description: "The member's track record (see /api/v1/track-record): by_horizon entries shaped like TrackRecordEntry, or available: false while it is being computed.",
+                    },
                   },
                 },
                 { recent_trades_returned: { type: "integer" }, all_trades: { type: "string" }, markdown: { type: "string" } }
@@ -279,6 +283,43 @@ export function openApiDocument(origin: string): Schema {
               },
             }, { dataset_note: { type: "string" }, recent_trades_returned: { type: "integer" } }),
             "404": NOT_FOUND,
+            ...ERRORS,
+          },
+        },
+      },
+      "/api/v1/track-record": {
+        get: {
+          operationId: "getTrackRecord",
+          tags: ["congress"],
+          summary: "Members ranked by how the stocks they traded moved afterwards against SPY",
+          description:
+            "A stock's move after each disclosed trade minus SPY's over the same trading days, signed by direction, in percentage points " +
+            "— never the member's profit or return, and no dollar amount enters it. Scores are shrunk toward zero for small samples; " +
+            "members below the minimum are listed under `not_enough_matured_decisions`, never ranked. `available` is false while the " +
+            "pipeline has not computed it yet.",
+          parameters: queryParams(PARAMS.track),
+          responses: {
+            "200": okResponse("Track record", {
+              type: "object",
+              properties: {
+                dataset: { type: "string", const: "congress" },
+                available: { type: "boolean" },
+                horizon_trading_days: { type: "integer", enum: [30, 90, 180] },
+                benchmark: { type: "string", const: "SPY" },
+                measure: { type: "string" },
+                ranking: { type: "string" },
+                minimum_decisions_to_rank: nullable("integer"),
+                model: { type: "object", description: "Per clock: shrinkage_k, all_decisions_mean_excess_move_pts, decisions_measured, members_measured, members_ranked." },
+                ranked: { type: "array", items: ref("TrackRecordEntry") },
+                not_enough_matured_decisions: { type: "array", items: { type: "object" } },
+                coverage: {
+                  type: "array",
+                  items: { type: "object", properties: { outcome: { type: "string" }, description: { type: "string" }, rows: { type: "integer" }, decisions: { type: "integer" } } },
+                },
+                computed_at: nullable("string"),
+                status: nullable("string"),
+              },
+            }, { page: { type: "string" } }),
             ...ERRORS,
           },
         },
@@ -517,6 +558,21 @@ export function openApiDocument(origin: string): Schema {
             sells: { type: "integer" },
             bought_priced_usd: { ...nullable("number"), description: "shares × reported price over this insider's priced purchases only." },
             sold_priced_usd: { ...nullable("number"), description: "shares × reported price over this insider's priced sales only." },
+          },
+        },
+        TrackRecordEntry: {
+          type: "object",
+          description: "One member's track record at one horizon. A stock's move against SPY after their trades, never a profit.",
+          properties: {
+            rank: { ...nullable("integer"), description: d("TrackRecordEntry", "rank") },
+            member: { type: "object" },
+            horizon_trading_days: { type: "integer", description: d("TrackRecordEntry", "horizon_trading_days") },
+            decisions_measured: { type: "integer", description: d("TrackRecordEntry", "decisions_measured") },
+            filings: { type: "integer", description: d("TrackRecordEntry", "filings") },
+            ranked: { type: "boolean" },
+            after_trade: { type: "object", description: d("TrackRecordEntry", "after_trade") },
+            after_disclosure: { type: "object", description: d("TrackRecordEntry", "after_disclosure") },
+            timing_lost_to_disclosure_delay_pts: { type: "number", description: d("TrackRecordEntry", "timing_lost_to_disclosure_delay_pts") },
           },
         },
         InsiderTrade: {

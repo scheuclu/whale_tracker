@@ -59,19 +59,31 @@ import {
 } from "../sortable-table";
 import { RowLinkBody, StickyThead } from "../table-client";
 import { ROW_LINK } from "../grouped-list";
+import { TRACK_PATH, TrackView } from "./track-view";
+import { parseTrackHorizon } from "@/lib/track-queries";
 
 export const dynamic = "force-dynamic";
 
-type Params = { action?: string; committee?: string; view?: string; sort?: string; dir?: string };
+type Params = { action?: string; committee?: string; view?: string; sort?: string; dir?: string; h?: string };
 
 /**
- * Three pages share this route: the roster, `?view=late` and
+ * Four pages share this route: the roster, `?view=late`, `?view=track` and
  * `?committee=<id>`. Each canonicalises to itself with only the parameter
  * that defines it; a sorted roster is the roster, so its canonical is the
- * bare path.
+ * bare path, and the track record's 30-day horizon (`&h=30`) is the track
+ * record.
  */
 export async function generateMetadata({ searchParams }: { searchParams: Promise<Params> }): Promise<Metadata> {
   const params = await searchParams;
+  if (params.view === "track") {
+    return pageMetadata({
+      title: "Track record: whose stock trades beat the market",
+      description:
+        "Members of Congress ranked by how the stocks they traded moved afterwards against the S&P 500, from the trade date and from the disclosure, with intervals and a luck check. A stock's move, not anyone's profit; not advice.",
+      path: TRACK_PATH,
+      card: pageCard("/cards/track", "Track record: members of Congress whose trades were followed by the biggest market-beating moves, against the S&P 500"),
+    });
+  }
   if (params.view === "late") {
     return pageMetadata({
       title: "Late STOCK Act disclosures by member of Congress",
@@ -155,6 +167,14 @@ export default async function PoliticiansPage({
         <LateView />
       </Fragment>
     );
+  if (params.view === "track") {
+    const horizon = parseTrackHorizon(params.h);
+    return (
+      <Fragment key={`track:${horizon}`}>
+        <TrackView horizon={horizon} />
+      </Fragment>
+    );
+  }
   if (params.committee)
     return (
       <Fragment key={`c:${params.committee}`}>
@@ -220,6 +240,20 @@ export default async function PoliticiansPage({
           />
         </a>
       </section>
+      <a
+        href={TRACK_PATH}
+        className="flex items-center justify-between gap-4 rounded-tile bg-card px-4 py-3.5 shadow-card transition-shadow duration-(--dur) hover:shadow-[var(--elev-card-hover)] sm:px-5"
+        data-track-link
+      >
+        <span className="min-w-0">
+          <span className="block text-[15px] font-semibold text-foreground">Track record</span>
+          <span className="block text-[13px] leading-snug text-muted-foreground">
+            Whose trades were followed by the biggest market-beating moves: the stock&rsquo;s move against the S&amp;P
+            500, not anyone&rsquo;s profit.
+          </span>
+        </span>
+        <span aria-hidden className="shrink-0 text-[20px] leading-none text-muted-foreground">›</span>
+      </a>
       </PageHeader>
 
       <section className="grid gap-6 lg:grid-cols-2">

@@ -45,6 +45,7 @@ def steps(monkeypatch):
     # write would otherwise reach the real `db.set_state`.
     monkeypatch.setattr(pipeline, "_classify_issuers", step("classify_issuers", None))
     monkeypatch.setattr(pipeline, "_sync_prices", step("sync_prices", None))  # #53, likewise
+    monkeypatch.setattr(pipeline, "_sync_track_record", step("track_record", None))  # likewise
     return calls
 
 

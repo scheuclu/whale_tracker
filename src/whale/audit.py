@@ -847,6 +847,85 @@ def check_price_coverage(conn, today: date | None = None) -> list[Finding]:
     return findings
 
 
+# A decision's 30-session horizon is overdue once this many business days
+# past its trade date (30 sessions, the PRICE_STALE_DAYS grace, and slack for
+# the federal holidays the exchange trades through) and nobody has read its
+# series past the horizon.
+TRACK_OVERDUE_BUSINESS_DAYS = 30 + PRICE_STALE_DAYS + 3
+
+
+def check_track_record(conn, today: date | None = None) -> list[Finding]:
+    """Track-record coverage, and whether the step keeps up.
+
+    INFO: decisions measured at 30 and 90 trading days out of the eligible
+    ones, members ranked, the exclusion counts and the shrinkage fit, with
+    the step's status — what /politicians?view=track stands on. WARN
+    `track_record_stale` only when an eligible decision's 30-day horizon is a
+    week overdue and its series has not been read past it: the step failing
+    (a wall, a throttle, a budget always spent elsewhere, the step not
+    running). A ticker whose series ended is read once past the horizon and
+    then left alone, so a buyout never warns. Silent while there is nothing
+    to measure.
+    """
+    from .db import get_state
+    from .stats import business_days_between
+
+    decisions = _rows(conn, "SELECT exclusion, tx_date, checked_through, signed_trade_30, "
+                            "signed_trade_90 FROM track_decisions")
+    if not decisions:
+        return []
+    today = today or date.today()
+    eligible = [d for d in decisions if d["exclusion"] is None]
+    measured30 = sum(1 for d in eligible if d["signed_trade_30"] is not None)
+    measured90 = sum(1 for d in eligible if d["signed_trade_90"] is not None)
+    coverage = {r["outcome"]: r for r in _rows(conn, "SELECT * FROM track_coverage")}
+    models = _rows(conn, "SELECT * FROM track_model WHERE horizon IN (30, 90) ORDER BY horizon, clock")
+    status = get_state(conn, "track_record_status")
+    evidence = [f"step status: {status or 'never run'}",
+                f"complete through: {get_state(conn, 'track_record_complete_through') or 'never'}"]
+    evidence += [f"{o}: {r['rows']} row(s), {r['decisions']} decision(s)" for o, r in coverage.items()]
+    evidence += [f"{m['clock']} {m['horizon']}d: k {m['k']:.1f}" if m["k"] is not None else
+                 f"{m['clock']} {m['horizon']}d: k none (no spread between members)"
+                 for m in models]
+    ranked = {m["horizon"]: m["ranked"] for m in models}
+    findings = [Finding(
+        INFO, "track_record_coverage",
+        f"{measured90} of {len(eligible)} eligible decision(s) measured at 90 trading days "
+        f"({measured30} at 30); {ranked.get(90, 0)} member(s) ranked at 90, "
+        f"{ranked.get(30, 0)} at 30",
+        "A decision is one member, ticker, direction and filing; it is measured as the "
+        "ticker's move after it against SPY. Excluded decisions (options, non-equity, "
+        "transcribed, dates as filed, no price series) are counted below. Figures on "
+        "/politicians?view=track are a stock's move, never anyone's profit.",
+        evidence,
+    )]
+    stale = []
+    for d in eligible:
+        try:
+            traded = date.fromisoformat(d["tx_date"])
+        except (TypeError, ValueError):
+            continue
+        if business_days_between(traded, today) <= TRACK_OVERDUE_BUSINESS_DAYS:
+            continue
+        if d["signed_trade_30"] is not None:
+            continue
+        checked = d["checked_through"]
+        if checked and business_days_between(traded, date.fromisoformat(checked)) >= 28:
+            continue  # read past the horizon: the series has no close there (ended)
+        stale.append(f"traded {d['tx_date']}  series read through {checked or 'never'}")
+    if stale:
+        findings.append(Finding(
+            WARN, "track_record_stale",
+            f"{len(stale)} decision(s) have a 30-day horizon over a week overdue and unmeasured",
+            "Their series has not been read past the horizon: the price source refusing "
+            "(`sync_state.track_record_status`), a budget spent before reaching them, or the "
+            "track step not running. Scores stop advancing until it recovers; `whale "
+            "track-record` fills them by hand.",
+            sorted(stale)[:50],
+        ))
+    return findings
+
+
 def check_senate(conn, today: date | None = None) -> list[Finding]:
     """The Senate side's last attempt, read from `sync_state.senate_status`.
 
@@ -1365,6 +1444,7 @@ CHECKS = (
     check_alert_health,
     check_alert_recording,
     check_price_coverage,
+    check_track_record,
     check_senate,
     check_senate_parse_coverage,
     check_pipeline_runs,

@@ -50,6 +50,12 @@ is the per-ticker refresh record. `alert_outcomes` is derived from both once
 in Python (`stats.alert_outcomes`) and rebuilt after every price refresh:
 what the alerted ticker did at +5/+20/+60 trading days, minus the benchmark.
 SQL reads those columns and never re-derives them.
+
+The `track_*` tables (schema 16) are the members' track record: one row per
+decision with the stock's move after it against SPY on two clocks, the
+per-member scores, the shrinkage fit, coverage and a per-ticker fetch
+record. Derived once in Python (stats / track.py); the price series behind
+them are fetched transiently and never stored.
 """
 
 from __future__ import annotations
@@ -59,7 +65,7 @@ from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 # The alerts table's columns, shared by the fresh-database DDL and the
 # version-13 rebuild so the two cannot drift.
@@ -428,6 +434,104 @@ CREATE TABLE IF NOT EXISTS alert_outcomes (
 );
 """
 
+# Track record (schema 16): how the stock moved after each member's
+# decisions, against SPY, on the trade clock and the disclosure clock. The
+# price series it needs are fetched transiently by track.py and never stored
+# — ~1,200 tickers of daily closes have no place in a file committed on every
+# run. What is kept is one row per decision and one per member and horizon,
+# all derived once in Python (stats.group_track_decisions / track_scores);
+# SQL reads them and never re-derives a score. Congressional only: corporate
+# insiders get their own `insider_track_*` tables when they are added, never
+# rows in these (CLAUDE.md, "Track record").
+_TRACK_DDL = """
+CREATE TABLE IF NOT EXISTS track_decisions (
+  id INTEGER PRIMARY KEY,
+  filing_id INTEGER NOT NULL REFERENCES filings(id) ON DELETE CASCADE,
+  politician_id INTEGER REFERENCES politicians(id),
+  member_name TEXT NOT NULL,           -- COALESCE(full_name, filer_name): the dashboard's member key
+  ticker TEXT NOT NULL,
+  direction TEXT NOT NULL,             -- 'buy' | 'sell'
+  tx_date TEXT,                        -- earliest trade date in the group, as filed
+  rows INTEGER NOT NULL,               -- transaction rows folded into this decision
+  exclusion TEXT,                      -- NULL = measured; else a stats.TRACK_EXCLUSIONS reason
+  t0_trade TEXT,                       -- first session on/after the trade date
+  t0_disclosure TEXT,                  -- first session strictly after the filing date
+  -- Direction-signed excess move vs SPY (fractions: 0.042 = 4.2 points):
+  -- the ticker's close-to-close move minus SPY's over the same sessions,
+  -- negated for a sale. NULL until the horizon has passed, or when the
+  -- ticker has no close on one of the two sessions.
+  signed_trade_30 REAL, signed_trade_90 REAL, signed_trade_180 REAL,
+  signed_disclosure_30 REAL, signed_disclosure_90 REAL, signed_disclosure_180 REAL,
+  checked_through TEXT,                -- last session the ticker's series was read through
+  UNIQUE (filing_id, ticker, direction)
+);
+-- No index on member_name: ~3,500 rows scan in well under a millisecond, and
+-- an index would add ~115 KB to a file committed on every run.
+
+-- Per member and horizon (trading days), both clocks scored on the same
+-- decisions: those measured on both. `*_score` is the shrunk mean the
+-- ranking orders by; `*_lo`/`*_hi` its 90% bootstrap interval and `*_luck`
+-- the share of same-date random portfolios it beats — both only for
+-- members with at least `min_decisions` over `min_filings` filings
+-- (qualifies = 1, ranked by trade_score at each horizon).
+CREATE TABLE IF NOT EXISTS track_scores (
+  member_name TEXT NOT NULL,
+  politician_id INTEGER REFERENCES politicians(id),
+  horizon INTEGER NOT NULL,
+  n INTEGER NOT NULL,
+  filings INTEGER NOT NULL,
+  min_decisions INTEGER NOT NULL,
+  min_filings INTEGER NOT NULL,
+  qualifies INTEGER NOT NULL,
+  rank INTEGER,
+  trade_mean REAL NOT NULL, trade_score REAL NOT NULL, trade_lo REAL, trade_hi REAL,
+  trade_hit_rate REAL NOT NULL, trade_luck REAL,
+  disclosure_mean REAL NOT NULL, disclosure_score REAL NOT NULL, disclosure_lo REAL,
+  disclosure_hi REAL, disclosure_hit_rate REAL NOT NULL, disclosure_luck REAL,
+  computed_at TEXT NOT NULL,
+  PRIMARY KEY (member_name, horizon)
+);
+
+-- One row per (clock, horizon): the empirical-Bayes shrinkage estimate
+-- (k = sigma2 / tau2; NULL when no spread between members is detectable,
+-- which shrinks every score to zero), the unshrunk mean over every scored
+-- decision (the base rate the members sit around), and how many decisions
+-- and members it was fitted on.
+CREATE TABLE IF NOT EXISTS track_model (
+  clock TEXT NOT NULL,
+  horizon INTEGER NOT NULL,
+  k REAL, sigma2 REAL, tau2 REAL,
+  mean REAL,
+  members_fit INTEGER NOT NULL,
+  decisions INTEGER NOT NULL,
+  members INTEGER NOT NULL,
+  ranked INTEGER NOT NULL,
+  min_decisions INTEGER NOT NULL,
+  min_filings INTEGER NOT NULL,
+  computed_at TEXT NOT NULL,
+  PRIMARY KEY (clock, horizon)
+);
+
+-- Coverage: counted transaction rows and decisions per outcome ('included'
+-- or a TRACK_EXCLUSIONS reason), rebuilt every run.
+CREATE TABLE IF NOT EXISTS track_coverage (
+  outcome TEXT PRIMARY KEY,
+  rows INTEGER NOT NULL,
+  decisions INTEGER NOT NULL,
+  computed_at TEXT NOT NULL
+);
+
+-- One row per ticker the track step has asked the price source for, so a
+-- symbol with no series is not asked again on every run.
+CREATE TABLE IF NOT EXISTS track_price_fetches (
+  ticker TEXT PRIMARY KEY,
+  fetched_at TEXT NOT NULL,
+  status TEXT NOT NULL,                -- 'ok' | 'no_data' | 'error: ...'
+  first_date TEXT,                     -- oldest and newest close the last fetch returned
+  last_date TEXT
+);
+"""
+
 # Statuses whose transactions count toward statistics. A filing that failed to
 # parse contributes nothing, and one that is merely 'new' has no rows yet.
 COUNTED_STATUSES = ("parsed", "notified", "backfilled")
@@ -527,6 +631,11 @@ def _migrate(conn: sqlite3.Connection) -> None:
         # normalize_ticker now unwraps them. Re-derive, as for #21, so the
         # stored row reads as "no ticker" rather than sorting as "[NONE]".
         _rederive_insider_tickers(conn)
+    if version < 16:
+        # Track record tables. Empty until the poll run's track step (or
+        # `whale track-record`) fills them; the fill needs the price source,
+        # so there is nothing to do at migration time.
+        conn.executescript(_TRACK_DDL)
     if version < SCHEMA_VERSION:
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         conn.commit()

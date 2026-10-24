@@ -1,4 +1,5 @@
-"""Pipeline orchestration: sync → parse → notify → cluster → insiders → prices.
+"""Pipeline orchestration: sync → parse → notify → cluster → insiders → prices →
+issuers → track record.
 
 Every step commits DB state before the next runs, so a crash at any point
 resumes cleanly on the next cron tick via the filing status state machine.
@@ -15,7 +16,7 @@ from dataclasses import dataclass, field
 from datetime import date
 
 from . import (db, digest, house, insider_alerts, insiders, issuers, options, prices, roster, senate,
-               senate_ptr, stats, telegram)
+               senate_ptr, stats, telegram, track)
 from .amounts import parse_amount
 from .config import Config
 from .ptr import (PAREN_SYMBOL_RE, SLOT_SYMBOL_RE, ParsedFiling, ScannedFilingError, parse_pdf,
@@ -39,6 +40,8 @@ def run(config: Config, dry_run: bool = False) -> None:
         digest.scheduled(conn, config, dry_run=dry_run)
         _sync_prices(conn, config, dry_run=dry_run)
         _classify_issuers(conn, config)
+        _sync_track_record(conn, config, dry_run=dry_run,
+                           deadline=tally.started_clock + TRACK_RUN_SOFT_LIMIT_S)
         tally.outcome = "ok"
     except Exception as exc:
         tally.outcome = "failed"
@@ -83,6 +86,11 @@ class RunTally:
 
     def __post_init__(self) -> None:
         self._t0 = self.clock()
+
+    @property
+    def started_clock(self) -> float:
+        """The run's start on its own monotonic clock."""
+        return self._t0
 
     def entry(self) -> dict:
         return {
@@ -151,6 +159,38 @@ def _sync_prices(conn: sqlite3.Connection, config: Config, dry_run: bool = False
         conn.commit()
         return
     log.info("prices: %s", result.summary())
+
+
+# The track-record step runs last and fetches the most, so it is also bounded
+# by the run as a whole: it stops by this many seconds after the run began,
+# whatever `track_record.budget_seconds` says. The poll job's timeout is 20
+# minutes and the commit step comes after this one; a run killed by the
+# timeout commits nothing (CLAUDE.md, the vision budget), so five minutes are
+# left for the commit and everything this cap does not see.
+TRACK_RUN_SOFT_LIMIT_S = 900
+
+
+def _sync_track_record(conn: sqlite3.Connection, config: Config, dry_run: bool = False,
+                       deadline: float | None = None) -> None:
+    """Best-effort, last: the members' track record is the least urgent
+    thing a run produces and fetches the most. `track.sync` absorbs the
+    failures it knows about (a throttle, a wall, a ticker that errors) and
+    keeps its own budget; this guard is for everything else. Skipped on a
+    dry run, which writes nothing."""
+    if dry_run:
+        return
+    try:
+        result = track.sync(conn, config, deadline=deadline)
+    except Exception as exc:
+        log.exception("track record failed unexpectedly")
+        try:
+            conn.rollback()
+            db.set_state(conn, track.STATE_STATUS, f"error: {exc}"[:300])
+            conn.commit()
+        except Exception:
+            log.exception("could not record the track-record failure")
+        return
+    log.info("track record: %s", result.summary())
 
 
 # --- sync -------------------------------------------------------------------

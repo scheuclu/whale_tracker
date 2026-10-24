@@ -379,3 +379,27 @@ issuers:
   # after every issuer that has never been fetched. SIC codes almost never
   # change; weekly keeps renamed and newly listed issuers current.
   refresh_days: 7
+
+track_record:
+  # The members' track record (/politicians?view=track): how each stock a
+  # member traded moved afterwards against SPY, from the trade date and from
+  # the disclosure, at 30/90/180 trading days. A stock's move, never anyone's
+  # profit; no bracket enters it. See CLAUDE.md, "Track record".
+  #
+  # The price series for ~1,200 tickers are fetched in the poll run and never
+  # stored (the database is committed on every run); only per-decision results
+  # are. A ticker is fetched only when one of its decisions has a horizon that
+  # matured since it was last read, so after the first fill a run asks for a
+  # handful of tickers once a day. The first fill is ~1,050 requests at two a
+  # second, about nine minutes: it spreads over two or three poll runs, or one
+  # `python -m whale track-record` by hand.
+  enabled: true
+  # Seconds one poll run may spend fetching; 0 = no limit. The step runs last
+  # and is also stopped 15 minutes into the run whatever this says, so the
+  # 20-minute job always reaches its commit step.
+  budget_seconds: 240
+  # Members are ranked only with at least this many measured decisions spread
+  # over at least this many filings. On the 2026-10-24 data this ranks 16
+  # members at 90 trading days and 24 at 30.
+  min_decisions: 8
+  min_filings: 3

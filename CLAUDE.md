@@ -266,8 +266,9 @@ parser stays faithful to the PDF and the UI flags the row rather than
 - `4/A`, Forms 3/5 and the derivative table are not ingested yet (counted in
   `sync_state.edgar_skipped`).
 - `insiders.sync` runs after every congressional step in `pipeline.run` and
-  must never raise into it; only the price step (`prices.sync`, #53) and the
-  issuer classification (#55) run after it, under the same rule.
+  must never raise into it; only the price step (`prices.sync`, #53), the
+  issuer classification (#55) and the track record run after it, under the
+  same rule.
 
 ## Issuer classification (SIC sectors)
 
@@ -286,7 +287,8 @@ parser stays faithful to the PDF and the UI flags the row rather than
   show the unclassified remainder as a row of its own so groups never sum
   to more than they describe. A sector is a label on a row, never a figure:
   it must not enter any volume arithmetic.
-- The fill runs **last** in `pipeline.run`, after the insider alerts, under
+- The fill runs after the insider alerts and the price step in `pipeline.run`
+  (only the track record comes later), under
   `issuers.budget_seconds`, never-fetched issuers first, committed per
   issuer, and never raises; `whale classify-issuers --budget-seconds N` is
   the manual form. A failed refresh keeps the earlier classification.
@@ -332,6 +334,70 @@ parser stays faithful to the PDF and the UI flags the row rather than
   than 5 trading days **and** the step has not successfully asked for it
   since — a series the source answered for with nothing newer (a buyout)
   is evidence, not a weekly warning.
+
+## Track record (`/politicians?view=track`, `track_*` tables)
+
+- The user's brief: "estimate how well each member is actually doing with
+  their trades, so we can rank who's the best". Decided: **members of
+  Congress only** for now; rank by **timing** (the stock's move after the
+  trade date vs SPY) and **show both clocks** (the same from the disclosure);
+  framing **"Track record" — whose trades were followed by the biggest
+  market-beating moves**. Never "best trader", "profit", "returns" or
+  "alpha"; always the stock's move, with uncertainty, not advice and not
+  evidence of wrongdoing. The quoting rule is `track-record` in
+  `web/lib/methodology.ts`.
+- **Unit = decision**: (member, ticker, direction, filing). Repeated rows for
+  one ticker in one filing are one decision dated by its earliest trade.
+  Included: `purchase` / `sale` / `sale_partial` of `ST`/`EF`/`ET` rows with a
+  ticker. Excluded and counted (`stats.TRACK_EXCLUSIONS`, first match wins):
+  transcribed (quarantine), exchange, no ticker, option (`option_kind` or
+  `OP`), non-equity (incl. NULL asset type), date as filed (missing, future,
+  after its filing or notification date — never corrected), no price series.
+- **Measure**: close(t0+h)/close(t0) − 1 minus SPY's over the same sessions,
+  h = 30/90/180 trading days, negated for a sale. Trade clock t0 = first
+  session on or after the trade date; disclosure clock t0 = first session
+  **strictly after** the filing date. SPY's own series is the calendar. Closes
+  are split-adjusted as Yahoo serves them; dividends ignored on both sides.
+  **No dollar amount enters it**: brackets are not amounts, so every decision
+  weighs one — do not "improve" it with bracket weights.
+- **Scores** (`stats.track_scores`): both clocks on the *same* decisions
+  (those matured on both), so their gap is timing lost to the delay. Mean
+  signed excess, shrunk by n/(n+k); k = σ²/τ² by method of moments with each
+  member's own variance (DerSimonian–Laird style), fitted on members with ≥5
+  decisions. A pooled, decision-weighted σ² was rejected: one 584-decision
+  portfolio set everyone's noise level and τ² went negative at 90 days. k NULL
+  (no spread detected; 180 days on 2026-10-24) shrinks everything to zero. A
+  member is ranked only with ≥ `min_decisions` (8) over ≥ `min_filings` (3)
+  filings — a one-filing member's bootstrap interval was narrow and away from
+  zero on nine tickers bought one day. Ranked members get a 90% two-stage
+  bootstrap interval (filings, then decisions within them) and a luck
+  percentile (same dates and directions, tickers swapped for other members'
+  within ±7 days, never past ±30, ≥3 other members, else that decision sits
+  out; < 80% left → NULL — a 2024 catch-up filing has no comparable universe).
+  Fixed seed per (member, clock, horizon): deterministic.
+- **Derived once in Python, read by SQL**: `track_decisions` (one row per
+  decision incl. excluded ones, signed excess per clock × horizon),
+  `track_scores` (member × horizon, both clocks, rank, qualifies),
+  `track_model` (k, base-rate mean), `track_coverage`, `track_price_fetches`.
+  `web/lib/track-queries.ts` only reads them and never computes a score; the
+  web guards on the tables existing ("being computed").
+- **Series are never stored**: `track.sync` fetches through
+  `prices.PriceClient` (same source, User-Agent, pacing, `blocked`/`throttled`
+  handling) only for tickers with a horizon that matured since the series was
+  last read (`checked_through`) or a new decision; a ticker with no series is
+  re-asked after 30 days. It runs **last** in `pipeline.run`, never raises
+  (`pipeline._sync_track_record`), under `track_record.budget_seconds` (240)
+  and a run-level cap (`TRACK_RUN_SOFT_LIMIT_S`, 900 s into the run) so the
+  20-minute job reaches its commit. A run with nothing matured makes no
+  request (`track_record_complete_through`). `whale track-record` is the
+  manual fill (first fill ≈ 1,050 requests, ~9 minutes).
+- Audit `check_track_record`: INFO coverage; WARN `track_record_stale` only
+  when an eligible decision's 30-day horizon is a week overdue and its series
+  was never read past it (an ended series is read once and left alone).
+- **Insiders later**: same pure functions, own tables (`insider_track_*`,
+  keyed on primary owner CIK, issuer, direction, accession), own ranking
+  page; `track_price_fetches` can be shared (a symbol's series is
+  population-free). Never rows in the congressional tables, never one ranking.
 
 ## Insider alerts
 
