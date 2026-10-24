@@ -11,8 +11,8 @@ import { cn } from "@/lib/utils";
  */
 
 /**
- * An estimate with its 90% interval on a symmetric axis around zero: a
- * forest-plot row. `scale` is the largest |value| the column shows, so
+ * An estimate with its 90% interval on a symmetric axis around zero: an
+ * Apple Health / Stocks style range row. `scale` is the largest |value| the column shows, so
  * every row of a table shares one axis.
  */
 export function IntervalBar({
@@ -36,23 +36,38 @@ export function IntervalBar({
   const left = lo == null ? null : at(lo);
   const right = hi == null ? null : at(hi);
   return (
-    <div role="img" aria-label={label} title={label} className={cn("relative h-4 w-full min-w-24", className)}>
-      {/* Track and zero axis. */}
-      <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2" style={{ background: "var(--viz-grid)" }} />
-      <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2" style={{ background: "var(--viz-axis)", opacity: 0.6 }} />
+    <div
+      role="img"
+      aria-label={label}
+      title={label}
+      className={cn("group/interval relative flex h-4 w-full min-w-28 items-center", className)}
+    >
+      {/* Recessed track. */}
+      <div className="absolute inset-x-0 h-1.5 rounded-full bg-fill/70 dark:bg-fill" />
+      {/* Zero anchor axis. */}
+      <div
+        className="absolute left-1/2 top-1/2 h-2.5 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--viz-axis)] opacity-60 z-10"
+        title="Zero: matching the S&P 500"
+      />
+      {/* 90% confidence interval band. */}
       {left != null && right != null ? (
         <div
-          className="viz-grow-x absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full"
+          className="viz-grow-x absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full transition-all duration-(--dur-fast)"
           style={{
             left: `${left}%`,
-            width: `${Math.max(right - left, 1)}%`,
-            background: "color-mix(in oklab, var(--viz-seq) 45%, transparent)",
+            width: `${Math.max(right - left, 1.5)}%`,
+            background: "color-mix(in oklab, var(--viz-seq) 42%, transparent)",
           }}
         />
       ) : null}
+      {/* Shrunk score knob. */}
       <div
-        className="viz-fade absolute top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full"
-        style={{ left: `${at(score)}%`, background: "var(--viz-price)", boxShadow: "0 0 0 2px var(--card-solid)" }}
+        className="viz-fade absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full z-20 shadow-xs transition-transform duration-(--dur-fast) group-hover/interval:scale-110"
+        style={{
+          left: `${at(score)}%`,
+          background: "var(--viz-price)",
+          boxShadow: "0 0 0 2px var(--card-solid)",
+        }}
       />
     </div>
   );

@@ -19,6 +19,8 @@ import { DataError, PAGE_STACK, PageHeader, Quiet } from "../page-header";
 import { ShareControl } from "../share-control";
 import { PartyBadge, ResponsiveTable, Segmented } from "../ui";
 import { IntervalBar, Points, intervalText } from "../track-ui";
+import { DATA_TABLE, HEAD_ROW, BODY_ROW, PLAIN_HEAD_ROW, PLAIN_BODY_ROW } from "../sortable-table";
+import { RowLinkBody, StickyThead } from "../table-client";
 
 /*
  * `/politicians?view=track` — the members' track record (CLAUDE.md, "Track
@@ -38,6 +40,7 @@ export function trackHref(horizon: TrackHorizon): string {
 export function TrackCaveats({ minimum, minFilings, k }: { minimum: number | null; minFilings: number | null; k: number | null }) {
   return (
     <Disclosure
+      className="mt-3 sm:mt-4"
       lead={
         <>
           Each figure is how a stock moved after a member traded it, against the S&amp;P 500 ({TRACK_BENCHMARK}) over
@@ -121,8 +124,8 @@ export async function TrackView({ horizon }: { horizon: TrackHorizon }) {
         />
       }
     >
-      <TrackCaveats minimum={board.min_decisions} minFilings={board.min_filings} k={model?.k ?? null} />
       {board.available && model ? <TrackTiles board={board} /> : null}
+      <TrackCaveats minimum={board.min_decisions} minFilings={board.min_filings} k={model?.k ?? null} />
     </PageHeader>
   );
 
@@ -153,7 +156,7 @@ export async function TrackView({ horizon }: { horizon: TrackHorizon }) {
       <section aria-labelledby="ranked-title">
         <SectionTitle
           right={
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-[12px] font-medium text-muted-foreground">
               {plural(board.ranked.length, "member")} · {board.min_decisions}+ decisions over {board.min_filings}+ filings
             </span>
           }
@@ -206,79 +209,90 @@ function TrackTiles({ board }: { board: TrackLeaderboard }) {
 function RankedTable({ rows, horizon, scale }: { rows: TrackScoreRow[]; horizon: TrackHorizon; scale: number }) {
   return (
     <ResponsiveTable>
-      <table className="w-full text-[13px]" data-track-ranked>
-        <thead>
-          <tr className="text-left text-[12px] font-medium text-muted-foreground">
-            <th scope="col" className="px-4 py-2.5 font-medium">
+      <table className={DATA_TABLE} data-track-ranked>
+        <StickyThead>
+          <tr className={HEAD_ROW}>
+            <th scope="col" className="px-4 py-3 font-medium">
               Member
             </th>
-            <th scope="col" className="px-4 py-2.5 text-right font-medium" title="Shrunk average move vs the S&P 500 after the trade date">
+            <th scope="col" className="px-4 py-3 text-right font-medium" title="Shrunk average move vs the S&P 500 after the trade date">
               After the trade
             </th>
-            <th scope="col" className="w-48 px-4 py-2.5 font-medium" title="90% bootstrap interval of the score; the hairline is zero">
+            <th scope="col" className="w-44 px-4 py-3 font-medium text-center" title="90% bootstrap interval of the score; the hairline is zero">
               90% interval
             </th>
-            <th scope="col" className="px-4 py-2.5 text-right font-medium" title="Share of decisions followed by a market-beating move in the trade's direction">
+            <th scope="col" className="px-4 py-3 text-right font-medium" title="Share of decisions followed by a market-beating move in the trade's direction">
               Hit rate
             </th>
-            <th scope="col" className="px-4 py-2.5 text-right font-medium" title="Decisions measured (filings)">
+            <th scope="col" className="px-4 py-3 text-right font-medium" title="Decisions measured (filings)">
               Decisions
             </th>
-            <th scope="col" className="px-4 py-2.5 text-right font-medium" title="The same score from the first close after the filing date">
+            <th scope="col" className="px-4 py-3 text-right font-medium" title="The same score from the first close after the filing date">
               After disclosure
             </th>
-            <th scope="col" className="px-4 py-2.5 text-right font-medium" title="Share of same-date random portfolios this member's average beats">
+            <th scope="col" className="px-4 py-3 text-right font-medium" title="Share of same-date random portfolios this member's average beats">
               Luck check
             </th>
           </tr>
-        </thead>
-        <tbody>
+        </StickyThead>
+        <RowLinkBody>
           {rows.map((r) => {
             const href = memberHref(r.member_name, r.bioguide_id);
             const label = `${r.member_name}: ${points(r.trade.score)} points vs ${TRACK_BENCHMARK} over ${horizon} trading days after the trade (shrunk; unshrunk average ${points(r.trade.mean)}), 90% interval ${intervalText(r.trade.lo, r.trade.hi)}`;
+            const delayDiff = r.trade.score - r.disclosure.score;
             return (
-              <tr key={r.member_name} className="border-t border-border" data-track-row={r.rank ?? undefined}>
-                <th scope="row" className="px-4 py-2 text-left font-normal">
+              <tr key={r.member_name} className={BODY_ROW} data-href={href} data-track-row={r.rank ?? undefined}>
+                <td className="px-4 py-2.5 text-left font-normal">
                   <div className="flex items-center gap-2.5">
-                    <span className="tabular w-5 shrink-0 text-right text-[12px] text-muted-foreground">{r.rank}</span>
+                    <span className="tabular w-5 shrink-0 text-right text-[12px] font-semibold text-muted-foreground">{r.rank}</span>
                     <MemberAvatar name={r.member_name} bioguideId={r.bioguide_id} size="sm" />
-                    <a href={href} className="row-name max-w-[7.5rem] truncate font-medium sm:max-w-none" title={r.member_name}>
+                    <a href={href} className="row-name max-w-[8.5rem] truncate font-semibold text-foreground sm:max-w-none" title={r.member_name}>
                       {r.member_name}
                     </a>
-                    <span className="hidden sm:inline-flex">
-                      <PartyBadge party={r.party} />
+                    <PartyBadge party={r.party} />
+                    <span className="hidden text-[12px] text-muted-foreground sm:inline">
+                      {r.state}{r.district && r.district !== "0" ? `-${r.district}` : ""}
                     </span>
                   </div>
-                </th>
-                <td className="px-4 py-2 text-right font-semibold text-foreground">
+                </td>
+                <td className="px-4 py-2.5 text-right font-semibold text-foreground">
                   <Points value={r.trade.score} />
                 </td>
-                <td className="px-4 py-2">
-                  <IntervalBar score={r.trade.score} lo={r.trade.lo} hi={r.trade.hi} scale={scale} label={label} />
-                  <div className="tabular mt-0.5 text-[11px] text-muted-foreground">{intervalText(r.trade.lo, r.trade.hi)}</div>
+                <td className="px-4 py-2.5">
+                  <div className="flex flex-col items-center">
+                    <IntervalBar score={r.trade.score} lo={r.trade.lo} hi={r.trade.hi} scale={scale} label={label} />
+                    <div className="tabular mt-1 text-[11px] text-muted-foreground">{intervalText(r.trade.lo, r.trade.hi)}</div>
+                  </div>
                 </td>
-                <td className="tabular px-4 py-2 text-right text-ink-2">{percent(r.trade.hit_rate)}</td>
-                <td className="tabular px-4 py-2 text-right text-ink-2">
-                  {r.n}
-                  <span className="text-muted-foreground"> · {plural(r.filings, "filing")}</span>
+                <td className="tabular px-4 py-2.5 text-right font-medium text-foreground/90">{percent(r.trade.hit_rate)}</td>
+                <td className="tabular px-4 py-2.5 text-right text-ink-2">
+                  <span className="font-medium text-foreground">{r.n}</span>
+                  <span className="text-muted-foreground text-[12px]"> · {plural(r.filings, "filing")}</span>
                 </td>
-                <td className="px-4 py-2 text-right text-ink-2" title={`Timing lost to the disclosure delay: ${points(r.trade.score - r.disclosure.score)} points`}>
+                <td className="px-4 py-2.5 text-right text-ink-2" title={`Timing lost to disclosure delay: ${points(delayDiff)} points`}>
                   <Points value={r.disclosure.score} />
                 </td>
                 <td
-                  className="tabular px-4 py-2 text-right text-ink-2"
+                  className="tabular px-4 py-2.5 text-right text-ink-2"
                   title={
                     r.trade.luck == null
                       ? "No luck check: too few other members traded on this member's dates to compare with (old catch-up filings)"
                       : "Share of random portfolios on the same dates, with the same buy/sell mix, that this member's average beats"
                   }
                 >
-                  {r.trade.luck == null ? "n/a" : `beats ${percent(r.trade.luck)}`}
+                  {r.trade.luck == null ? (
+                    <span className="text-muted-foreground">n/a</span>
+                  ) : (
+                    <>
+                      <span className="mr-1 text-[11px] text-muted-foreground">beats</span>
+                      <span className="font-medium text-foreground">{percent(r.trade.luck)}</span>
+                    </>
+                  )}
                 </td>
               </tr>
             );
           })}
-        </tbody>
+        </RowLinkBody>
       </table>
     </ResponsiveTable>
   );
@@ -299,25 +313,25 @@ function UnrankedList({
   return (
     <section aria-labelledby="unranked-title">
       <SectionTitle
-        right={<span className="text-[11px] text-muted-foreground">what each still needs</span>}
+        right={<span className="text-[12px] font-medium text-muted-foreground">what each still needs</span>}
       >
         <span id="unranked-title">Not enough matured trades yet</span>
       </SectionTitle>
       <Card>
-        <p className="mb-3 text-[13px] text-muted-foreground">
+        <p className="mb-3.5 text-[13px] text-muted-foreground">
           {plural(rows.length, "member")} with fewer than {minimum} decisions measured over {horizon} trading days, or
           fewer than {minFilings} filings behind them. Listed, never ranked.
         </p>
-        <ul className="flex flex-wrap gap-x-2 gap-y-2" data-track-unranked>
+        <ul className="flex flex-wrap gap-2" data-track-unranked>
           {rows.map((r) => (
             <li key={r.member_name}>
               <a
                 href={memberHref(r.member_name, r.bioguide_id)}
-                className="inline-flex h-7 items-center gap-1.5 rounded-full bg-fill pl-1 pr-2.5 text-[12px] font-medium text-ink-2 transition-colors duration-(--dur) hover:text-foreground"
+                className="inline-flex h-8 items-center gap-1.5 rounded-full bg-fill/70 pl-1 pr-3 text-[12px] font-medium text-foreground transition-all duration-(--dur-fast) hover:bg-fill active:scale-[0.98]"
               >
                 <MemberAvatar name={r.member_name} bioguideId={r.bioguide_id} size="xs" />
-                {r.member_name}
-                <span className="tabular font-normal text-muted-foreground">{shortfall(r)}</span>
+                <span>{r.member_name}</span>
+                <span className="tabular text-[11px] font-normal text-muted-foreground">{shortfall(r)}</span>
               </a>
             </li>
           ))}
@@ -335,7 +349,7 @@ function CoverageSection({ board }: { board: TrackLeaderboard }) {
     <section aria-labelledby="coverage-title">
       <SectionTitle
         right={
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-[12px] font-medium text-muted-foreground">
             {included ? `${percent(included.rows / (totalRows || 1))} of counted trades eligible` : null}
           </span>
         }
@@ -343,30 +357,39 @@ function CoverageSection({ board }: { board: TrackLeaderboard }) {
         <span id="coverage-title">Coverage</span>
       </SectionTitle>
       <ResponsiveTable stickyFirstColumn={false} wrap>
-        <table className="w-full text-[13px]" data-track-coverage>
+        <table className={DATA_TABLE} data-track-coverage>
           <thead>
-            <tr className="text-left text-[12px] font-medium text-muted-foreground">
-              <th scope="col" className="px-4 py-2.5 font-medium">
+            <tr className={PLAIN_HEAD_ROW}>
+              <th scope="col" className="px-4 py-3 font-medium">
                 Counted trades
               </th>
-              <th scope="col" className="px-4 py-2.5 text-right font-medium">
+              <th scope="col" className="px-4 py-3 text-right font-medium">
+                Share
+              </th>
+              <th scope="col" className="px-4 py-3 text-right font-medium">
                 Rows
               </th>
-              <th scope="col" className="px-4 py-2.5 text-right font-medium" title="Member, ticker, direction and filing">
+              <th scope="col" className="px-4 py-3 text-right font-medium" title="Member, ticker, direction and filing">
                 Decisions
               </th>
             </tr>
           </thead>
           <tbody>
-            {board.coverage.map((c) => (
-              <tr key={c.outcome} className="border-t border-border">
-                <th scope="row" className="px-4 py-2 text-left font-normal text-ink-2">
-                  {OUTCOME_LABEL[c.outcome] ?? c.outcome}
-                </th>
-                <td className="tabular px-4 py-2 text-right">{c.rows.toLocaleString()}</td>
-                <td className="tabular px-4 py-2 text-right">{c.decisions ? c.decisions.toLocaleString() : "—"}</td>
-              </tr>
-            ))}
+            {board.coverage.map((c) => {
+              const share = totalRows > 0 ? (c.rows / totalRows) * 100 : 0;
+              return (
+                <tr key={c.outcome} className={PLAIN_BODY_ROW}>
+                  <td className="px-4 py-2.5 text-left font-normal text-foreground">
+                    <span className="font-medium">{OUTCOME_LABEL[c.outcome] ?? c.outcome}</span>
+                  </td>
+                  <td className="tabular px-4 py-2.5 text-right text-muted-foreground text-[12px]">
+                    {share >= 0.1 ? `${share.toFixed(1)}%` : "<0.1%"}
+                  </td>
+                  <td className="tabular px-4 py-2.5 text-right font-medium text-foreground">{c.rows.toLocaleString()}</td>
+                  <td className="tabular px-4 py-2.5 text-right text-ink-2">{c.decisions ? c.decisions.toLocaleString() : "—"}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </ResponsiveTable>

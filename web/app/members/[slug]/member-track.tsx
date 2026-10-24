@@ -18,6 +18,7 @@ import { DataError, Quiet } from "../../page-header";
 import { TRACK_PATH } from "../../politicians/track-view";
 import { ActionBadge, ResponsiveTable, TickerChip } from "../../ui";
 import { IntervalBar, Points, intervalText } from "../../track-ui";
+import { DATA_TABLE, PLAIN_HEAD_ROW, PLAIN_BODY_ROW } from "../../sortable-table";
 
 /*
  * A member's track record (CLAUDE.md, "Track record"): read from the tables
@@ -46,7 +47,7 @@ export async function MemberTrack({ member }: { member: string }) {
       <span id="track-title">Track record</span>
     </SectionTitle>
   );
-  if (!data.available) {
+  if (!data.available || data.min_decisions == null) {
     return (
       <section aria-labelledby="track-title" data-track-member="computing">
         {title}
@@ -65,7 +66,7 @@ export async function MemberTrack({ member }: { member: string }) {
   const lead = (
     <Disclosure
       size="sm"
-      className="mt-3"
+      className="mt-3 sm:mt-4"
       lead={
         <>
           How each stock moved after this member traded it, against the S&amp;P 500 ({TRACK_BENCHMARK}) over the same
@@ -102,7 +103,8 @@ export async function MemberTrack({ member }: { member: string }) {
   }
 
   const best = data.decisions.slice(0, LIST);
-  const worst = data.decisions.length > LIST ? data.decisions.slice(-LIST).reverse() : [];
+  const remaining = data.decisions.slice(LIST);
+  const worst = remaining.length ? remaining.slice(-LIST).reverse() : [];
   const ranked = data.ranked_count[DEFAULT_TRACK_HORIZON];
 
   return (
@@ -154,75 +156,82 @@ function ScoreTable({ scores }: { scores: TrackScoreRow[] }) {
   return (
     <div>
       <ResponsiveTable>
-      <table className="w-full text-[13px]" data-track-scores>
-        <thead>
-          <tr className="text-left text-[12px] font-medium text-muted-foreground">
-            <th scope="col" className="px-4 py-2.5 font-medium">
-              Horizon
-            </th>
-            <th scope="col" className="px-4 py-2.5 font-medium">
-              Clock
-            </th>
-            <th scope="col" className="px-4 py-2.5 text-right font-medium">
-              Score
-            </th>
-            <th scope="col" className="w-40 px-4 py-2.5 font-medium">
-              90% interval
-            </th>
-            <th scope="col" className="px-4 py-2.5 text-right font-medium">
-              Hit rate
-            </th>
-            <th scope="col" className="px-4 py-2.5 text-right font-medium">
-              Luck check
-            </th>
-            <th scope="col" className="px-4 py-2.5 text-right font-medium">
-              Decisions
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {shown.flatMap((s) =>
-            (["trade", "disclosure"] as const).map((clock) => {
-              const c = s[clock];
-              return (
-                <tr key={`${s.horizon}-${clock}`} className="border-t border-border">
-                  <td className="tabular px-4 py-2 text-ink-2">{clock === "trade" ? `${s.horizon} days` : ""}</td>
-                  <td className="px-4 py-2 text-ink-2">{clock === "trade" ? "After the trade" : "After disclosure"}</td>
-                  <td className="px-4 py-2 text-right font-semibold">
-                    {s.qualifies ? <Points value={c.score} /> : <span className="font-normal text-muted-foreground">not enough yet</span>}
-                  </td>
-                  <td className="px-4 py-2">
-                    {s.qualifies ? (
-                      <>
-                        <IntervalBar
-                          score={c.score}
-                          lo={c.lo}
-                          hi={c.hi}
-                          scale={scale}
-                          label={`${points(c.score)} points, 90% interval ${intervalText(c.lo, c.hi)}`}
-                        />
-                        <div className="tabular mt-0.5 text-[11px] text-muted-foreground">{intervalText(c.lo, c.hi)}</div>
-                      </>
-                    ) : null}
-                  </td>
-                  <td className="tabular px-4 py-2 text-right text-ink-2">{s.qualifies ? percent(c.hit_rate) : "—"}</td>
-                  <td
-                    className="tabular px-4 py-2 text-right text-ink-2"
-                    title={c.luck == null && s.qualifies ? "Too few other members traded on these dates to compare with" : undefined}
-                  >
-                    {c.luck == null ? (s.qualifies ? "n/a" : "—") : `beats ${percent(c.luck)}`}
-                  </td>
-                  <td className="tabular px-4 py-2 text-right text-ink-2">
-                    {clock === "trade" ? `${s.n} of ${s.min_decisions}+` : ""}
-                  </td>
-                </tr>
-              );
-            })
-          )}
-        </tbody>
-      </table>
+        <table className={DATA_TABLE} data-track-scores>
+          <thead>
+            <tr className={PLAIN_HEAD_ROW}>
+              <th scope="col" className="px-4 py-3 font-medium">
+                Horizon
+              </th>
+              <th scope="col" className="px-4 py-3 font-medium">
+                Clock
+              </th>
+              <th scope="col" className="px-4 py-3 text-right font-medium">
+                Score
+              </th>
+              <th scope="col" className="w-44 px-4 py-3 font-medium text-center">
+                90% interval
+              </th>
+              <th scope="col" className="px-4 py-3 text-right font-medium">
+                Hit rate
+              </th>
+              <th scope="col" className="px-4 py-3 text-right font-medium">
+                Luck check
+              </th>
+              <th scope="col" className="px-4 py-3 text-right font-medium">
+                Decisions
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.flatMap((s) =>
+              (["trade", "disclosure"] as const).map((clock) => {
+                const c = s[clock];
+                return (
+                  <tr key={`${s.horizon}-${clock}`} className={PLAIN_BODY_ROW}>
+                    <td className="tabular px-4 py-2.5 font-medium text-foreground">{clock === "trade" ? `${s.horizon} days` : ""}</td>
+                    <td className="px-4 py-2.5 text-ink-2">{clock === "trade" ? "After the trade" : "After disclosure"}</td>
+                    <td className="px-4 py-2.5 text-right font-semibold text-foreground">
+                      {s.qualifies ? <Points value={c.score} /> : <span className="font-normal text-muted-foreground text-[12px]">not enough yet</span>}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      {s.qualifies ? (
+                        <div className="flex flex-col items-center">
+                          <IntervalBar
+                            score={c.score}
+                            lo={c.lo}
+                            hi={c.hi}
+                            scale={scale}
+                            label={`${points(c.score)} points, 90% interval ${intervalText(c.lo, c.hi)}`}
+                          />
+                          <div className="tabular mt-1 text-center text-[11px] text-muted-foreground">{intervalText(c.lo, c.hi)}</div>
+                        </div>
+                      ) : null}
+                    </td>
+                    <td className="tabular px-4 py-2.5 text-right font-medium text-foreground/90">{s.qualifies ? percent(c.hit_rate) : "—"}</td>
+                    <td
+                      className="tabular px-4 py-2.5 text-right text-ink-2"
+                      title={c.luck == null && s.qualifies ? "Too few other members traded on these dates to compare with" : undefined}
+                    >
+                      {c.luck == null ? (
+                        s.qualifies ? <span className="text-muted-foreground">n/a</span> : "—"
+                      ) : (
+                        <>
+                          <span className="mr-1 text-[11px] text-muted-foreground">beats</span>
+                          <span className="font-medium text-foreground">{percent(c.luck)}</span>
+                        </>
+                      )}
+                    </td>
+                    <td className="tabular px-4 py-2.5 text-right text-muted-foreground">
+                      {clock === "trade" ? `${s.n} of ${s.min_decisions}+` : ""}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
       </ResponsiveTable>
-      <p className="mt-2 pl-1 text-[12px] text-muted-foreground">
+      <p className="mt-2.5 pl-1 text-[12px] text-muted-foreground">
         Score: average move vs the S&amp;P 500 in points, shrunk toward zero for small samples. Both clocks use the same
         decisions.
       </p>
@@ -238,8 +247,11 @@ function DecisionList({ title, rows }: { title: string; rows: TrackDecisionRow[]
         <span className="text-[12px] font-normal text-muted-foreground">over {DEFAULT_TRACK_HORIZON} trading days</span>
       </h3>
       <ul className="inset-rows text-[13px]" data-track-decisions={title}>
-        {rows.map((r) => (
-          <li key={`${r.ticker}-${r.direction}-${r.tx_date}`} className="flex min-h-10 items-center justify-between gap-3 py-1.5">
+        {rows.map((r, index) => (
+          <li
+            key={`${r.ticker}-${r.direction}-${r.tx_date}-${r.filing_date ?? index}`}
+            className="flex min-h-11 items-center justify-between gap-3 py-2 px-1 rounded-control transition-colors duration-(--dur-fast) hover:bg-fill/40"
+          >
             <span className="flex min-w-0 items-center gap-2">
               <TickerChip ticker={r.ticker} href={tickerHref(r.ticker)} />
               <ActionBadge action={r.direction === "buy" ? "purchase" : "sale"} />
@@ -251,8 +263,8 @@ function DecisionList({ title, rows }: { title: string; rows: TrackDecisionRow[]
               className="flex shrink-0 flex-col items-end text-right sm:flex-row sm:items-baseline"
               title={`${r.ticker} vs ${TRACK_BENCHMARK} from the ${r.t0_trade} close: ${points(r.trade)} points after the trade, ${points(r.disclosure)} after disclosure (from ${r.t0_disclosure})`}
             >
-              <Points value={r.trade} className="font-semibold" />
-              <span className="text-[12px] text-muted-foreground sm:ml-2">
+              <Points value={r.trade} className="font-semibold text-foreground" />
+              <span className="text-[12px] text-muted-foreground sm:ml-2.5">
                 {points(r.disclosure)} after disclosure
               </span>
             </span>
