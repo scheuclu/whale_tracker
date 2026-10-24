@@ -28,7 +28,7 @@ import { ActionBadge, ResponsiveTable } from "./ui";
 import { Disclosure } from "./disclosure";
 import { DataError, PAGE_STACK, PageHeader } from "./page-header";
 import { AgentAlternates } from "./agent-alternates";
-import { AppleScrollObserver, type NavSection } from "./apple-scroll";
+import { AppleScrollObserver } from "./apple-scroll";
 
 export const dynamic = "force-dynamic";
 
@@ -137,15 +137,8 @@ export default async function FeedPage({
 
   const weekLabels = rollingWeekLabels(WEEKS);
 
-  const navSections: NavSection[] = [
-    { id: "overview", label: "Overview" },
-    ...(consensus.length > 0 ? [{ id: "consensus", label: "Consensus", badge: consensus.length }] : []),
-    { id: "trades", label: "Recent Trades", badge: totals.trades > 0 ? totals.trades.toLocaleString() : undefined },
-    { id: "both-sides", label: "Both Sides" },
-  ];
-
   return (
-    <AppleScrollObserver sections={navSections}>
+    <AppleScrollObserver>
       <div className={PAGE_STACK}>
         <SiteStructuredData />
         <AgentAlternates markdown="/api/v1/feed.md" json="/api/v1/trades" />
