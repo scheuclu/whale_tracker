@@ -179,9 +179,9 @@ main[tabindex="-1"]:focus {
    prefers-contrast: more.
 
    Hairlines become lines, muted ink moves toward the foreground, and the
-   focus ring darkens and thickens. Buy/sell keep their values: blue and
-   orange are ΔE 40 apart (33 under CVD), and every orange mark already has
-   its value and direction printed beside it in (now darker) text.
+   focus ring darkens and thickens. Buy/sell keep their values: ink and
+   silver are ΔE 52 apart, and every silver mark already has its value and
+   direction printed beside it in (now darker) text.
    ------------------------------------------------------------------ */
 @media (prefers-contrast: more) {
   :root {
@@ -219,7 +219,7 @@ main[tabindex="-1"]:focus {
 
    The system palette replaces every authored colour, which would paint
    each bar the page colour and erase it. Data marks opt out and keep the
-   blue/orange pair; the words "Bought" / "Sold" / "Purchase" / "Sale" beside
+   ink/silver pair; the words "Bought" / "Sold" / "Purchase" / "Sale" beside
    them carry the meaning either way. Skeleton bones become GrayText so a
    loading page still shows its shape.
    ------------------------------------------------------------------ */

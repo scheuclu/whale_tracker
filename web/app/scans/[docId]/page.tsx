@@ -67,9 +67,8 @@ function statusLabel(status: string): string {
  * One scanned filing, one page at a time: the captured image with the grid
  * reader's decisions drawn over it, and the rows it read beside it. The
  * overlay is drawn from `scan_rows` in the image's own pixels. A ticked
- * type cell is washed blue for a buy or orange for a sell; its column on
- * the form is the direction too, and the table spells it out ("↗ Purchase");
- * unknown rows are outlined dashed in the neutral axis colour and
+ * type cell is washed in the buy ink or the sell silver; its column on the
+ * form is the direction, and the table spells it out ("↗ Purchase"); unknown rows are outlined dashed in the neutral axis colour and
  * labelled. A transcribed row shows what the model read beside what the
  * grid decided, and says so where the two disagreed.
  */
@@ -259,7 +258,7 @@ export default async function ScanDetailPage({
 
       <Disclosure
         size="sm"
-        lead="Each row the reader counted as a transaction is boxed and the cell it read as ticked is washed — blue for a buy, orange for a sell, grey for an exchange; its column on the form is the direction, and the table beside it says it in words. A row with no tick or more than one is outlined dashed and stored as unknown, never guessed."
+        lead="Each row the reader counted as a transaction is boxed and the cell it read as ticked is washed — dark for a buy, light grey for a sell or an exchange; its column on the form is the direction, and the table beside it says it in words. A row with no tick or more than one is outlined dashed and stored as unknown, never guessed."
       >
         <p>
           Overlay: each row the reader counted as a transaction is boxed; its amount and type
@@ -403,13 +402,8 @@ function RowLine({ r }: { r: ScanRow }) {
       </td>
       <td className="px-3 py-1.5">
         {r.action ? (
-          <span
-            className={cn(
-              "whitespace-nowrap font-medium",
-              isBuy(r.action) ? "text-(--viz-buy-text)" : isSell(r.action) ? "text-(--viz-sell-text)" : "text-ink-2"
-            )}
-          >
-            {/* Direction in words and an arrow, like the ActionBadge: the hue only repeats it. */}
+          <span className={cn("whitespace-nowrap", isBuy(r.action) ? "font-medium text-foreground" : isSell(r.action) ? "text-ink-2" : "")}>
+            {/* Direction in words and an arrow, like the ActionBadge: no tone carries it. */}
             {isBuy(r.action) ? "↗ " : isSell(r.action) ? "↘ " : ""}
             {ACTION_LABEL[r.action] ?? r.action}
           </span>

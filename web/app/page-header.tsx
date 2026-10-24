@@ -121,8 +121,8 @@ export type Health = "ok" | "attention" | "error" | "off";
 
 /**
  * iOS Settings style: a grey pill, the word in ink, and the status as a
- * small accent — a green dot, a grey triangle, a red diamond (with a
- * hairline round the pill) for an error. The pill is never tinted.
+ * small accent — a green or orange dot, a red diamond (with a hairline
+ * round the pill) for an error. The pill is never tinted.
  */
 const HEALTH_TONE: Record<Health, { cls: string; dot: string }> = {
   ok: { cls: "text-ink-2 bg-fill border-transparent", dot: STATUS_MARK.ok },

@@ -132,16 +132,16 @@ export function Tag({
 }
 
 /**
- * Direction chips: "↗ Buy" / "↘ Sell" as tinted pills, Apple blue and
- * orange at 15–20%. The glyph and the word carry the direction; the tint
- * only echoes the chart marks. The text is the darker `--viz-*-text` of
- * the same hue, never the mark colour (light orange is 2.5:1 on white):
- * 5.4:1 light on the tile (5.0:1 on the canvas), 5.4:1 / 6.7:1 dark.
+ * Direction chips: "↗ Buy" / "↘ Sell" on a tint of the buy ink or the sell
+ * silver. The glyph and the word carry the direction; the tint only echoes
+ * the chart marks, so it is never read alone: Buy is a visibly darker
+ * capsule than the grey fact chips around it, Sell about as light as them.
+ * The text is ink (Buy, 11.7:1 light / 7.9:1 dark on its tint) and the
+ * secondary ink (Sell, 8.4:1 / 7.9:1), never the tint's own grey: silver
+ * text would miss 4.5:1.
  */
-const BUY_TONE =
-  "bg-[color-mix(in_srgb,var(--viz-buy)_15%,transparent)] dark:bg-[color-mix(in_srgb,var(--viz-buy)_20%,transparent)] text-(--viz-buy-text)";
-const SELL_TONE =
-  "bg-[color-mix(in_srgb,var(--viz-sell)_16%,transparent)] dark:bg-[color-mix(in_srgb,var(--viz-sell)_18%,transparent)] text-(--viz-sell-text)";
+const BUY_TONE = "bg-[color-mix(in_srgb,var(--viz-buy)_18%,transparent)] dark:bg-[color-mix(in_srgb,var(--viz-buy)_22%,transparent)] text-foreground";
+const SELL_TONE = "bg-[color-mix(in_srgb,var(--viz-sell)_25%,transparent)] dark:bg-[color-mix(in_srgb,var(--viz-sell)_35%,transparent)] text-ink-2";
 
 const ACTION_TONE: Record<string, { cls: string; glyph: LucideIcon }> = {
   purchase: { cls: BUY_TONE, glyph: ArrowUpRight },
@@ -162,37 +162,33 @@ export function ActionBadge({ action }: { action: string }) {
 }
 
 /**
- * The status accents as small marks beside ink text (iOS Settings), each
- * with its own shape: a green dot for ok, a grey triangle for attention, a
- * red diamond for an error. Attention is a shape, not orange, because
- * orange is "sold" and a sell mark is a dot. Classes, so a pill, a page
- * header badge and a sentence all draw the same mark; the triangle
- * overrides whatever size and rounding the host gives a dot.
+ * The status accents as small marks beside ink text (iOS Settings): a dot
+ * for ok and attention, a diamond for an error. Classes, so a pill, a page
+ * header badge and a sentence all draw the same mark.
  */
-const TRIANGLE = "bg-attention rounded-none! h-[7px]! w-2! [clip-path:polygon(50%_0,100%_100%,0_100%)]";
 export const STATUS_MARK = {
   ok: "bg-ok rounded-full",
-  attention: TRIANGLE,
+  attention: "bg-attention rounded-full",
   error: "bg-error rounded-[1px]! rotate-45",
 } as const;
 
 /**
  * Filing states, the way iOS Settings shows one: a grey pill with the word
- * in ink and a small status mark — a green dot (alerted), a grey triangle
- * (in flight / needs attention), a red diamond (unreadable), a grey or ink
- * dot (history, sending). The pill itself is never tinted; the word carries
- * the state and the mark's shape, not only its colour, sets each apart.
+ * in ink and a small status mark — a green dot (alerted), an orange dot (in
+ * flight / needs attention), a red diamond (unreadable), a grey or ink dot
+ * (history, sending). The pill itself is never tinted; the word carries the
+ * state and the mark's shape, not only its colour, sets an error apart.
  */
 const PILL = "bg-fill text-ink-2";
 const OK = { cls: PILL, dot: "bg-ok" };
 const GREY = { cls: PILL, dot: "bg-muted-foreground" };
-const WARN = { cls: PILL, dot: STATUS_MARK.attention };
+const WARN = { cls: PILL, dot: "bg-attention" };
 
 const STATUS_TONE: Record<string, { label: string; cls: string; dot: string }> = {
   notified: { label: "alerted", ...OK },
   backfilled: { label: "history", ...GREY },
   parsed: { label: "sending", cls: PILL, dot: "bg-foreground" },
-  new: { label: "processing", cls: PILL, dot: cn(STATUS_MARK.attention, "motion-safe:animate-pulse") },
+  new: { label: "processing", cls: PILL, dot: "bg-attention motion-safe:animate-pulse" },
   backfill_queued: { label: "queued", ...WARN },
   failed: {
     label: "unreadable",
@@ -262,7 +258,7 @@ export function StatusBadge({ value }: { value: string }) {
 
 /**
  * Party as a neutral letter (or, with `full`, the word). Never tinted: the
- * page has no party colours, and a blue Democrat would read as "bought".
+ * page has no party colours, and the greys are the buy/sell encoding.
  */
 export function PartyBadge({ party, full = false }: { party: string | null; full?: boolean }) {
   if (!party) return null;
@@ -578,8 +574,7 @@ export function Amount({
 
 /* ------------------------------------------------------------------
    Controls, iOS-style. Buttons are capsules: a grey fill for the
-   secondary, graphite for the one primary (white in dark mode) — never
-   blue, which means "bought". Fields are grey filled rounded rects (12px),
+   secondary, graphite for the one primary (white in dark mode). Fields are grey filled rounded rects (12px),
    no border. The segmented control is a grey track with the selected
    option raised as a white chip.
    ------------------------------------------------------------------ */

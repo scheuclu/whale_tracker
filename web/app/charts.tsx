@@ -6,12 +6,10 @@
  * baseline, hairline recessive axes, 2px surface gaps between touching fills,
  * and selective direct labels (the value at the bar tip, never on every mark).
  *
- * Colour roles come from `--viz-*` in globals.css. Buy/sell is Apple blue
- * and orange — not the finance-convention green/red, which red-green
- * colourblind readers cannot separate — and direction is still always
- * double-encoded: by position (bought left / above, sold right / below)
- * and by words or arrows. A single-series quantity is the mid grey
- * `--viz-seq`, never blue or orange.
+ * Colour roles come from `--viz-*` in globals.css. Buy/sell is ink and
+ * silver (no hue), so direction is always double-encoded: by position
+ * (bought left / above, sold right / below) and by words or arrows. A
+ * single-series quantity is the mid grey `--viz-seq`, never the buy ink.
  */
 
 import { useId } from "react";
@@ -428,11 +426,10 @@ export type SplitDatum = {
 /**
  * Diverging bars centred on a shared baseline: buys extend left, sells right.
  * This is a polarity encoding, so both arms share one scale and the midpoint
- * is neutral surface — the reader compares direction, not just size. Blue
- * and orange are the echo: the side of the axis, the "← Bought" / "Sold →"
- * captions and the legend carry the direction too, and every bar has its
- * count printed at the tip (light orange is 2.5:1 on white, so it is never
- * unlabelled). Bars are capsules, rounded at both ends.
+ * is neutral surface — the reader compares direction, not just size. Ink and
+ * silver are only the echo: the side of the axis, the "← Bought" / "Sold →"
+ * captions and the legend carry the direction, and every bar has its count
+ * printed at the tip (silver is 2.2:1 on white, so it is never unlabelled).
  */
 export function DivergingSplit({ data, unit }: { data: SplitDatum[]; unit: string }) {
   const uid = useId();
@@ -574,22 +571,21 @@ export function DivergingSplit({ data, unit }: { data: SplitDatum[]; unit: strin
 
 /**
  * One arm's bar with its count at the tip. The count always sits OUTSIDE the
- * bar, in the gutter reserved for it, never inside: a 12px numeral in white
- * on the orange fill misses 4.5:1, and a count that moved in and out of its
- * bar with the bar's length would not scan down the column. The count is in
- * the muted text ink (5.1:1 light, 5.9:1 dark), not the bar's hue.
+ * bar, in the gutter reserved for it, never inside: a 12px numeral on the
+ * silver fill misses 4.5:1, and a count that moved in and out of its bar
+ * with the bar's length would not scan down the column. The count is in the
+ * muted text ink (5.1:1 light, 5.9:1 dark), not the bar's grey.
  */
 function SplitBar({ value, pct, side, i }: { value: number; pct: number; side: "buy" | "sell"; i: number }) {
   const buy = side === "buy";
   return (
-    <div className="relative h-2 shrink-0" style={{ width: `max(${pct}%, 8px)` }}>
+    <div className="relative h-2.5 shrink-0" style={{ width: `max(${pct}%, 3px)` }}>
       <div
-        className={cn("viz-bar h-2", buy ? "viz-grow-x-end" : "viz-grow-x")}
+        className={cn("viz-bar h-2.5", buy ? "viz-grow-x-end" : "viz-grow-x")}
         style={{
           background: buy ? "var(--viz-buy)" : "var(--viz-sell)",
-          // A capsule: both ends round. The 2px surface gap either side of
-          // the baseline keeps the two arms apart.
-          borderRadius: 999,
+          // Rounded data-end, square at the baseline.
+          borderRadius: buy ? "999px 2px 2px 999px" : "2px 999px 999px 2px",
           "--viz-i": i,
         } as React.CSSProperties}
       />
@@ -752,9 +748,9 @@ export function Legend({
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] leading-4 text-muted-foreground">
       {items.map((i) => (
-        <span key={i.label} className="inline-flex items-center gap-1.5 font-semibold text-foreground">
-          {/* The key mirrors the mark: a short capsule. */}
-          <span aria-hidden className="h-1.5 w-3.5 shrink-0 rounded-full" style={{ background: i.color }} />
+        <span key={i.label} className="inline-flex items-center gap-1.5 font-medium text-ink-2">
+          {/* The key mirrors the mark: a short rounded bar. */}
+          <span aria-hidden className="h-2 w-3.5 shrink-0 rounded-full" style={{ background: i.color }} />
           {i.label}
         </span>
       ))}
@@ -950,17 +946,16 @@ export function ColumnSeries({ data, height = 128 }: { data: ColumnSeriesDatum[]
 /**
  * Change over time — the forms /trends introduced. Two conventions:
  *
- * - Columns grow from a shared baseline, bought up (blue) and sold down
- *   (orange): the same polarity as `DivergingSplit`, turned vertical for a
- *   time axis, so position carries direction as well as hue. Lines share
- *   one y-axis, always — two measures of different scale get two charts,
- *   never a second axis.
+ * - Columns grow from a shared baseline, bought up (ink) and sold down
+ *   (silver): the same polarity as `DivergingSplit`, turned vertical for a
+ *   time axis, so position carries direction. Lines share one y-axis,
+ *   always — two measures of different scale get two charts, never a
+ *   second axis.
  * - A second identity inside a direction (party within "bought") is carried
- *   by TEXTURE, not a third hue: the page has no party colours, and a party
- *   hue would collide with the blue / orange direction reading. Texture is
- *   the backup identity channel: 45° and its 135° mirror only (horizontal
- *   or vertical reads as gridlines), always tone-on-tone with the fill it
- *   sits in.
+ *   by TEXTURE, not a hue: the page has no party colours, and a hue would
+ *   be the only colour in the chart. Texture is the backup identity
+ *   channel: 45° and its 135° mirror only (horizontal or vertical reads as
+ *   gridlines), always tone-on-tone with the fill it sits in.
  *
  * Every value is in text three ways: a selective cap label, a per-period
  * tooltip listing every series at that x (hover and keyboard focus — the

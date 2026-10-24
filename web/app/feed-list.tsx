@@ -46,19 +46,18 @@ export function DirectionFilter({
   current: string | undefined;
   hrefFor?: (k: Direction) => string;
 }) {
-  const options: { k: Direction; label: string; dot?: string }[] = [
+  const options: { k: Direction; label: string }[] = [
     { k: undefined, label: "All" },
-    { k: "buy", label: "Buys", dot: "var(--viz-buy)" },
-    { k: "sell", label: "Sells", dot: "var(--viz-sell)" },
+    { k: "buy", label: "Buys" },
+    { k: "sell", label: "Sells" },
   ];
   const active = current === "buy" || current === "sell" ? current : undefined;
-  // The shared iOS segmented control (ui.tsx); the dots repeat the words.
-  // The selected segment stays graphite / white: blue is "bought", not
-  // "selected".
+  // The shared iOS segmented control (ui.tsx). Words only: a silver "sell"
+  // dot vanished on the dark selected segment, which is the same grey.
   return (
     <Segmented
       label="Trade direction"
-      items={options.map((o) => ({ key: o.label, label: o.label, href: hrefFor(o.k), active: active === o.k, dot: o.dot }))}
+      items={options.map((o) => ({ key: o.label, label: o.label, href: hrefFor(o.k), active: active === o.k }))}
     />
   );
 }

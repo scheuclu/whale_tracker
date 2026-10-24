@@ -56,9 +56,9 @@ const PARTIES: { key: "d" | "r" | "other"; label: string; texture: Texture }[] =
 
 const BUY = "var(--viz-buy)";
 const SELL = "var(--viz-sell)";
-/** A neutral quantity: the mid grey, never blue or orange. */
+/** A neutral quantity: the mid grey, never the buy ink. */
 const SEQ = "var(--viz-seq)";
-/** The strong neutral line (the delay median): dark grey, no hue. */
+/** The strong neutral line (the delay median): dark grey, not the ink. */
 const LINE = "var(--viz-price)";
 const GREY = "var(--viz-axis)";
 /** Transcribed from a scan: the quantity grey, hatched — provisional by texture, not by a tone (DESIGN.md). */
