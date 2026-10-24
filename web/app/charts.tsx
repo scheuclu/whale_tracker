@@ -39,6 +39,7 @@ export function StatTile({
   trendCaption,
   trendLabels,
   delta,
+  className,
 }: {
   label: string;
   value: string;
@@ -52,23 +53,30 @@ export function StatTile({
   /** Per-period names for the hover detail, aligned with `trend`. */
   trendLabels?: string[];
   delta?: StatDelta;
+  className?: string;
 }) {
   const zero = isZeroFigure(value);
   // A tile, the way Apple Health and Stocks set a number: a small grey
   // label, a big confident figure, one grey line of context. A zero figure
   // is set in muted ink, so the tiles that report something lead.
   return (
-    <div data-stat-tile className="viz-rise flex h-full min-w-0 flex-col rounded-tile bg-card p-4 shadow-card max-[359px]:px-3.5 sm:px-5 sm:pb-5 sm:pt-4">
+    <div
+      data-stat-tile
+      className={cn(
+        "viz-rise group/tile flex h-full min-w-0 flex-col rounded-tile bg-card p-4 shadow-card border border-black/[0.05] dark:border-white/[0.08] max-[359px]:px-3.5 sm:px-5 sm:pb-5 sm:pt-4 transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-card-hover",
+        className
+      )}
+    >
       <div className="flex items-baseline justify-between gap-2">
-        <div className="truncate text-[13px] font-semibold leading-5 text-muted-foreground">{label}</div>
+        <div className="truncate text-[13px] font-semibold tracking-tight leading-5 text-muted-foreground">{label}</div>
         {trend?.length && trendCaption ? (
-          <div className="shrink-0 truncate text-[12px] leading-5 text-muted-foreground">{trendCaption}</div>
+          <div className="shrink-0 truncate text-[11px] font-medium leading-5 text-muted-foreground/80">{trendCaption}</div>
         ) : null}
       </div>
       <div className={cn("mt-2.5 flex flex-wrap items-end justify-between gap-x-3 gap-y-2.5", zero && "[&>svg]:opacity-60")}>
         <div
           className={cn(
-            "figure text-[30px] leading-none sm:text-[36px]",
+            "figure font-display tracking-tight text-[30px] leading-none sm:text-[36px]",
             zero ? "text-muted-foreground" : "text-foreground"
           )}
         >
@@ -84,8 +92,8 @@ export function StatTile({
         </div>
       ) : null}
       {delta ? (
-        <div className="tabular mt-1 text-[13px] leading-snug text-ink-2 max-[359px]:text-[12px]" title={delta.title}>
-          <span aria-hidden className="mr-1 text-[9px] text-muted-foreground">
+        <div className="tabular mt-2 inline-flex items-center gap-1 rounded-full bg-fill/80 px-2 py-0.5 text-[12px] font-medium leading-tight text-ink-2 max-[359px]:text-[11px] w-fit" title={delta.title}>
+          <span aria-hidden className="mr-0.5 text-[8px] text-muted-foreground">
             {delta.direction === "up" ? "▲" : delta.direction === "down" ? "▼" : "■"}
           </span>
           <Hint text={delta.text} />
@@ -782,20 +790,22 @@ export function SectionTitle({
   children,
   right,
   kicker,
+  className,
 }: {
   children: React.ReactNode;
   right?: React.ReactNode;
   kicker?: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="mb-3 sm:mb-4">
-      {kicker ? <div className="kicker mb-0.5">{kicker}</div> : null}
+    <div className={cn("mb-3 sm:mb-4 apple-headline-reveal", className)}>
+      {kicker ? <div className="kicker mb-1 font-medium tracking-wide uppercase text-[11px] text-muted-foreground/90">{kicker}</div> : null}
       <div className="flex min-h-8 flex-wrap items-end justify-between gap-x-4 gap-y-2">
-        <h2 className="font-display text-[22px] font-bold leading-tight tracking-[-0.022em] text-foreground sm:text-[24px]">
+        <h2 className="font-display text-[24px] font-bold leading-tight tracking-[-0.024em] text-foreground sm:text-[28px] lg:text-[30px]">
           {children}
         </h2>
         {right ? (
-          <div className="flex min-w-0 items-center text-[13px] text-muted-foreground [&>span]:text-[13px]">
+          <div className="flex min-w-0 items-center text-[13px] font-medium text-muted-foreground [&>span]:text-[13px]">
             {right}
           </div>
         ) : null}
@@ -825,7 +835,9 @@ export function Card({
   return (
     <div
       className={cn(
-        variant === "open" ? "min-w-0" : "min-w-0 rounded-tile bg-card p-4 shadow-card sm:p-6",
+        variant === "open"
+          ? "min-w-0"
+          : "min-w-0 rounded-tile bg-card p-4 shadow-card border border-black/[0.05] dark:border-white/[0.08] sm:p-6 transition-all duration-300",
         className
       )}
     >
