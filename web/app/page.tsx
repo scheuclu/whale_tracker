@@ -28,6 +28,7 @@ import { ActionBadge, ResponsiveTable } from "./ui";
 import { Disclosure } from "./disclosure";
 import { DataError, PAGE_STACK, PageHeader } from "./page-header";
 import { AgentAlternates } from "./agent-alternates";
+import { AppleScrollObserver } from "./apple-scroll";
 
 export const dynamic = "force-dynamic";
 
@@ -137,99 +138,126 @@ export default async function FeedPage({
   const weekLabels = rollingWeekLabels(WEEKS);
 
   return (
-    <div className={PAGE_STACK}>
-      <SiteStructuredData />
-      <AgentAlternates markdown="/api/v1/feed.md" json="/api/v1/trades" />
-      <PageHeader
-        eyebrow="House and Senate"
-        title="Congressional trades"
-        subtitle="Stock trades members of the House and Senate disclose under the STOCK Act, reproduced as filed. Amounts are the disclosed bracket, never one exact figure."
-      >
-      <section aria-label="All disclosed trades" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <StatTile
-          label="Trades"
-          value={pipeline.totals.transactions.toLocaleString()}
-          hint={`disclosed · ${weekly.window.trades.toLocaleString()} in last ${WEEKS} wk`}
-          trend={weekly.trades}
-          trendLabels={weekLabels}
-          trendCaption="per week"
-          trendLabel={`Trades disclosed per week, last ${WEEKS} weeks, by filing date`}
-          delta={tradesDelta(weekly.window.trades, weekly.priorTrades)}
-        />
-        <StatTile
-          label="Tickers"
-          value={pipeline.totals.tickers.toLocaleString()}
-          hint={`distinct symbols · ${weekly.window.tickers.toLocaleString()} in last ${WEEKS} wk`}
-        />
-        <StatTile
-          label="Members"
-          value={pipeline.totals.members.toLocaleString()}
-          hint={`filing trades · ${weekly.window.members.toLocaleString()} in last ${WEEKS} wk`}
-        />
-        <StatTile
-          label="Filings"
-          value={pipeline.coverage.parsed.toLocaleString()}
-          hint={`parsed · ${weekly.window.filings.toLocaleString()} in last ${WEEKS} wk`}
-          trend={weekly.filings}
-          trendLabels={weekLabels}
-          trendCaption="per week"
-          trendLabel={`Filings parsed per week, last ${WEEKS} weeks, by filing date`}
-        />
-      </section>
-      </PageHeader>
-
-      {consensus.length ? (
-        <section>
-          <SectionTitle right={<span className="text-muted-foreground">Last 90 days</span>}>
-            Where members agree
-          </SectionTitle>
-          <Card>
-            <DivergingSplit
-              unit="members trading, by direction"
-              data={consensus.map((c) => ({
-                key: c.ticker,
-                label: c.ticker,
-                sublabel: assetLabel(c.asset_name, { ticker: c.ticker }) || undefined,
-                buy: c.buy_politicians,
-                sell: c.sell_politicians,
-                href: tickerHref(c.ticker),
-              }))}
-            />
-          </Card>
+    <AppleScrollObserver>
+      <div className={PAGE_STACK}>
+        <SiteStructuredData />
+        <AgentAlternates markdown="/api/v1/feed.md" json="/api/v1/trades" />
+        <section id="overview" className="apple-snap-section">
+          <PageHeader
+            eyebrow={
+              <span className="inline-flex items-center gap-2 rounded-full border border-black/[0.08] dark:border-white/[0.12] bg-fill/60 px-3 py-1 text-[11px] font-semibold tracking-wider uppercase text-muted-foreground backdrop-blur-md">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                House & Senate · STOCK Act Disclosures
+              </span>
+            }
+            title="Congressional trades"
+            subtitle="Stock trades members of the House and Senate disclose under the STOCK Act, reproduced as filed. Amounts are the disclosed bracket, never one exact figure."
+          >
+            <section aria-label="All disclosed trades" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+              <div className="apple-stagger-item h-full">
+                <StatTile
+                  label="Trades"
+                  value={pipeline.totals.transactions.toLocaleString()}
+                  hint={`disclosed · ${weekly.window.trades.toLocaleString()} in last ${WEEKS} wk`}
+                  trend={weekly.trades}
+                  trendLabels={weekLabels}
+                  trendCaption="per week"
+                  trendLabel={`Trades disclosed per week, last ${WEEKS} weeks, by filing date`}
+                  delta={tradesDelta(weekly.window.trades, weekly.priorTrades)}
+                />
+              </div>
+              <div className="apple-stagger-item h-full">
+                <StatTile
+                  label="Tickers"
+                  value={pipeline.totals.tickers.toLocaleString()}
+                  hint={`distinct symbols · ${weekly.window.tickers.toLocaleString()} in last ${WEEKS} wk`}
+                />
+              </div>
+              <div className="apple-stagger-item h-full">
+                <StatTile
+                  label="Members"
+                  value={pipeline.totals.members.toLocaleString()}
+                  hint={`filing trades · ${weekly.window.members.toLocaleString()} in last ${WEEKS} wk`}
+                />
+              </div>
+              <div className="apple-stagger-item h-full">
+                <StatTile
+                  label="Filings"
+                  value={pipeline.coverage.parsed.toLocaleString()}
+                  hint={`parsed · ${weekly.window.filings.toLocaleString()} in last ${WEEKS} wk`}
+                  trend={weekly.filings}
+                  trendLabels={weekLabels}
+                  trendCaption="per week"
+                  trendLabel={`Filings parsed per week, last ${WEEKS} weeks, by filing date`}
+                />
+              </div>
+            </section>
+          </PageHeader>
         </section>
-      ) : null}
 
-      <section id="trades">
-        <SectionTitle right={<span className="text-muted-foreground">By trade date, newest first</span>}>
-          Recent trades
-        </SectionTitle>
+        {consensus.length ? (
+          <section id="consensus" className="apple-snap-section">
+            <SectionTitle
+              kicker="Bipartisan Activity"
+              right={<span className="text-muted-foreground">Last 90 days</span>}
+            >
+              Where members agree
+            </SectionTitle>
+            <div className="apple-card-reveal">
+              <Card>
+                <DivergingSplit
+                  unit="members trading, by direction"
+                  data={consensus.map((c) => ({
+                    key: c.ticker,
+                    label: c.ticker,
+                    sublabel: assetLabel(c.asset_name, { ticker: c.ticker }) || undefined,
+                    buy: c.buy_politicians,
+                    sell: c.sell_politicians,
+                    href: tickerHref(c.ticker),
+                  }))}
+                />
+              </Card>
+            </div>
+          </section>
+        ) : null}
 
-        <FeedList
-          rows={rows}
-          toolbar={
-            <>
-              <DirectionFilter current={filters.action} hrefFor={(k) => feedHref({ ...filters, action: k })} />
-              <FilterBar filters={filters} ignored={ignored} />
-            </>
-          }
-          actions={<ExportLink filters={filters} />}
-          summary={<ShownLine offset={offset} shown={rows.length} totals={totals} />}
-          empty={
-            offset > 0 && totals.trades ? (
-              <>
-                Nothing past trade {totals.trades.toLocaleString()}.{" "}
-                <a href={feedHref(filters)} className="ink-link text-foreground">
-                  Back to the newest
-                </a>
-              </>
-            ) : undefined
-          }
-        />
-        <Pagination filters={filters} offset={offset} shown={rows.length} total={totals.trades} page={PAGE} />
-      </section>
+        <section id="trades" className="apple-snap-section">
+          <SectionTitle
+            kicker="Live Disclosures"
+            right={<span className="text-muted-foreground">By trade date, newest first</span>}
+          >
+            Recent trades
+          </SectionTitle>
 
-      <BothSides />
-    </div>
+          <div className="apple-card-reveal">
+            <FeedList
+              rows={rows}
+              toolbar={
+                <>
+                  <DirectionFilter current={filters.action} hrefFor={(k) => feedHref({ ...filters, action: k })} />
+                  <FilterBar filters={filters} ignored={ignored} />
+                </>
+              }
+              actions={<ExportLink filters={filters} />}
+              summary={<ShownLine offset={offset} shown={rows.length} totals={totals} />}
+              empty={
+                offset > 0 && totals.trades ? (
+                  <>
+                    Nothing past trade {totals.trades.toLocaleString()}.{" "}
+                    <a href={feedHref(filters)} className="ink-link text-foreground">
+                      Back to the newest
+                    </a>
+                  </>
+                ) : undefined
+              }
+            />
+            <Pagination filters={filters} offset={offset} shown={rows.length} total={totals.trades} page={PAGE} />
+          </div>
+        </section>
+
+        <BothSides />
+      </div>
+    </AppleScrollObserver>
   );
 }
 
@@ -261,8 +289,9 @@ async function BothSides() {
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
   return (
-    <section>
+    <section id="both-sides" className="apple-snap-section">
       <SectionTitle
+        kicker="Convergence Radar"
         right={
           <span className="text-muted-foreground">
             Last {BOTH_SIDES_DAYS} days · {plural(shared.tickers, "ticker")} traded by both,{" "}
@@ -272,51 +301,53 @@ async function BothSides() {
       >
         Both sides
       </SectionTitle>
-      <ResponsiveTable>
-        <table className="w-full text-[14px]">
-          <thead>
-            <tr className="border-b border-border text-left text-[13px] font-medium text-muted-foreground">
-              <th className="px-4 py-3 font-medium">Ticker</th>
-              <th className="px-4 py-3 font-medium">Direction</th>
-              <th className="px-4 py-3 text-right font-medium">Members</th>
-              <th className="px-4 py-3 text-right font-medium">Insiders</th>
-              <th className="px-4 py-3 font-medium">Issuer</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={`${r.ticker}-${r.direction}`} className="border-b border-border/70 transition-colors duration-(--dur-fast) last:border-0 hover:bg-foreground/[0.03]">
-                <td className="px-4 py-2.5">
-                  <a
-                    href={tickerHref(r.ticker)}
-                    className="font-semibold decoration-border-strong underline-offset-[3px] hover:underline"
-                  >
-                    {r.ticker}
-                  </a>
-                </td>
-                <td className="px-4 py-2.5">
-                  <ActionBadge action={r.direction === "buy" ? "purchase" : "sale"} />
-                </td>
-                <td className="tabular px-4 py-2.5 text-right">
-                  <a href={tickerHref(r.ticker)} className="font-medium decoration-border-strong underline-offset-[3px] hover:underline">
-                    {plural(r.members, "member")}
-                  </a>
-                  <span className="text-muted-foreground"> · {plural(r.member_trades, "trade")}</span>
-                </td>
-                <td className="tabular px-4 py-2.5 text-right">
-                  <a href={`/insiders?t=${encodeURIComponent(r.ticker)}`} className="font-medium decoration-border-strong underline-offset-[3px] hover:underline">
-                    {plural(r.insiders, "insider")}
-                  </a>
-                  <span className="text-muted-foreground"> · {plural(r.insider_filings, "filing")}</span>
-                </td>
-                <td className="max-w-[18rem] truncate px-4 py-2.5 text-muted-foreground" title={r.issuer_name ?? r.asset_name ?? undefined}>
-                  {assetLabel(r.issuer_name ?? r.asset_name, { ticker: r.ticker })}
-                </td>
+      <div className="apple-card-reveal">
+        <ResponsiveTable>
+          <table className="w-full text-[14px]">
+            <thead>
+              <tr className="border-b border-border text-left text-[13px] font-medium text-muted-foreground">
+                <th className="px-4 py-3 font-medium">Ticker</th>
+                <th className="px-4 py-3 font-medium">Direction</th>
+                <th className="px-4 py-3 text-right font-medium">Members</th>
+                <th className="px-4 py-3 text-right font-medium">Insiders</th>
+                <th className="px-4 py-3 font-medium">Issuer</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </ResponsiveTable>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={`${r.ticker}-${r.direction}`} className="border-b border-border/70 transition-colors duration-(--dur-fast) last:border-0 hover:bg-foreground/[0.03]">
+                  <td className="px-4 py-2.5">
+                    <a
+                      href={tickerHref(r.ticker)}
+                      className="font-semibold decoration-border-strong underline-offset-[3px] hover:underline"
+                    >
+                      {r.ticker}
+                    </a>
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <ActionBadge action={r.direction === "buy" ? "purchase" : "sale"} />
+                  </td>
+                  <td className="tabular px-4 py-2.5 text-right">
+                    <a href={tickerHref(r.ticker)} className="font-medium decoration-border-strong underline-offset-[3px] hover:underline">
+                      {plural(r.members, "member")}
+                    </a>
+                    <span className="text-muted-foreground"> · {plural(r.member_trades, "trade")}</span>
+                  </td>
+                  <td className="tabular px-4 py-2.5 text-right">
+                    <a href={`/insiders?t=${encodeURIComponent(r.ticker)}`} className="font-medium decoration-border-strong underline-offset-[3px] hover:underline">
+                      {plural(r.insiders, "insider")}
+                    </a>
+                    <span className="text-muted-foreground"> · {plural(r.insider_filings, "filing")}</span>
+                  </td>
+                  <td className="max-w-[18rem] truncate px-4 py-2.5 text-muted-foreground" title={r.issuer_name ?? r.asset_name ?? undefined}>
+                    {assetLabel(r.issuer_name ?? r.asset_name, { ticker: r.ticker })}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </ResponsiveTable>
+      </div>
       <Disclosure
         size="sm"
         className="mt-3"
