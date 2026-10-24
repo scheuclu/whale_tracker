@@ -29,6 +29,9 @@ from form4_samples import APPLE_XML
     ("AAPL", "AAPL"),
     ("NONE, N/A", None),         # placeholder first: still no ticker
     ("n/a", None),
+    ("[NONE]", None),            # bracketed placeholder
+    ("(N/A)", None),
+    ("[none], [n/a]", None),
     (None, None),
 ])
 def test_first_symbol_is_the_ticker(raw, expected):

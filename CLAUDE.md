@@ -172,7 +172,9 @@ parser stays faithful to the PDF and the UI flags the row rather than
   codes (ST is Sensata, AB is AllianceBernstein); do not "fix" that. There is
   deliberately no shape check on `insider_filings.ticker`: it comes from an XML
   element rather than a column split, and real values include exchange-prefixed
-  foreign symbols like `ASX:LNW`.
+  foreign symbols like `ASX:LNW`. Placeholders (`NONE`, `N/A`, also bracketed
+  like `[NONE]`) are not a shape check: `form4.normalize_ticker` maps them to
+  NULL, and a schema bump re-runs `db._rederive_insider_tickers` for stored rows.
 - A ticker read from the asset name — `(BHP)` on a row whose ticker column
   is empty (#50) — is marked by appending `ptr.TICKER_FROM_NAME_NOTE` to
   `description`; that is the only provenance (no schema column) and
