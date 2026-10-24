@@ -63,7 +63,7 @@ export function StatTile({
     <div
       data-stat-tile
       className={cn(
-        "viz-rise group/tile flex h-full min-w-0 flex-col rounded-tile bg-card p-4 shadow-card border border-black/[0.05] dark:border-white/[0.08] max-[359px]:px-3.5 sm:px-5 sm:pb-5 sm:pt-4 transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-card-hover",
+        "viz-rise group/tile flex h-full min-w-0 flex-col rounded-tile bg-card/85 backdrop-blur-xl p-4 shadow-card border border-black/[0.05] dark:border-white/[0.09] max-[359px]:px-3.5 sm:px-5 sm:pb-5 sm:pt-4 transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-card-hover hover:border-black/[0.1] dark:hover:border-white/[0.18]",
         className
       )}
     >
@@ -92,7 +92,10 @@ export function StatTile({
         </div>
       ) : null}
       {delta ? (
-        <div className="tabular mt-2 inline-flex items-center gap-1 rounded-full bg-fill/80 px-2 py-0.5 text-[12px] font-medium leading-tight text-ink-2 max-[359px]:text-[11px] w-fit" title={delta.title}>
+        <div
+          className="tabular mt-2 inline-flex items-center gap-1.5 rounded-full bg-black/[0.035] dark:bg-white/[0.06] border border-black/[0.05] dark:border-white/[0.08] px-2.5 py-0.5 text-[11px] font-medium leading-tight text-ink-2 max-[359px]:text-[10px] w-fit shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-sm"
+          title={delta.title}
+        >
           <span aria-hidden className="mr-0.5 text-[8px] text-muted-foreground">
             {delta.direction === "up" ? "▲" : delta.direction === "down" ? "▼" : "■"}
           </span>
@@ -799,7 +802,7 @@ export function SectionTitle({
 }) {
   return (
     <div className={cn("mb-3 sm:mb-4 apple-headline-reveal", className)}>
-      {kicker ? <div className="kicker mb-1 font-medium tracking-wide uppercase text-[11px] text-muted-foreground/90">{kicker}</div> : null}
+      {kicker ? <div className="kicker mb-1 font-semibold tracking-[0.06em] uppercase text-[11px] text-muted-foreground/80">{kicker}</div> : null}
       <div className="flex min-h-8 flex-wrap items-end justify-between gap-x-4 gap-y-2">
         <h2 className="font-display text-[24px] font-bold leading-tight tracking-[-0.024em] text-foreground sm:text-[28px] lg:text-[30px]">
           {children}
@@ -837,7 +840,7 @@ export function Card({
       className={cn(
         variant === "open"
           ? "min-w-0"
-          : "min-w-0 rounded-tile bg-card p-4 shadow-card border border-black/[0.05] dark:border-white/[0.08] sm:p-6 transition-all duration-300",
+          : "min-w-0 rounded-tile bg-card/85 backdrop-blur-xl p-4 shadow-card border border-black/[0.05] dark:border-white/[0.09] sm:p-6 transition-all duration-300",
         className
       )}
     >

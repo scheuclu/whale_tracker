@@ -145,8 +145,8 @@ export default async function FeedPage({
         <section id="overview" className="apple-snap-section">
           <PageHeader
             eyebrow={
-              <span className="inline-flex items-center gap-2 rounded-full border border-black/[0.08] dark:border-white/[0.12] bg-fill/60 px-3 py-1 text-[11px] font-semibold tracking-wider uppercase text-muted-foreground backdrop-blur-md">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] dark:border-white/[0.12] bg-white/70 dark:bg-white/[0.08] px-3 py-1 text-[11px] font-semibold tracking-wider uppercase text-muted-foreground backdrop-blur-xl shadow-xs">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)] animate-pulse" />
                 House & Senate · STOCK Act Disclosures
               </span>
             }

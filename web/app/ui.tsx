@@ -139,9 +139,9 @@ export function Tag({
  * 5.4:1 light on the tile (5.0:1 on the canvas), 5.4:1 / 6.7:1 dark.
  */
 const BUY_TONE =
-  "bg-[color-mix(in_srgb,var(--viz-buy)_15%,transparent)] dark:bg-[color-mix(in_srgb,var(--viz-buy)_20%,transparent)] text-(--viz-buy-text)";
+  "bg-[color-mix(in_srgb,var(--viz-buy)_14%,transparent)] dark:bg-[color-mix(in_srgb,var(--viz-buy)_20%,transparent)] text-(--viz-buy-text) border border-[color-mix(in_srgb,var(--viz-buy)_24%,transparent)]";
 const SELL_TONE =
-  "bg-[color-mix(in_srgb,var(--viz-sell)_16%,transparent)] dark:bg-[color-mix(in_srgb,var(--viz-sell)_18%,transparent)] text-(--viz-sell-text)";
+  "bg-[color-mix(in_srgb,var(--viz-sell)_15%,transparent)] dark:bg-[color-mix(in_srgb,var(--viz-sell)_18%,transparent)] text-(--viz-sell-text) border border-[color-mix(in_srgb,var(--viz-sell)_25%,transparent)]";
 
 const ACTION_TONE: Record<string, { cls: string; glyph: LucideIcon }> = {
   purchase: { cls: BUY_TONE, glyph: ArrowUpRight },
@@ -595,8 +595,8 @@ export const BUTTON = cn(
 /** The one filled button in a form: its submit. A graphite capsule. */
 export const BUTTON_PRIMARY = cn(
   "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-primary px-4",
-  "text-[13px] font-semibold text-primary-foreground",
-  "transition-[background-color,opacity] duration-(--dur) ease-(--ease-out) hover:opacity-85 active:opacity-75",
+  "text-[13px] font-semibold text-primary-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_1px_2px_rgba(0,0,0,0.1)]",
+  "transition-all duration-(--dur) ease-(--ease-out) hover:opacity-90 active:opacity-80",
   FOCUS_RING
 );
 
@@ -616,13 +616,13 @@ export function segmentClass(active: boolean) {
     FOCUS_RING,
     "focus-visible:outline-offset-1",
     active
-      ? "bg-card text-foreground shadow-segment dark:bg-[#636366]"
+      ? "bg-card text-foreground shadow-segment dark:bg-[#3a3a3c] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_1px_2px_rgba(0,0,0,0.4)]"
       : "text-ink-2 hover:text-foreground active:bg-foreground/[0.06]"
   );
 }
 
 /** The segmented control's track. */
-export const SEGMENT_TRACK = "inline-flex max-w-full items-center gap-0.5 rounded-[9px] bg-fill p-0.5";
+export const SEGMENT_TRACK = "inline-flex max-w-full items-center gap-0.5 rounded-[9px] bg-fill p-0.5 border border-black/[0.04] dark:border-white/[0.06]";
 
 /**
  * A segmented control of links: the state is the URL, so each option is a

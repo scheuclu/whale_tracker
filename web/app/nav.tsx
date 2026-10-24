@@ -149,9 +149,9 @@ export function SearchForm({ className }: { className?: string }) {
         title="Search members, tickers and insider issuers"
         aria-keyshortcuts={hint ? "Meta+K Control+K /" : undefined}
         className={cn(
-          "peer h-8 w-full rounded-[10px] border-0 bg-fill pl-8 pr-12 text-[13px] text-foreground outline-none",
-          "transition-[background-color] duration-(--dur) ease-(--ease-out) [&::-webkit-search-cancel-button]:hidden",
-          "placeholder:text-muted-foreground hover:bg-foreground/[0.09] focus:bg-foreground/[0.09]"
+          "peer h-8 w-full rounded-[10px] border border-black/[0.04] dark:border-white/[0.08] bg-fill pl-8 pr-12 text-[13px] text-foreground outline-none",
+          "transition-all duration-(--dur) ease-(--ease-out) [&::-webkit-search-cancel-button]:hidden",
+          "placeholder:text-muted-foreground hover:bg-foreground/[0.09] hover:border-black/[0.08] dark:hover:border-white/[0.14] focus:bg-card focus:border-black/[0.16] dark:focus:border-white/[0.22] focus:shadow-xs"
         )}
       />
       {hint ? (
