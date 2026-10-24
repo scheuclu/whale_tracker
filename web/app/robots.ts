@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { absoluteUrl } from "@/lib/site";
+import { absoluteUrl } from "../lib/site";
 
 /**
  * Everyone may crawl everything a reader can see, AI crawlers included —
@@ -9,6 +9,14 @@ import { absoluteUrl } from "@/lib/site";
  * up to 5,000 rows a request) and the scan-image route behind the noindexed
  * scan pages. Nothing else under /api/ — in particular not the
  * public /api/v1/, which is meant to be read by agents.
+ *
+ * Also disallowed: the *views* of a list — every window, direction, insider
+ * filter, sort and row count is a link, so their combinations are an
+ * unbounded URL space that canonicalises to one page. GPTBot walked
+ * `/insiders` views from 2026-10-18 at ~140k uncached renders a day. The
+ * pages themselves stay open: `/insiders`, an issuer (`/insiders?t=X`),
+ * `/tickers` and every member page. Rules are scoped to those paths, never
+ * `/*`, because the longest match wins and `/api/v1/` takes `action`/`sort`.
  */
 const AI_CRAWLERS = [
   "GPTBot",
@@ -31,7 +39,21 @@ const AI_CRAWLERS = [
   "MistralAI-User",
 ];
 
-const DISALLOW = ["/api/export.csv", "/api/scan-page/", "/api/health"];
+/** Parameters of the `/insiders` list that select a view rather than a page (`t`, the issuer, is a page). */
+const INSIDER_VIEW_PARAMS = ["w", "action", "cik", "sort", "dir", "n"];
+
+export const DISALLOW = [
+  "/api/export.csv",
+  "/api/scan-page/",
+  "/api/health",
+  ...INSIDER_VIEW_PARAMS.map((p) => `/insiders?${p}=`),
+  // A second parameter is always a view: an issuer plus a window, or a filter plus a sort.
+  "/insiders?*&",
+  // Every /tickers parameter (w, sort, dir, n) is a view of the one list.
+  "/tickers?",
+  // A member page filtered to buys or sells.
+  "/members/*?",
+];
 
 export default function robots(): MetadataRoute.Robots {
   return {
