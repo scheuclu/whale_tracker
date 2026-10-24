@@ -4,9 +4,9 @@
  *
  * Encoding:
  * - x: trade date as filed. Buys stack above the axis, sells below, exchanges
- *   and other actions sit on it (in the mid grey). Buys are the ink, sells
- *   silver, but the side of the axis, the "Buys →" / "← Sells" labels, the
- *   legend and every tooltip carry the direction, never the tone alone.
+ *   and other actions sit on it (in the mid grey). Buys are blue, sells
+ *   orange, and the side of the axis, the "Buys →" / "← Sells" labels, the
+ *   legend and every tooltip carry the direction too, never the hue alone.
  * - Mark size: the bracket FLOOR (log scale) — the least the disclosed range
  *   allows. Never a midpoint, never "the amount".
  * - Diamond: an option trade. Hollow dashed: transcribed from a scanned

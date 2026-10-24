@@ -17,9 +17,9 @@
  *                is a box ticked on a scan, and the row is in no total.
  *   unknown      empty rungs, "—".
  *
- * Neutral greys, and the bracket's own rung is the mid grey, never the ink:
- * ink means "bought", and the action badge beside it already carries the
- * direction. Colours live in `--viz-rung-*` (globals.css), validated as
+ * Neutral greys, and the bracket's own rung is the mid grey, never a hue:
+ * blue and orange mean bought and sold, and the action badge beside it
+ * already carries the direction. Colours live in `--viz-rung-*` (globals.css), validated as
  * two-step ordinal ramps.
  */
 

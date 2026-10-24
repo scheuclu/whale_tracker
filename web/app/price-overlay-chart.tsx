@@ -27,17 +27,17 @@ import { ScrollX } from "./scroll-area";
  * `/api/prices/<SYMBOL>` and drawn on the same calendar axis as the trade
  * lanes the server prepared (app/price-overlay.tsx). SVG, no chart library.
  *
- * - Price panel: the close as a 2px dark-grey line (not the ink, which
- *   means "bought"); "vs SPY" rebases both lines to 100 on one axis (never
- *   a second scale) and draws SPY in the mid grey, dashed.
- * - One lane per population, each with its own label: buys (ink) above the
- *   lane's centre line, sells (silver) below, "bought" / "sold" printed at
- *   the lane's start. Never pooled.
+ * - Price panel: the close as a 2px dark-grey line (no hue: blue and
+ *   orange are the trades); "vs SPY" rebases both lines to 100 on one axis
+ *   (never a second scale) and draws SPY in the mid grey, dashed.
+ * - One lane per population, each with its own label: buys (blue) above
+ *   the lane's centre line, sells (orange) below, "bought" / "sold" printed
+ *   at the lane's start. Never pooled.
  * - Shaded spans: windows where the cluster rule for that population held,
  *   washed over the price panel and marked as a bar over their own lane. A
- *   buying cluster is a flat grey wash and a solid bar; a selling cluster a
- *   diagonal hatch and a dashed bar — texture, not tone, plus the words in
- *   the legend and the readout.
+ *   buying cluster is a flat blue wash and a solid blue bar; a selling
+ *   cluster an orange diagonal hatch and a dashed orange bar — hue and
+ *   texture, plus the words in the legend and the readout.
  * - The crosshair stops at every session and at every trade date that is not
  *   one; the readout gives the date, the close (or why there is none) and the
  *   trades of that date. Arrow keys walk the same stops.
@@ -334,8 +334,8 @@ function LineKey({ color, label, dashed = false }: { color: string; label: strin
 
 /** The legend swatches for the two cluster washes: flat (buying), hatched (selling). */
 const WASH_KEY: Record<"buy" | "sell", React.CSSProperties> = {
-  buy: { background: "color-mix(in oklab, var(--viz-buy) 10%, transparent)" },
-  sell: { backgroundImage: "repeating-linear-gradient(135deg, var(--viz-axis) 0 1px, transparent 1px 4px)" },
+  buy: { background: "color-mix(in oklab, var(--viz-buy) 14%, transparent)" },
+  sell: { backgroundImage: "repeating-linear-gradient(135deg, color-mix(in oklab, var(--viz-sell) 60%, transparent) 0 1px, transparent 1px 4px)" },
 };
 
 /* --------------------------------------------------------------- the svg */
