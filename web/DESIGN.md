@@ -17,10 +17,15 @@ App Store.** Concretely:
 2. **The system font.** `-apple-system` / `BlinkMacSystemFont` first, so
    Apple devices render SF Pro; Inter (self-hosted) everywhere else. Large,
    bold, tight titles; reading-size body; tabular figures for every number.
-3. **Monochrome interface.** Graphite in light mode, white in dark: the
-   filled button, the selected segment, the active section, link hovers.
-   **Apple's blue is not available — blue means "bought".** Buy-blue and
-   sell-red are the only saturated colours on a page.
+3. **A monochrome interface, one pair of data hues.** Graphite in light
+   mode, white in dark: the filled button, the selected segment, the active
+   section, link hovers. The data has exactly two hues: **bought is Apple
+   blue, sold is Apple orange** (the user's choice, 2026-10-24 — this
+   branch is the alternative to #107's graphite/silver; merge one, close
+   the other). Because blue means "bought", nothing interactive is blue.
+   Direction always also reads from position and words. Everything else is
+   grey, bar small status marks (a dot, a triangle, a diamond) and the app
+   icon's gold tie.
 4. **Big numbers, small grey labels.** Stocks/Health tiles: a 13px semibold
    grey label, a 30–36px figure, one grey line of context.
 5. **Grouped lists.** Lists and tables sit in a tile as iOS inset-grouped
@@ -74,53 +79,116 @@ canvas, the tile and the hover wash in both modes.
 | `--selection` | black 14% | white 24% | text selection |
 | `--gold` | `#f5b41b` | `#f7c544` | not used in the interface; the bow tie on the app icon is `BOW_TIE_FILL` (`#fbbf24`) |
 
-Where iOS would be blue, v3 is graphite: links are ink with a hairline
-underline that firms on hover; the selected segment is a white raised chip
-on a grey track (`#636366` in dark mode); the active nav section is a grey
-capsule. Nothing interactive is ever blue or red.
+Where iOS would be blue, v3 is graphite — on this site systemBlue means
+"bought": links are ink with a hairline underline that firms on hover; the
+selected segment is a white raised chip on a grey track (`#636366` in dark
+mode); the active nav section is a grey capsule. Nothing interactive is ever
+coloured, and never blue.
 
-### Status (pipeline and filing state — never buy/sell, never the accent)
+### Status accents (pipeline and filing state — never buy/sell, never the accent)
 
-| Token | Light | Dark |
-| --- | --- | --- |
-| `--ok` | `#24744a` | `#5bb585` |
-| `--attention` | `#a34f0b` | `#f0954a` |
-| `--error` (`--destructive`) | `#8a3478` (plum: red is "sold") | `#eaa8e4` |
+| Token | Shape | Light | Dark | On tile (light / dark) |
+| --- | --- | --- | --- | --- |
+| `--ok` | dot | `#248a3d` | `#30d158` | 4.4 / 8.4 |
+| `--attention` | **triangle** | `#424245` | `#d1d1d6` | 10.0 / 11.2 |
+| `--error` (`--destructive`) | diamond | `#d70015` | `#ff453a` | 5.4 / 5.0 |
 
-Each has a `*-soft` wash for pills. Status always ships with a word; error
-pills are also outlined and carry a diamond, not a dot. Error vs buy/sell on
-the v3 tiles (dataviz validator, `--pairs all`): light CVD ΔE 14.5 (protan),
-normal 17.5; dark CVD 15.3, normal 19.1; all ≥ 3:1.
+iOS Settings style: the state is a **small mark beside ink text**, and each
+tone has its own **shape** — a green dot for ok, a grey triangle for
+attention, a red diamond for an error — in a grey pill (`StatusBadge`,
+`HealthPill`, the status screen's chip) or before a sentence (`StatusNote`,
+`AsFiled`). Pills are never tinted and words are never set in these colours
+(they are non-text marks: 3:1 is the bar). An error pill also carries a
+hairline outline.
+
+Why these, now that sold is orange:
+
+- **Attention is not orange** (it was `#c93400` / `#ff9f0a` under #107): an
+  orange dot beside a trade reads as "sold", and a sell mark is a dot.
+  Apple yellow was measured and rejected — ΔE 13.3 from the dark sell
+  orange under normal vision (floor 15) and 1.5:1 on white — so attention is
+  the secondary ink with the triangle carrying it. Grey triangle vs sell:
+  CVD ΔE 32.1 light / 18.2 dark; vs buy 30.2 / 27.1.
+- **Error is a darker red in light mode.** `#ff3b30` sat ΔE 14.8 from the
+  light sell orange (CVD 7.3); Apple's high-contrast `#d70015` is 21.7
+  (CVD 17.3) and 5.4:1 on white. Dark `#ff453a` vs `#ff9f0a`: 18.4 (CVD
+  12.1). Red is free for errors because it does not mean "sold".
+- **Ok stays green.** vs sell: CVD 9.0 light, 7.1 dark (deutan, the WARN
+  band) — legal only because a status mark always sits beside its word and
+  never beside a trade; ok vs attention 19.6 / 15.0.
+
+Late counts are an ink figure (an outlined chip in tables, "49d late" in
+rows) with no colour: a reporting fact, not an alarm.
 
 ### Data-viz roles (`--viz-*`)
 
 | Role | Light | Dark | Notes |
 | --- | --- | --- | --- |
-| `--viz-buy` | `#2a78d6` | `#3987e5` | bought; diverging pair with sell |
-| `--viz-sell` | `#d03b3b` | `#e66767` | sold |
-| `--viz-seq` | `#3a3a3c` | `#aeaeb2` | single-series magnitude (ranked bars, sparkbars' current period, the range band). Graphite, like the interface. |
+| `--viz-buy` | `#007aff` | `#0a84ff` | bought: Apple systemBlue (4.0:1 / 4.7:1 on the tile) |
+| `--viz-sell` | `#f08a00` | `#ff9f0a` | sold: Apple orange (2.5:1 light — always labelled; 8.3:1 dark) |
+| `--viz-buy-text` | `#0058c4` | `#5aa9ff` | "Buy" chip and table text: 5.4:1 on its tint over the tile (5.0:1 over the canvas) / 5.4:1 |
+| `--viz-sell-text` | `#9a4a00` | `#ffb340` | "Sell" chip and table text: 5.4:1 (5.0:1) / 6.7:1 |
+| `--viz-seq` | `#7c7c80` | `#909095` | a neutral quantity: ranked volume and count bars, sparkbars' current period, the range band, the bracket ladder's own rung, "exchange / other" marks, scan counts. The mid grey, **never a hue**. |
+| `--viz-price` | `#48484a` | `#c1c1c6` | the strong neutral line: the price close, the delay median. Dark grey. |
+| `--viz-bench` | = seq, dashed | = seq, dashed | the SPY benchmark, the delay p90 (solid) |
 | `--viz-track` | fill 12% | fill 24% | empty bar track |
 | `--viz-grid` / `--viz-axis` | `#e8e8ed` / `#8e8e93` | `#2c2c2e` / `#8e8e93` | recessive grid and axes |
-| `--viz-rung-off/below/on` | `#e8e8ed` / `#aeaeb2` / `#1d1d1f` | `#3a3a3c` / `#636366` / `#f5f5f7` | the bracket ladder (neutral ordinal ramp) |
-| `--viz-price` / `--viz-bench` | `#1d1d1f` / `#8e8e93` | `#f5f5f7` / `#aeaeb2` | price overlay: one ink, one grey |
+| `--viz-rung-off/below/on` | `#e8e8ed` / `#aeaeb2` / seq | `#3a3a3c` / `#636366` / seq | the bracket ladder (neutral ordinal ramp) |
+
+**Direction is double-encoded, always.** Blue vs orange is one channel; the
+second is always there:
+
+| Where | Position | Words / arrows |
+| --- | --- | --- |
+| `DivergingSplit` | bought left of the axis, sold right | legend "Bought" / "Sold", "← Bought" / "Sold →" captions, counts at every tip |
+| `MonthlyColumns` (/trends) | bought up, sold down | legend, cap labels, tooltip, table |
+| Timeline, price lanes | buys above the axis, sells below | "Buys →" / "← Sells", "bought" / "sold" lane labels, legend counts, tooltips |
+| `SplitCell`, member/ticker glance bar | buys first (left) | "12 / 30" with the header naming the order; "44 bought … sold 34" |
+| `ActionBadge` | — | "↗ Buy" / "↘ Sell": tinted pills (blue 15% / orange 16%, 20% / 18% dark), text in `--viz-*-text` |
+| Insider value cells, "Most bought / sold" | their own column or list | the column header / section title |
+| Share cards | — | a small dot beside "buys" / "sells" |
+
+Collisions with the neutral roles, and how they are kept apart:
+
+- **Quantity vs a direction.** A single-series bar is the mid grey — CVD ΔE
+  ≥ 16.5 from blue and orange (21.3 normal) light, ≥ 17.3 dark — has no
+  chroma, and never carries a Bought/Sold legend. It cannot be read as one.
+- **Price line vs buys.** The close is `--viz-price`, a dark grey line in its
+  own panel; buys are blue dots in the lanes under it, with "bought" printed
+  beside them. SPY is the mid grey, dashed, named in the legend.
+- **Exchange / other.** The mid grey, on the axis (neither above nor below),
+  named in the legend.
+- **Cluster spans.** A buying cluster is a flat blue wash (8% / 14%) with a
+  solid blue bar over its lane; a selling cluster is an orange diagonal
+  hatch with a dashed orange bar — hue and texture both. Legend, span list
+  and readout say "buying" / "selling".
+- **Party inside a direction.** Hatching (solid Democrat, 45° Republican,
+  135° other), tone-on-tone inside the blue or orange column.
+- **Transcribed (scanned) rows are not a colour.** They are drawn hollow and
+  dashed (the bracket ladder, the timeline) or hatched (/trends), and always
+  say "transcribed from scan" in words.
 
 Validated with the `dataviz` skill's `validate_palette.js` against the v3
 tiles (`#ffffff` / `#1c1c1e`); re-run it before changing any value:
 
-- buy · sell · seq, `--pairs all` — light: worst CVD ΔE 14.2 (seq/sell,
-  protan), normal 27.7, all ≥ 3:1; dark: CVD 10.5 (seq/sell, deutan), normal
-  17.9, all ≥ 3:1. The lightness-band and chroma-floor checks fail for seq by
-  design: it is a neutral single-series role, never a categorical slot.
-- buy/sell alone (unchanged hues): CVD 23.8 / normal 31.6 light, 19.2 / 29.0
-  dark — on the tiles and on the canvases (`#f5f5f7`, `#000`); all pass.
-- price · bench · buy · sell, `--pairs all` — light CVD 11.6, normal 17.3;
-  dark CVD 10.5, normal 17.9; all ≥ 3:1.
-- rung below → on, `--ordinal` — both modes pass (monotone L, ΔL ≥ 0.06,
-  light end 2.21:1 light / 2.84:1 dark).
-
-**Transcribed (scanned) rows are not a colour.** They are drawn hollow and
-dashed (the bracket ladder, the timeline) or hatched, and always say
-"transcribed from scan" in words.
+- buy · sell — light CVD ΔE 33.2 (protan), normal 40.2, on the tile and on
+  `#f5f5f7`; dark CVD 33.5, normal 40.8, on the tile and on `#000`.
+- buy · sell · seq · price, `--pairs all` — worst CVD 16.5 light (seq/sell),
+  15.7 dark (price/seq); worst normal 18.5 / 15.7 (both neutral pairs).
+  `bench` is seq's own tone (ΔE 0 to it by construction), set apart by its
+  dash.
+- Expected and accepted: the **dark orange FAILs the lightness band** (L
+  0.78 against 0.48–0.67) — it is Apple's own dark systemOrange, 8.3:1 on the
+  tile, and a darker one turns brown; the **light orange WARNs on contrast**
+  (2.52:1 on the tile, 2.31:1 on the canvas) — every orange mark has its
+  value or word printed beside it. seq and price FAIL the band and chroma
+  checks by design: neutral roles, never categorical slots. (`#e07b00`
+  would reach 3.0:1 on white if the WARN ever has to go.)
+- rung below → on (`#aeaeb2` → `#7c7c80`, `#636366` → `#909095`),
+  `--ordinal` — both modes pass (monotone L, ΔL 0.164 / 0.154, light end
+  2.21:1 light / 2.84:1 dark).
+- Green/red stays out: Apple's `#34c759` / `#ff3b30` measure CVD ΔE 6.8
+  (deutan) on white.
 
 ## Type
 
@@ -193,8 +261,11 @@ Sentence case everywhere; no tracked capitals.
 - **Disclosure** — "How to read this": the lead at reading size in
   secondary ink, the detail in a native `<details>`.
 - **Badges** (`ui.tsx`) — chip (6px, facts), pill (round, filing state).
-  Direction chips are buy/sell tints with a glyph and the word; ticker chips
-  are grey-filled semibold sans; `ScanTag` is a dashed outline.
+  Direction chips are "↗ Buy" / "↘ Sell" as blue / orange tinted pills
+  with darker text of the same hue — the glyph and word carry it; ticker
+  chips are grey-filled
+  semibold sans; `ScanTag` is a dashed outline; state pills are grey with a
+  small status mark.
 - **Controls** — `Segmented` (iOS segmented control), `BUTTON` (grey
   capsule), `BUTTON_PRIMARY` (graphite capsule), `FIELD` (grey filled 12px
   rect, no border). One focus ring.
@@ -206,9 +277,10 @@ Sentence case everywhere; no tracked capitals.
   (`.inset-rows`, separators inset to the member's name).
 - **Tables** (`ResponsiveTable`) — in a tile, cells inset 16px, clipped with
   `overflow: clip` so the sticky header still works.
-- **Charts** (`charts.tsx`) — pure CSS/SVG. Fully rounded bar ends, thin
-  tracks, no heavy gridlines, legends as small capsules inline above the
-  plot, values printed at the tip.
+- **Charts** (`charts.tsx`) — pure CSS/SVG. Capsule bars (both ends
+  round), thin tracks, no heavy gridlines, legends as small capsules with
+  the words "Bought" / "Sold" inline above the plot, values printed at the
+  tip.
 - **Brand** (`lib/brand.ts`, `brand.tsx`) — on the site a **monochrome
   glyph** in the page ink, tie included (a masked hairline keeps chin and
   tie apart), like the apple in Apple's nav. The **app icon** (`icon.svg`,
@@ -223,8 +295,13 @@ Sentence case everywhere; no tracked capitals.
 ## Do / don't
 
 - **Do** put content in a tile; **don't** add borders round tiles.
-- **Do** use graphite/white for anything interactive; **don't** use blue or
-  red for anything but buy/sell, and **don't** colour a party.
+- **Do** use graphite/white for anything interactive; **don't** make a
+  button, link or selected state blue (blue is "bought"), **don't** add
+  colour beyond blue/orange data and the small status marks, and **don't**
+  colour a party.
+- **Do** give every buy/sell mark a position and/or words; **don't** draw a
+  neutral quantity in blue or orange, an orange mark without its label, or
+  a status mark in orange.
 - **Do** give every number tabular figures; **don't** print a congressional
   dollar figure without "est." or a range.
 - **Do** say a caveat once, in a `Disclosure`.

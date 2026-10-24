@@ -29,7 +29,7 @@ import { MemberAvatar } from "./avatar";
 import { BracketAmount, BracketLegend } from "./bracket-glyph";
 import { StickyOffset } from "./sticky-offset";
 import { AssetName, TickerCell, TradeDelay } from "./trade-row";
-import { ActionBadge, OptionBadge, OwnerTag, PartyBadge, ScanTag, Segmented } from "./ui";
+import { ActionBadge, OptionBadge, OwnerTag, PartyBadge, ScanTag, Segmented, StatusNote } from "./ui";
 
 /* ------------------------------------------------------------- header */
 
@@ -53,6 +53,8 @@ export function DirectionFilter({
   ];
   const active = current === "buy" || current === "sell" ? current : undefined;
   // The shared iOS segmented control (ui.tsx); the dots repeat the words.
+  // The selected segment stays graphite / white: blue is "bought", not
+  // "selected".
   return (
     <Segmented
       label="Trade direction"
@@ -119,13 +121,14 @@ function DaySection({ day, today, index }: { day: DayGroup<TransactionRow>; toda
         <span className="whitespace-nowrap font-display text-[17px] font-semibold leading-tight tracking-[-0.018em] text-foreground">{day.label}</span>
         {day.date ? <span className="tabular leading-tight text-muted-foreground">{day.date}</span> : null}
         {day.future ? (
-          <span
-            className="whitespace-nowrap rounded-full bg-attention-soft px-2 py-px text-[12px] font-medium leading-tight text-attention"
+          <StatusNote
+            tone="attention"
+            className="whitespace-nowrap rounded-full bg-fill px-2 py-px text-[12px] font-medium leading-tight text-ink-2"
             title="This trade date is later than today: the filing's own date, reproduced as filed rather than corrected"
           >
             {/* A phone keeps the header on one line: the flag shortens, its title keeps the whole reason. */}
             future date<span className="hidden sm:inline"> as filed</span>
-          </span>
+          </StatusNote>
         ) : null}
         {day.key === null ? null : (
           <span className="hidden leading-tight text-muted-foreground sm:inline">traded</span>

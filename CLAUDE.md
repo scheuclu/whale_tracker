@@ -443,12 +443,47 @@ parser stays faithful to the PDF and the UI flags the row rather than
 Charts are pure CSS/SVG in `web/app/charts.tsx`; no chart library. Colour roles
 live in `--viz-*` at the bottom of `web/app/globals.css`.
 
-Buy/sell uses a **blue↔red diverging pair, not the finance-convention
-green/red**. Green/red measures a CVD ΔE of 4.1 under deuteranopia against
-these surfaces — red-green colourblind readers cannot separate them. Blue/red
-measures 23.8 light / 19.2 dark. Direction is always spelled out in text too,
-so colour never carries meaning alone. Re-run the validator in the `dataviz`
-skill before changing any palette value.
+Buy/sell is **Apple blue / orange**: bought `#007aff` / sold `#f08a00` in light
+mode, `#0a84ff` / `#ff9f0a` in dark (iOS systemBlue / systemOrange). The user
+chose it on 2026-10-24 from a side-by-side render, after rejecting blue↔red
+("not very Apple-like") and the graphite/silver pair of #107. This branch
+(`design/blue-orange`) is an **alternative to #107** and keeps #107's
+minimal-colour work everywhere else; only one of the two should be merged.
+**Green/red is still out**: Apple's own green/red pair measures CVD ΔE 6.8
+under deuteranopia on white, so red-green colourblind readers cannot rely on
+it.
+
+- **Blue means "bought", so interactive accents are never blue.** Buttons,
+  links, the focus ring and the selected nav item / segment stay graphite
+  (white in dark mode).
+- **Direction is always double-encoded**: by **position** (diverging bars:
+  bought left, sold right; the timeline and price lanes: buys above the axis,
+  sells below; split cells: buys first) **and/or words and arrows** ("↗ Buy" /
+  "↘ Sell" chips, "Bought" / "Sold" legends and captions, every tooltip). A
+  chart that cannot give direction a position must label it in words.
+- **Light orange is 2.5:1 on white**, so every orange mark has its value or
+  label printed beside it in text ink. Chip and table text uses the darker
+  `--viz-buy-text` / `--viz-sell-text` (`#0058c4` / `#9a4a00` light,
+  `#5aa9ff` / `#ffb340` dark; ≥ 5.0:1 on their 15–20% tints), never the mark
+  colour. Bars are capsules (both ends round).
+- **Nothing but a direction has a hue.** Volume, counts, the bracket ladder
+  and "exchange / other" take the mid grey `--viz-seq` (`#7c7c80` /
+  `#909095`); the price line and the delay median take `--viz-price`
+  (`#48484a` / `#c1c1c6`); the SPY benchmark is the mid grey, dashed. Buying
+  vs selling cluster spans are a blue wash + solid bar vs an orange hatch +
+  dashed bar; party inside a direction is hatching.
+- Status (ok / attention / error) is a small mark beside ink text, each with
+  its **own shape** so none reads as a buy or sell dot: ok a green dot,
+  attention a **grey triangle** (not orange — orange is "sold"; Apple yellow
+  was measured at ΔE 13.3 from the dark orange), error a red diamond (light
+  `#d70015`: `#ff3b30` sat ΔE 14.8 from the light orange). Never a tinted
+  pill, never a coloured sentence.
+- Validator numbers (light / dark): buy·sell CVD ΔE 33.2 / 33.5, normal 40.2 /
+  40.8; buy·sell·seq·price `--pairs all` worst CVD 16.5 / 15.7. Expected and
+  accepted: the dark orange fails the lightness band (L 0.78; it is Apple's
+  own value, 8.3:1 on the tile) and the light orange WARNs on contrast — both
+  relieved by the printed labels. Re-run the validator in the `dataviz` skill
+  before changing any palette value.
 
 ## Price overlay (ticker and insider-issuer pages)
 

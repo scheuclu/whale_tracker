@@ -135,7 +135,7 @@ export function ShareControl({ url, text, className }: { url: string; text: stri
         role="status"
         aria-live="polite"
         className={cn(
-          "pointer-events-none absolute right-0 top-full z-20 mt-1.5 whitespace-nowrap rounded-full bg-popover px-3 py-1 text-[12px] font-medium text-ok shadow-popover",
+          "pointer-events-none absolute right-0 top-full z-20 mt-1.5 whitespace-nowrap rounded-full bg-popover px-3 py-1 text-[12px] font-medium text-foreground shadow-popover",
           status ? "opacity-100" : "opacity-0"
         )}
       >

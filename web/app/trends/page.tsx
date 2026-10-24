@@ -47,7 +47,7 @@ const WINDOWS = [
   { months: 24, label: "24m" },
 ];
 
-/** Party inside a direction is carried by texture; the hue is the direction's. */
+/** Party inside a direction is carried by texture; the tone is the direction's. */
 const PARTIES: { key: "d" | "r" | "other"; label: string; texture: Texture }[] = [
   { key: "d", label: "Democrat", texture: "solid" },
   { key: "r", label: "Republican", texture: "hatch" },
@@ -56,10 +56,13 @@ const PARTIES: { key: "d" | "r" | "other"; label: string; texture: Texture }[] =
 
 const BUY = "var(--viz-buy)";
 const SELL = "var(--viz-sell)";
+/** A neutral quantity: the mid grey, never blue or orange. */
 const SEQ = "var(--viz-seq)";
+/** The strong neutral line (the delay median): dark grey, no hue. */
+const LINE = "var(--viz-price)";
 const GREY = "var(--viz-axis)";
-/** Transcribed from a scan: ink, hatched — provisional, never the accent (DESIGN.md). */
-const SCAN = "var(--viz-price)";
+/** Transcribed from a scan: the quantity grey, hatched — provisional by texture, not by a tone (DESIGN.md). */
+const SCAN = SEQ;
 
 const num = (n: number) => n.toLocaleString();
 const days = (d: number | null) => (d == null ? "—" : `${Number.isInteger(d) ? d : d.toFixed(1)}d`);
@@ -164,7 +167,7 @@ export default async function TrendsPage({
     name: names[i],
     up: [
       { key: "transcribed", label: "Transcribed", value: r.transcribed, fill: SCAN, texture: "hatch" },
-      { key: "not", label: "Not transcribed", value: r.unread + r.refused, fill: GREY },
+      { key: "not", label: "Not transcribed", value: r.unread + r.refused, fill: SEQ },
     ],
     upLabel: r.scans ? num(r.scans) : "",
     tip: [
@@ -301,8 +304,8 @@ export default async function TrendsPage({
         <Card>
           <ChartLegend
             items={[
-              { label: "Median", style: { background: SEQ }, kind: "line" },
-              { label: "90th percentile", style: { background: GREY }, kind: "line" },
+              { label: "Median", style: { background: LINE }, kind: "line" },
+              { label: "90th percentile", style: { background: SEQ }, kind: "line" },
               { label: "45-day deadline", style: { background: GREY, height: 1 }, kind: "line" },
             ]}
             note="days"
@@ -312,8 +315,8 @@ export default async function TrendsPage({
               labels={labels}
               names={names}
               series={[
-                { key: "median", label: "median", stroke: SEQ, values: delay.months.map((m) => m.median) },
-                { key: "p90", label: "p90", stroke: GREY, values: delay.months.map((m) => m.p90) },
+                { key: "median", label: "median", stroke: LINE, values: delay.months.map((m) => m.median) },
+                { key: "p90", label: "p90", stroke: SEQ, values: delay.months.map((m) => m.p90) },
               ]}
               reference={{ value: 45, label: "45-day deadline" }}
               height={180}
@@ -465,7 +468,7 @@ export default async function TrendsPage({
           <ChartLegend
             items={[
               { label: "Transcribed", style: textureStyle(SCAN, "hatch") },
-              { label: "Not transcribed", style: textureStyle(GREY) },
+              { label: "Not transcribed", style: textureStyle(SEQ) },
             ]}
             note="filings"
           />

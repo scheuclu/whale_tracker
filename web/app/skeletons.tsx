@@ -12,8 +12,9 @@ import { Card } from "./charts";
  * Where a piece mirrors a component rather than reusing it, the comment
  * names the component: change one, change the other.
  *
- * Bones are neutral grey on purpose: blue and red mean buy and sell here, and
- * a placeholder must not look like either. The bone colour and shimmer live
+ * Bones are a pale grey wash on purpose, never a hue: blue means
+ * "bought" and orange "sold" here, and a placeholder must not look like
+ * either. The bone colour and shimmer live
  * in globals.css / motion.css (`.skeleton`) and stop under
  * `prefers-reduced-motion`.
  */

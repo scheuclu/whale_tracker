@@ -47,8 +47,8 @@ export type AvatarSize = keyof typeof PX;
  *   Without JavaScript the reader gets the monograms, never a broken icon.
  *
  * Decorative by design: every caller prints the member's name beside it.
- * Neutral by design too — party is never tinted, because blue↔red is the
- * buy/sell encoding everywhere on this site.
+ * Neutral by design too — party is never tinted; the page has no party
+ * colours.
  */
 export function MemberAvatar({
   name,

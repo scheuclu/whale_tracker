@@ -17,9 +17,10 @@
  *                is a box ticked on a scan, and the row is in no total.
  *   unknown      empty rungs, "—".
  *
- * Neutral ink rather than a hue: blue↔red is reserved for buy/sell, and the
- * action badge beside it already carries direction. Colours live in
- * `--viz-rung-*` (globals.css), validated as two-step ordinal ramps.
+ * Neutral greys, and the bracket's own rung is the mid grey, never a hue:
+ * blue and orange mean bought and sold, and the action badge beside it
+ * already carries the direction. Colours live in `--viz-rung-*` (globals.css), validated as
+ * two-step ordinal ramps.
  */
 
 import { useId } from "react";

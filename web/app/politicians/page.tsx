@@ -554,7 +554,7 @@ async function CommitteeView({ id }: { id: string }) {
                     <td
                       className={`tabular px-4 py-2 text-right ${
                         r.late_count > 0
-                          ? "font-medium text-error"
+                          ? "font-medium text-foreground"
                           : "text-muted-foreground"
                       }`}
                     >
@@ -772,7 +772,7 @@ async function LateView() {
                   <td className="tabular py-1.5 pr-3 text-right text-muted-foreground">{m.trades}</td>
                   <td
                     className={`tabular py-1.5 pr-3 text-right ${
-                      m.late_trades > 0 ? "font-medium text-error" : "text-muted-foreground"
+                      m.late_trades > 0 ? "font-medium text-foreground" : "text-muted-foreground"
                     }`}
                   >
                     {m.late_trades || "—"}
@@ -839,7 +839,7 @@ async function LateView() {
                     </div>
                   </td>
                   <td className="tabular px-4 py-2 text-right text-muted-foreground">{r.trades}</td>
-                  <td className="tabular px-4 py-2 text-right font-medium text-error">
+                  <td className="tabular px-4 py-2 text-right font-medium text-foreground">
                     {r.late_count}
                   </td>
                   <td className="tabular px-4 py-2 text-right">{share(r.late_count, r.trades)}</td>
@@ -895,7 +895,7 @@ async function LateView() {
                 </span>
                 <span className="text-xs text-muted-foreground">filed {shortDate(f.filing_date)}</span>
                 <span
-                  className="text-xs font-medium text-error"
+                  className="text-xs font-medium text-foreground"
                   title={
                     f.late.length === f.trades
                       ? "Every trade in this filing was past the deadline — its Telegram message led with how late"

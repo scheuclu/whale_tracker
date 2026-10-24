@@ -17,11 +17,17 @@ const SECTIONS = [
   { href: "/insiders", label: "Insiders", hint: "Form 4 open-market trades" },
 ];
 
-/** Status colours describe system state only — never buy/sell. */
+/**
+ * Status describes system state only — never buy/sell. A grey chip with the
+ * word in ink and a small accent (iOS Settings): a grey triangle (never an
+ * orange dot: orange is "sold"), a red diamond. Inline rather than ui.tsx's
+ * STATUS_MARK: this also renders from the client error boundary, which
+ * should not pull in the server badges. Keep the two in step.
+ */
 const TONE = {
-  neutral: { chip: "bg-muted text-ink-2", dot: "bg-muted-foreground" },
-  attention: { chip: "bg-attention-soft text-attention", dot: "bg-attention" },
-  error: { chip: "bg-error-soft text-error ring-1 ring-inset ring-error/40", dot: "bg-error rounded-[1px]! rotate-45" },
+  neutral: { chip: "bg-fill text-ink-2", dot: "bg-muted-foreground" },
+  attention: { chip: "bg-fill text-ink-2", dot: "bg-attention rounded-none! h-[7px]! w-2! [clip-path:polygon(50%_0,100%_100%,0_100%)]" },
+  error: { chip: "bg-fill text-foreground ring-1 ring-inset ring-border-strong", dot: "bg-error rounded-[1px]! rotate-45" },
 } as const;
 
 export function StatusScreen({

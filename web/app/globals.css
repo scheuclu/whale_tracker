@@ -10,8 +10,11 @@
    Apple devices get SF Pro (Inter is the fallback elsewhere), big
    confident numbers with small grey labels, grouped lists, a frosted
    sticky nav. The interface is monochrome — graphite in light mode, white
-   in dark. Blue and red are not accents: they are buy and sell, and they
-   are the only saturated colours on the page.
+   in dark. The data has one pair of hues: Apple blue is bought, Apple
+   orange is sold, and direction always also reads from position and
+   words. Because blue means "bought", no control, link or selected state
+   is ever blue. Everything else is grey, bar small status marks (a green
+   dot, a grey triangle, a red diamond) and the app icon's gold tie.
    ============================================================ */
 
 @theme inline {
@@ -52,11 +55,8 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-ok: var(--ok);
-  --color-ok-soft: var(--ok-soft);
   --color-attention: var(--attention);
-  --color-attention-soft: var(--attention-soft);
   --color-error: var(--error);
-  --color-error-soft: var(--error-soft);
 
   /* Radius scale. Tiles are generous (20px), controls 12px, chips 6px;
      pills, segmented tracks, avatars and buttons are fully round. */
@@ -111,9 +111,10 @@
   --rule: rgba(60, 60, 67, 0.16);
   --input: rgba(60, 60, 67, 0.2);
 
-  /* The interactive accent is graphite — Apple's blue is taken: it means
-     "bought". --primary is the filled button, the selected state, a link's
-     hover ink. --gold survives only as the bow tie on the app icon. */
+  /* The interactive accent is graphite — never Apple's system blue, which
+     on this site means "bought". --primary is the filled button, the
+     selected state, a link's hover ink. --gold survives only as the bow
+     tie on the app icon. */
   --primary: #1d1d1f;
   --primary-foreground: #ffffff;
   --accent: rgba(118, 118, 128, 0.16);
@@ -125,14 +126,21 @@
   --secondary-foreground: #1d1d1f;
   --muted: rgba(118, 118, 128, 0.1);
 
-  /* Status — pipeline and filing state, never buy/sell, never the accent. */
-  --ok: #24744a;
-  --ok-soft: rgba(36, 116, 74, 0.1);
-  --attention: #a34f0b;
-  --attention-soft: rgba(163, 79, 11, 0.1);
-  /* Error is plum, not red: red is "sold". Re-validated on white (DESIGN.md). */
-  --error: #8a3478;
-  --error-soft: rgba(138, 52, 120, 0.09);
+  /* Status accents — pipeline and filing state, never buy/sell, never the
+     accent. iOS Settings style: a small mark beside ink text; the word is in
+     the ink, never in these. Each tone has its own SHAPE, so none can be
+     taken for a sell (orange) or buy (blue) mark:
+       ok         green dot
+       attention  grey triangle — not orange: orange is "sold". Apple
+                  yellow was measured and rejected: ΔE 13.3 from the dark
+                  sell orange under normal vision (floor 15), 1.5:1 on white.
+       error      red diamond. Light red is Apple's high-contrast #d70015:
+                  #ff3b30 sat ΔE 14.8 from the light sell orange.
+     Non-text marks, so 3:1 against the tile is the bar — light ok 4.4,
+     attention 10.0, error 5.4; dark 8.4 / 11.2 / 5.0. */
+  --ok: #248a3d;
+  --attention: #424245;
+  --error: #d70015;
   --destructive: var(--error);
 
   /* Elevation. */
@@ -188,12 +196,9 @@
   --secondary-foreground: #f5f5f7;
   --muted: rgba(118, 118, 128, 0.2);
 
-  --ok: #5bb585;
-  --ok-soft: rgba(91, 181, 133, 0.14);
-  --attention: #f0954a;
-  --attention-soft: rgba(240, 149, 74, 0.14);
-  --error: #eaa8e4;
-  --error-soft: rgba(234, 168, 228, 0.13);
+  --ok: #30d158;
+  --attention: #d1d1d6;
+  --error: #ff453a;
 
   --elev-card: 0 0 #0000;
   --elev-card-hover: 0 0 #0000;
@@ -459,36 +464,69 @@
 /* ------------------------------------------------------------------
    Data-viz roles.
 
-   Buy/sell is a POLARITY encoding, so it uses the validated diverging
-   pair (blue <-> red) rather than the finance-convention green/red:
-   green/red measures CVD ΔE 4.1 under deuteranopia — roughly 8% of men
-   could not tell a buy bar from a sell bar. Direction is also always
-   spelled out in text, so colour never carries the meaning alone.
+   Buy/sell is APPLE BLUE and APPLE ORANGE (the user's choice of
+   2026-10-24): systemBlue for bought, systemOrange for sold, the iOS
+   light and dark values. Not green/red: that pair is CVD ΔE ~6.8 under
+   deuteranopia on these tiles, and red/green colourblind readers could
+   not separate a buy from a sell. Blue/orange is the classic CVD-safe
+   diverging pair. Hue still never carries direction alone: every mark
+   also has POSITION (diverging bars: bought left, sold right; timeline
+   and price lanes: buys above, sells below) and WORDS or ARROWS beside
+   it (legends say "Bought" / "Sold"; chips say "↗ Buy" / "↘ Sell").
 
-   v3 surfaces (white tile #ffffff, iOS grey tile #1c1c1e), dataviz
-   validator, --pairs all over buy · sell · seq:
-     light  CVD ΔE 14.2 (seq/sell, protan), normal-vision 27.7, all ≥ 3:1
-     dark   CVD ΔE 10.5 (seq/sell, deutan), normal-vision 17.9, all ≥ 3:1
-   buy/sell alone: 23.8 / 31.6 light, 19.2 / 29.0 dark — on the tiles and
-   on the canvases (#f5f5f7, #000) alike. The validator's lightness-band
-   and chroma-floor checks fail for seq by design: it is a neutral
-   single-series magnitude role, never a categorical slot.
+   Light orange is 2.5:1 on the white tile (2.3:1 on the canvas), under
+   the 3:1 non-text bar, so an orange mark ALWAYS has its value or label
+   printed next to it in text ink. Chip text uses the darker -text
+   variants below, never the mark colour.
+
+   The neutral roles stay grey, so nothing but a direction has a hue:
+   --viz-seq (a single-series quantity: volume, counts, the bracket
+   ladder, "exchange / other") is the mid grey, --viz-price (the price
+   line, a delay median) a dark grey, --viz-bench the mid grey with a
+   dash.
+
+   dataviz validate_palette.js on the v3 tiles (#ffffff, #1c1c1e):
+     buy · sell          light CVD ΔE 33.2 (protan), normal 40.2
+                         dark  CVD ΔE 33.5 (protan), normal 40.8
+     buy · sell · seq · price, --pairs all
+                         light worst CVD 16.5 (seq/sell, protan), normal
+                         18.5 (price/seq); dark worst 15.7 / 15.7
+                         (price/seq). Every grey against blue or orange:
+                         light ≥ 16.5 CVD / 21.3 normal, dark ≥ 17.0 /
+                         17.9 — no neutral reads as a direction.
+     bench               = seq's tone (ΔE 0 to it by construction), set
+                         apart by its dash and its legend entry
+     sell vs tile        2.52:1 light: WARN, relieved by the printed value
+                         or word on every orange mark
+     dark orange L 0.78  lightness-band FAIL (band 0.48–0.67): it is
+                         Apple's own dark systemOrange, 8.3:1 on the tile,
+                         and a darker one turns brown; kept by design.
+   seq and price fail the band and chroma checks by design: neutral,
+   single-series roles, never categorical slots.
    ------------------------------------------------------------------ */
 :root {
-  --viz-buy: #2a78d6;
-  --viz-sell: #d03b3b;
-  /* Single-series magnitude: graphite, like the rest of the interface.
-     11:1 on white, so a bar needs no relief label (they still carry one). */
-  --viz-seq: #3a3a3c;
+  --viz-buy: #007aff;
+  --viz-sell: #f08a00;
+  /* Text on the tinted Buy/Sell chips (and anywhere the pair is set as
+     words): 5.4:1 on the 15–16% tint over the white tile, 5.0:1 over the
+     canvas. The mark colours themselves are too light for 12px text. */
+  --viz-buy-text: #0058c4;
+  --viz-sell-text: #9a4a00;
+  /* Single-series quantity: the mid grey, 4.2:1 on white. Never a hue —
+     blue and orange mean bought and sold. */
+  --viz-seq: #7c7c80;
   --viz-track: rgba(118, 118, 128, 0.12);
   --viz-grid: #e8e8ed;
   --viz-axis: #8e8e93;
 }
 
 .dark {
-  --viz-buy: #3987e5;
-  --viz-sell: #e66767;
-  --viz-seq: #aeaeb2;
+  --viz-buy: #0a84ff;
+  --viz-sell: #ff9f0a;
+  /* 5.4:1 / 6.7:1 on the 20% / 18% tint over the #1c1c1e tile. */
+  --viz-buy-text: #5aa9ff;
+  --viz-sell-text: #ffb340;
+  --viz-seq: #909095;
   --viz-track: rgba(118, 118, 128, 0.24);
   --viz-grid: #2c2c2e;
   --viz-axis: #8e8e93;
@@ -652,8 +690,8 @@
 }
 
 /* Loading skeletons. One viewport-anchored sheen sweeps every bone at
-   once, so the page shimmers as a whole instead of bar by bar. Neutral
-   grey only: blue and red are reserved for buy and sell. */
+   once, so the page shimmers as a whole instead of bar by bar. A pale
+   grey wash, lighter than any data mark, and never a hue. */
 :root {
   --skeleton: rgba(12, 12, 17, 0.085);
   --skeleton-sheen: rgba(255, 255, 255, 0.7);
@@ -881,37 +919,9 @@
   }
 }
 
-/* In-cell magnitude bar (BarCell): a tint behind the number, anchored at the
-   column's right edge where the figures align and growing left — one common
-   baseline, no empty track, so a small value is a sliver of tint under its
-   own number rather than a grey pill. The number stays in text ink. */
-.cell-bar {
-  position: absolute;
-  inset-block: 0;
-  right: 0;
-  border-radius: 4px 1px 1px 4px;
-  pointer-events: none;
-}
-.cell-bar.bar-seq {
-  background: color-mix(in oklab, var(--viz-seq) 20%, transparent);
-}
-.cell-bar.bar-buy {
-  background: color-mix(in oklab, var(--viz-buy) 20%, transparent);
-}
-.cell-bar.bar-sell {
-  background: color-mix(in oklab, var(--viz-sell) 20%, transparent);
-}
-.dark .cell-bar.bar-seq {
-  background: color-mix(in oklab, var(--viz-seq) 24%, transparent);
-}
-.dark .cell-bar.bar-buy {
-  background: color-mix(in oklab, var(--viz-buy) 24%, transparent);
-}
-.dark .cell-bar.bar-sell {
-  background: color-mix(in oklab, var(--viz-sell) 24%, transparent);
-}
-
-/* Buy/sell split (SplitCell): the full diverging pair, 2px surface gap. */
+/* Buy/sell split (SplitCell): blue then orange, buys always first (left),
+   two capsules with a 2px surface gap; the cell prints both counts beside
+   it, so the light orange is never unlabelled. */
 .split-track {
   background: var(--viz-track);
 }
@@ -921,16 +931,20 @@
 .split-track > .bar-sell {
   background: var(--viz-sell);
 }
+/* A late count: ink figure in a hairline outline, no fill, so it never
+   reads as a tinted Buy / Sell chip. */
 .late-chip {
   color: var(--foreground);
-  background: color-mix(in srgb, var(--foreground) 7%, transparent);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
 }
 
 /* ------------------------------------------------------------------
    Home feed timeline (app/feed-list.tsx, app/bracket-glyph.tsx).
 
-   --viz-rung-*: the bracket ladder. Neutral ink, because blue<->red is
-   reserved for buy/sell. below/on
+   --viz-rung-*: the bracket ladder, a neutral quantity. The bracket's own
+   rung is the mid grey (--viz-seq), never a hue: blue and orange are
+   bought and sold, and the ladder sits beside the Buy/Sell chip on every
+   row. below/on
    validated as a two-step ordinal ramp (dataviz validate_palette.js
    --ordinal: monotone L, dL >= 0.06, light end >= 2:1 on the paper) in both
    modes. A transcribed row is not a colour any more: its rungs are drawn
@@ -941,14 +955,14 @@
 :root {
   --viz-rung-off: #e8e8ed;
   --viz-rung-below: #aeaeb2;
-  --viz-rung-on: #1d1d1f;
+  --viz-rung-on: var(--viz-seq);
   --feed-hover: color-mix(in oklab, var(--foreground) 4%, transparent);
 }
 
 .dark {
   --viz-rung-off: #3a3a3c;
   --viz-rung-below: #636366;
-  --viz-rung-on: #f5f5f7;
+  --viz-rung-on: var(--viz-seq);
   --feed-hover: color-mix(in oklab, var(--foreground) 6%, transparent);
 }
 
@@ -994,8 +1008,7 @@
 /* ------------------------------------------------------------------
    Member portraits (app/avatar.tsx).
 
-   The monogram surface is a neutral warm grey, never a party colour:
-   blue <-> red is the buy/sell encoding above. The hairline ring is an
+   The monogram surface is a neutral grey, never a party colour. The hairline ring is an
    overlay (::after) so it stays crisp on top of the photo too.
    ------------------------------------------------------------------ */
 .member-avatar {
@@ -1071,15 +1084,16 @@
   fill: var(--viz-sell);
 }
 .tl-dot.tl-other {
-  fill: var(--viz-axis);
+  fill: var(--viz-seq);
 }
 .tl-dot.tl-blank {
   fill: var(--card-solid);
 }
-/* Transcribed from a scan: hollow and dashed, the direction in the stroke. */
+/* Transcribed from a scan: hollow and dashed, the direction in the stroke
+   (and, as for every mark, in its side of the axis). */
 .tl-hollow {
   fill: none;
-  stroke-width: 1.6px;
+  stroke-width: 1.8px;
   stroke-dasharray: 2.4 1.8;
 }
 .tl-hollow.tl-buy {
@@ -1089,7 +1103,7 @@
   stroke: var(--viz-sell);
 }
 .tl-hollow.tl-other {
-  stroke: var(--viz-axis);
+  stroke: var(--viz-seq);
 }
 /* Trade date after the filing's own date: an outer hairline, as filed. */
 .tl-flag {
@@ -1109,41 +1123,47 @@
 }
 
 /* ------------------------------------------------------------------
-   Price overlay (app/price-overlay-chart.tsx). The close is a neutral
-   ink line — blue<->red is reserved for buy/sell — and the "vs SPY"
-   benchmark a recessive gray: the emphasis form (one ink, one gray),
-   so the categorical lightness/chroma bands do not apply. Measured with
-   the dataviz validator against the v3 tiles, all pairs with the buy/sell
-   pair: light worst CVD ΔE 11.6 (bench/sell, deutan), normal-vision 17.3,
-   contrast >= 3:1; dark worst CVD ΔE 10.5 (bench/sell, deutan),
-   normal-vision 17.9, contrast >= 3:1. Cluster washes are the buy/sell
-   hues at ~10%, the area-fill spec.
+   Price overlay (app/price-overlay-chart.tsx). The close is a dark grey
+   line (no hue: blue and orange are the buys and sells plotted in the
+   lanes under it); the "vs SPY" benchmark is the mid grey, dashed. Both
+   are named in the legend. Validated with buy, sell and seq in the
+   --pairs all run above (bench shares seq's tone; the dash separates it).
+
+   Cluster spans: a buying cluster is a flat blue wash with a solid blue
+   bar over its lane; a selling cluster an orange diagonal hatch with a
+   dashed orange bar. Hue and texture both tell them apart, and the legend
+   and readout say "buying" / "selling" in words.
    ------------------------------------------------------------------ */
 :root {
-  --viz-price: #1d1d1f;
-  --viz-bench: #8e8e93;
+  --viz-price: #48484a;
+  --viz-bench: var(--viz-seq);
 }
 .dark {
-  --viz-price: #f5f5f7;
-  --viz-bench: #aeaeb2;
+  --viz-price: #c1c1c6;
+  --viz-bench: var(--viz-seq);
 }
 .po-wash-buy {
   fill: var(--viz-buy);
-  fill-opacity: 0.1;
+  fill-opacity: 0.08;
 }
-.po-wash-sell {
-  fill: var(--viz-sell);
-  fill-opacity: 0.1;
+.dark .po-wash-buy {
+  fill-opacity: 0.14;
 }
-.dark .po-wash-buy,
-.dark .po-wash-sell {
-  fill-opacity: 0.16;
+.po-hatch-line {
+  stroke: var(--viz-sell);
+  stroke-opacity: 0.6;
+  stroke-width: 1.25px;
+}
+.dark .po-hatch-line {
+  stroke-opacity: 0.4;
 }
 .po-span-buy {
   fill: var(--viz-buy);
 }
 .po-span-sell {
-  fill: var(--viz-sell);
+  stroke: var(--viz-sell);
+  stroke-width: 3px;
+  stroke-dasharray: 4 3;
 }
 .po-lane-label {
   font-size: 12px;

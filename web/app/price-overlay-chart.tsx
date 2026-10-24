@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   alignToSessions,
   crosshairStops,
@@ -27,12 +27,17 @@ import { ScrollX } from "./scroll-area";
  * `/api/prices/<SYMBOL>` and drawn on the same calendar axis as the trade
  * lanes the server prepared (app/price-overlay.tsx). SVG, no chart library.
  *
- * - Price panel: the close as a 2px neutral-ink line; "vs SPY" rebases both
- *   lines to 100 on one axis (never a second scale).
- * - One lane per population, each with its own label: buys above the lane's
- *   centre line, sells below. Never pooled.
+ * - Price panel: the close as a 2px dark-grey line (no hue: blue and
+ *   orange are the trades); "vs SPY" rebases both lines to 100 on one axis
+ *   (never a second scale) and draws SPY in the mid grey, dashed.
+ * - One lane per population, each with its own label: buys (blue) above
+ *   the lane's centre line, sells (orange) below, "bought" / "sold" printed
+ *   at the lane's start. Never pooled.
  * - Shaded spans: windows where the cluster rule for that population held,
- *   washed over the price panel and marked as a bar over their own lane.
+ *   washed over the price panel and marked as a bar over their own lane. A
+ *   buying cluster is a flat blue wash and a solid blue bar; a selling
+ *   cluster an orange diagonal hatch and a dashed orange bar — hue and
+ *   texture, plus the words in the legend and the readout.
  * - The crosshair stops at every session and at every trade date that is not
  *   one; the readout gives the date, the close (or why there is none) and the
  *   trades of that date. Arrow keys walk the same stops.
@@ -224,16 +229,12 @@ export function PriceOverlayChart({ symbol, priceable, fromYear, lo, hi, lanes, 
         {status ? null : (
           <LineKey color="var(--viz-price)" label={relative ? `${symbol}, first session = 100` : `${symbol} daily close`} />
         )}
-        {relative ? <LineKey color="var(--viz-bench)" label={`${BENCH}, first session = 100`} /> : null}
+        {relative ? <LineKey color="var(--viz-bench)" dashed label={`${BENCH}, first session = 100`} /> : null}
         {(["buy", "sell"] as const)
           .filter((side) => spans.some((s) => s.side === side))
           .map((side) => (
             <span key={side} className="inline-flex items-center gap-1.5">
-              <span
-                aria-hidden
-                className="h-2.5 w-3.5 rounded-[2px]"
-                style={{ background: `color-mix(in oklab, var(--viz-${side}) 22%, transparent)` }}
-              />
+              <span aria-hidden className="h-2.5 w-3.5 rounded-[2px] ring-1 ring-inset ring-border" style={WASH_KEY[side]} />
               shaded: {side === "buy" ? "buying" : "selling"} cluster
             </span>
           ))}
@@ -318,14 +319,24 @@ export function PriceOverlayChart({ symbol, priceable, fromYear, lo, hi, lanes, 
   );
 }
 
-function LineKey({ color, label }: { color: string; label: string }) {
+function LineKey({ color, label, dashed = false }: { color: string; label: string; dashed?: boolean }) {
   return (
     <span className="inline-flex items-center gap-1.5">
-      <span aria-hidden className="h-0.5 w-3.5 rounded-full" style={{ background: color }} />
+      <span
+        aria-hidden
+        className="h-0.5 w-4 rounded-full"
+        style={{ background: dashed ? `repeating-linear-gradient(90deg, ${color} 0 4px, transparent 4px 7px)` : color }}
+      />
       <span className="text-ink-2">{label}</span>
     </span>
   );
 }
+
+/** The legend swatches for the two cluster washes: flat (buying), hatched (selling). */
+const WASH_KEY: Record<"buy" | "sell", React.CSSProperties> = {
+  buy: { background: "color-mix(in oklab, var(--viz-buy) 14%, transparent)" },
+  sell: { backgroundImage: "repeating-linear-gradient(135deg, color-mix(in oklab, var(--viz-sell) 60%, transparent) 0 1px, transparent 1px 4px)" },
+};
 
 /* --------------------------------------------------------------- the svg */
 
@@ -373,13 +384,25 @@ function OverlaySvg({
   };
   const at = active != null ? alignToSessions(active, sessions) : null;
   const activeClose = (list: Session[]) => (active == null ? null : list.find((s) => s.day === active) ?? null);
+  // Two SVGs (wide and phone) render at once, so the hatch needs its own id.
+  const hatch = `po-hatch-${useId().replace(/:/g, "")}`;
 
   return (
     <>
-      {/* Cluster washes over the price panel, under everything else. */}
+      <defs>
+        <pattern id={hatch} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <line x1="0" y1="0" x2="0" y2="6" className="po-hatch-line" />
+        </pattern>
+      </defs>
+      {/* Cluster washes over the price panel, under everything else: a
+          buying cluster flat, a selling cluster hatched. */}
       {spans.map((s, i) => {
         const { x0, w } = spanX(s);
-        return <rect key={`w${i}`} x={x0} y={priceTop} width={w} height={priceBottom - priceTop} className={`po-wash-${s.side}`} />;
+        return s.side === "buy" ? (
+          <rect key={`w${i}`} x={x0} y={priceTop} width={w} height={priceBottom - priceTop} className="po-wash-buy" />
+        ) : (
+          <rect key={`w${i}`} x={x0} y={priceTop} width={w} height={priceBottom - priceTop} fill={`url(#${hatch})`} />
+        );
       })}
 
       {/* Month gridlines across every panel; labels under the axis. */}
@@ -425,7 +448,7 @@ function OverlaySvg({
       ) : (
         <>
           {plotted.bench.length ? (
-            <path d={linePath(plotted.bench, x, y, layout.lo, layout.hi)} fill="none" stroke="var(--viz-bench)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+            <path d={linePath(plotted.bench, x, y, layout.lo, layout.hi)} fill="none" stroke="var(--viz-bench)" strokeWidth="2" strokeDasharray="5 4" strokeLinejoin="round" />
           ) : null}
           <path d={linePath(plotted.main, x, y, layout.lo, layout.hi)} fill="none" stroke="var(--viz-price)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
         </>
@@ -439,8 +462,10 @@ function OverlaySvg({
           <g key={lane.source}>
             {laneSpans.map((s, i) => {
               const { x0, w } = spanX(s);
-              return (
-                <rect key={i} x={x0} y={lane.top - (s.side === "buy" ? 7 : 3)} width={w} height={3} rx={1.5} className={`po-span-${s.side}`} />
+              return s.side === "buy" ? (
+                <rect key={i} x={x0} y={lane.top - 7} width={w} height={3} rx={1.5} className="po-span-buy" />
+              ) : (
+                <line key={i} x1={x0} x2={x0 + w} y1={lane.top - 1.5} y2={lane.top - 1.5} className="po-span-sell" />
               );
             })}
             <text x={plotLeft} y={lane.top - 10} className="po-lane-label">
@@ -583,7 +608,7 @@ function Tooltip({ readout, at, width }: { readout: Readout; at: { left: number;
             <span
               aria-hidden
               className="mt-[5px] size-2 shrink-0 rounded-full"
-              style={{ background: l.side === "buy" ? "var(--viz-buy)" : l.side === "sell" ? "var(--viz-sell)" : "var(--viz-axis)" }}
+              style={{ background: l.side === "buy" ? "var(--viz-buy)" : l.side === "sell" ? "var(--viz-sell)" : "var(--viz-seq)" }}
             />
           ) : null}
           <span className="min-w-0">{l.text}</span>

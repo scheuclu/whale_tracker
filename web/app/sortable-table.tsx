@@ -197,22 +197,24 @@ export function BarCell({
 }
 
 /**
- * The bar tints: a step quieter than a chart mark (13% light, 17% dark), so a
- * column of bars reads as texture behind the figures rather than as a second,
- * louder number. The hues are the `--viz-*` roles; only the strength is set
- * here.
+ * The bar tints: a step quieter than a chart mark, so a column of bars reads
+ * as texture behind the figures rather than as a second, louder number. The
+ * colours are the `--viz-*` roles (a buy or sell column is named in its
+ * header; a plain quantity takes the mid grey, never blue or orange); only
+ * the strength is set here.
  */
 const BAR_TINT = {
-  seq: "bg-[color-mix(in_oklab,var(--viz-seq)_13%,transparent)] dark:bg-[color-mix(in_oklab,var(--viz-seq)_17%,transparent)]",
-  buy: "bg-[color-mix(in_oklab,var(--viz-buy)_13%,transparent)] dark:bg-[color-mix(in_oklab,var(--viz-buy)_17%,transparent)]",
-  sell: "bg-[color-mix(in_oklab,var(--viz-sell)_13%,transparent)] dark:bg-[color-mix(in_oklab,var(--viz-sell)_17%,transparent)]",
+  seq: "bg-[color-mix(in_oklab,var(--viz-seq)_16%,transparent)] dark:bg-[color-mix(in_oklab,var(--viz-seq)_22%,transparent)]",
+  buy: "bg-[color-mix(in_oklab,var(--viz-buy)_14%,transparent)] dark:bg-[color-mix(in_oklab,var(--viz-buy)_22%,transparent)]",
+  sell: "bg-[color-mix(in_oklab,var(--viz-sell)_18%,transparent)] dark:bg-[color-mix(in_oklab,var(--viz-sell)_22%,transparent)]",
 } as const;
 
 /**
  * Buys and sells, printed as "12 / 30" with a two-segment bar after it:
- * the buy share in the buy colour, the sell share in the sell colour, a
- * surface gap between. The header names the order, the screen-reader text
- * names both counts, and colour never carries the direction alone.
+ * the buy share in blue on the left, the sell share in orange on the right,
+ * two capsules with a surface gap between. The header names the order, the
+ * screen-reader text names both counts, and hue never carries the direction
+ * alone.
  */
 export function SplitCell({ buys, sells, className }: { buys: number; sells: number; className?: string }) {
   const total = buys + sells;
@@ -230,11 +232,11 @@ export function SplitCell({ buys, sells, className }: { buys: number; sells: num
         </span>
         <span
           aria-hidden
-          className="split-track flex h-1.5 w-10 shrink-0 gap-[2px] overflow-hidden rounded-[2px]"
+          className="split-track flex h-1.5 w-10 shrink-0 gap-[2px] overflow-hidden rounded-full"
           title={total ? `${Math.round(buyPct)}% buys` : "no buys or sells"}
         >
-          {buys ? <span className="bar-buy block h-full rounded-[1px]" style={{ flexGrow: buys }} /> : null}
-          {sells ? <span className="bar-sell block h-full rounded-[1px]" style={{ flexGrow: sells }} /> : null}
+          {buys ? <span className="bar-buy block h-full rounded-full" style={{ flexGrow: buys }} /> : null}
+          {sells ? <span className="bar-sell block h-full rounded-full" style={{ flexGrow: sells }} /> : null}
         </span>
       </span>
     </td>
@@ -242,9 +244,9 @@ export function SplitCell({ buys, sells, className }: { buys: number; sells: num
 }
 
 /**
- * The late count: a quiet chip when there are any, a dash when none. Not
- * red — red is the sell colour on this dashboard — and a late count is a
- * reporting fact, not an alarm.
+ * The late count: an ink figure in a hairline outline when there are any, a
+ * dash when none. No colour: a late count is a reporting fact, not an alarm,
+ * and a tinted chip would read as a Buy / Sell chip.
  */
 export function LateCell({ count, of, className }: { count: number; of?: number; className?: string }) {
   return (
