@@ -199,20 +199,33 @@ export function GetAlertsPopover({
           clusters,
         }),
       });
-      const data = (await res.json()) as { message?: string; error?: string };
+      const data = (await res.json()) as {
+        message?: string;
+        error?: string;
+        status?: string;
+        code?: string;
+      };
+      trackEvent("alert_email_subscribed", {
+        from: normId ?? "global",
+        status: res.ok ? (data.status ?? "ok") : (data.code ?? "error"),
+        members: members.length,
+        tickers: tickers.length,
+        clusters,
+      });
       if (res.ok) {
-        trackEvent("alert_email_subscribed", {
-          from: normId ?? "global",
-          members: members.length,
-          tickers: tickers.length,
-          clusters,
-        });
         setNotice(data.message ?? "Check your inbox to confirm your daily alert subscription.");
         setEmail("");
       } else {
         setNotice(data.error ?? "Saved to your device watchlist.");
       }
     } catch {
+      trackEvent("alert_email_subscribed", {
+        from: normId ?? "global",
+        status: "network_error",
+        members: members.length,
+        tickers: tickers.length,
+        clusters,
+      });
       setNotice("Saved to your device watchlist.");
     } finally {
       setSubmitting(false);

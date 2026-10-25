@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Bell, Check, Mail, Plus, Sparkles, Star, Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
@@ -21,17 +21,27 @@ export interface ManagedSubscriptionProps {
 export function WatchlistManager({
   token,
   initialSub,
+  statusCode,
   statusNotice,
   emailEnabled,
 }: {
   token?: string;
   initialSub?: ManagedSubscriptionProps | null;
+  statusCode?: string | null;
   statusNotice?: string | null;
   emailEnabled: boolean;
 }) {
   const { state, mounted, toggle, clear } = useWatchlist();
   const [addInput, setAddInput] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (statusCode === "verified") {
+      trackEvent("alert_email_verified");
+    } else if (statusCode === "unsubscribed") {
+      trackEvent("alert_unsubscribed", { source: "email_link" });
+    }
+  }, [statusCode]);
 
   // Email subscribe / preferences state
   const [email, setEmail] = useState(initialSub?.email ?? "");
@@ -78,22 +88,37 @@ export function WatchlistManager({
           weeklyDigest,
         }),
       });
-      const data = (await res.json()) as { message?: string; error?: string; status?: string };
+      const data = (await res.json()) as {
+        message?: string;
+        error?: string;
+        status?: string;
+        code?: string;
+      };
+      trackEvent("alert_email_subscribed", {
+        from: "watchlist_page",
+        status: res.ok ? (data.status ?? "ok") : (data.code ?? "error"),
+        members: state.members.length,
+        tickers: state.tickers.length,
+        clusters,
+        weeklyDigest,
+      });
       if (!res.ok) {
         setFeedback({ tone: "err", text: data.error ?? "Could not subscribe right now." });
       } else {
-        trackEvent("alert_email_subscribed", {
-          members: state.members.length,
-          tickers: state.tickers.length,
-          clusters,
-          weeklyDigest,
-        });
         setFeedback({
           tone: "ok",
           text: data.message ?? "Check your inbox to confirm your daily alert subscription.",
         });
       }
     } catch {
+      trackEvent("alert_email_subscribed", {
+        from: "watchlist_page",
+        status: "network_error",
+        members: state.members.length,
+        tickers: state.tickers.length,
+        clusters,
+        weeklyDigest,
+      });
       setFeedback({ tone: "err", text: "Network error while subscribing." });
     } finally {
       setSubmitting(false);
