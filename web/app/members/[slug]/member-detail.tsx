@@ -126,7 +126,7 @@ export async function MemberDetail({
       <MemberTimeline member={member} />
 
       <section>
-        <SectionTitle>Disclosed volume range</SectionTitle>
+        <SectionTitle kicker="Bracket Interval">Disclosed volume range</SectionTitle>
         <Card>
           <VolumeRange
             min={detail.volume_min}
@@ -144,7 +144,7 @@ export async function MemberDetail({
 
       <section className="grid gap-8 lg:grid-cols-2 lg:gap-4">
         <div className="flex flex-col [&>:last-child]:flex-1">
-          <SectionTitle>Most traded by volume</SectionTitle>
+          <SectionTitle kicker="Top Symbols">Most traded by volume</SectionTitle>
           <Card>
             <MagnitudeBars
               data={tickers.slice(0, 12).map((r) => ({
@@ -166,7 +166,7 @@ export async function MemberDetail({
           </Card>
         </div>
         <div className="flex flex-col [&>:last-child]:flex-1">
-          <SectionTitle>Buy / sell by ticker</SectionTitle>
+          <SectionTitle kicker="Direction Split">Buy / sell by ticker</SectionTitle>
           <Card>
             <DivergingSplit
               unit="trades, by direction"
@@ -185,6 +185,7 @@ export async function MemberDetail({
 
       <section>
         <SectionTitle
+          kicker="Complete Ledger"
           right={
             <div className="flex items-center gap-2">
               <Segmented
@@ -245,6 +246,7 @@ function MemberSectors({
   return (
     <section>
       <SectionTitle
+        kicker="Industry Exposure"
         right={<span className="text-muted-foreground">Trade count · disclosed range</span>}
       >
         By sector
@@ -335,6 +337,7 @@ function MemberCommittees({ seats }: { seats: CommitteeSeatRow[] }) {
   return (
     <section>
       <SectionTitle
+        kicker="Legislative Assignments"
         right={
           <span className="text-muted-foreground">
             Current Congress · {groups.size} committee{groups.size === 1 ? "" : "s"}

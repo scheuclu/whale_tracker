@@ -45,11 +45,11 @@ export default async function SearchPage({
   return (
     <div className={PAGE_STACK}>
       <PageHeader eyebrow="Across Congress and SEC Form 4" title="Search" subtitle="Members of Congress, the tickers they trade, and SEC Form 4 insider issuers.">
-        <form method="get" action="/search" role="search" className="flex max-w-xl items-center gap-2">
+        <form method="get" action="/search" role="search" className="flex max-w-xl items-center gap-2.5">
           <label className="relative min-w-0 flex-1">
             <span className="sr-only">Search members, tickers and insider issuers</span>
             <Search
-              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+              className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
               aria-hidden
             />
             <input
@@ -59,10 +59,10 @@ export default async function SearchPage({
               maxLength={QUERY_MAX}
               placeholder="Search members, tickers, issuers"
               autoFocus={!q}
-              className={cn(FIELD, "h-10 pl-9 pr-3 text-sm")}
+              className={cn(FIELD, "h-11 rounded-full pl-10 pr-4 text-[14px]")}
             />
           </label>
-          <button type="submit" className={cn(BUTTON_PRIMARY, "h-10 shrink-0 px-4 text-sm")}>
+          <button type="submit" className={cn(BUTTON_PRIMARY, "h-11 shrink-0 rounded-full px-5 text-[14px]")}>
             Search
           </button>
         </form>
@@ -108,6 +108,7 @@ async function Results({ q }: { q: string }) {
       node: (
         <section key="members" aria-labelledby="search-members">
           <SectionTitle
+            kicker="Congress"
             right={
               more(members.length) ?? (
                 <span className="text-[12px] text-muted-foreground">
@@ -159,6 +160,7 @@ async function Results({ q }: { q: string }) {
       node: (
         <section key="tickers" aria-labelledby="search-tickers">
           <SectionTitle
+            kicker="Symbols"
             right={
               more(tickers.length) ?? (
                 <span className="text-[12px] text-muted-foreground">House &amp; Senate disclosures</span>
@@ -192,6 +194,7 @@ async function Results({ q }: { q: string }) {
       node: (
         <section key="issuers" aria-labelledby="search-issuers">
           <SectionTitle
+            kicker="Corporate"
             right={
               more(issuers.length) ?? <span className="text-[12px] text-muted-foreground">SEC Form 4, kept apart</span>
             }

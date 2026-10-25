@@ -106,7 +106,7 @@ export function FilterBar({ filters, ignored }: { filters: TransactionFilters; i
             aria-hidden
           />
         </summary>
-        <div className="absolute inset-x-0 top-full z-40 mt-2 rounded-tile bg-popover p-4 shadow-popover sm:p-5">
+        <div className="absolute inset-x-0 top-full z-40 mt-2.5 rounded-[22px] bg-popover/95 backdrop-blur-2xl p-4 shadow-popover ring-1 ring-black/[0.08] dark:ring-white/[0.12] sm:p-5">
           <form
             method="get"
             action="/"

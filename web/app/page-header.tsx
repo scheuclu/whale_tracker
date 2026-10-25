@@ -54,20 +54,24 @@ export function PageHeader({
 }) {
   return (
     <header className="space-y-6 sm:space-y-8">
-      <div className="space-y-3">
+      <div className="apple-headline-reveal space-y-3.5">
         {back || share ? (
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             {back ? <BackLink href={back.href} label={back.label} /> : <span />}
             {share}
           </div>
         ) : null}
         <div className="flex flex-wrap items-end justify-between gap-x-10 gap-y-4">
           <div className="min-w-0 max-w-full">
-            {eyebrow ? <div className="kicker mb-1">{eyebrow}</div> : null}
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            {eyebrow ? (
+              <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-fill/75 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground ring-1 ring-black/[0.04] dark:ring-white/[0.08]">
+                {eyebrow}
+              </div>
+            ) : null}
+            <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2">
               <h1
                 className={cn(
-                  "display min-w-0 break-words text-[34px] leading-[1.1] text-foreground sm:text-[48px] sm:leading-[1.06]",
+                  "display min-w-0 break-words text-balance text-[36px] leading-[1.06] tracking-[-0.032em] text-foreground sm:text-[52px] sm:leading-[1.03]",
                   titleClassName
                 )}
               >
@@ -76,7 +80,7 @@ export function PageHeader({
               {badges}
             </div>
             {subtitle ? (
-              <p className="dek mt-2 max-w-[62ch] text-[17px] leading-[1.42] sm:mt-3 sm:text-[19px] sm:leading-[1.4]">{subtitle}</p>
+              <p className="dek mt-2.5 max-w-[64ch] text-[17px] leading-[1.46] sm:mt-3.5 sm:text-[19px] sm:leading-[1.44]">{subtitle}</p>
             ) : null}
           </div>
           {aside ? <div className="w-full min-w-0 sm:w-auto">{aside}</div> : null}
@@ -87,14 +91,14 @@ export function PageHeader({
   );
 }
 
-/** "‹ All members": the way back to a detail page's list, iOS-style. */
+/** "‹ All members": the way back to a detail page's list, iOS-style capsule button. */
 export function BackLink({ href, label }: { href: string; label: string }) {
   return (
     <a
       href={href}
-      className="-ml-1 inline-flex items-center gap-0.5 rounded-md pr-1 text-[15px] font-medium text-ink-2 transition-colors duration-(--dur) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      className="inline-flex items-center gap-1 rounded-full bg-fill/85 py-1 pl-2 pr-3 text-[13px] font-medium text-ink-2 ring-1 ring-black/[0.04] transition-all duration-(--dur) hover:bg-foreground/[0.09] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:ring-white/[0.08]"
     >
-      <ChevronLeft className="size-5" strokeWidth={2.25} aria-hidden />
+      <ChevronLeft className="size-4" strokeWidth={2.4} aria-hidden />
       <span className="first-letter:uppercase">{label}</span>
     </a>
   );

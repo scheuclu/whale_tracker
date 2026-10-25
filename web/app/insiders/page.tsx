@@ -256,7 +256,7 @@ export default async function InsidersPage({
       </PageHeader>
 
       <section>
-        <SectionTitle right={<span>last 30 days · 3+ insiders</span>}>
+        <SectionTitle kicker="Cluster Activity" right={<span>last 30 days · 3+ insiders</span>}>
           Insiders converging
         </SectionTitle>
         <Card>
@@ -319,7 +319,7 @@ export default async function InsidersPage({
 
       <section className="grid gap-x-6 gap-y-7 lg:grid-cols-2">
         <div>
-          <SectionTitle>Most bought</SectionTitle>
+          <SectionTitle kicker="Purchase Volume">Most bought</SectionTitle>
           <Card>
             <MagnitudeBars
               note="shares × reported price"
@@ -337,7 +337,7 @@ export default async function InsidersPage({
           </Card>
         </div>
         <div>
-          <SectionTitle>Most sold</SectionTitle>
+          <SectionTitle kicker="Sale Volume">Most sold</SectionTitle>
           <Card>
             <MagnitudeBars
               note="shares × reported price"
@@ -359,7 +359,7 @@ export default async function InsidersPage({
       </div>
 
       <section id="all-issuers" className="table-anchor">
-        <SectionTitle>All issuers</SectionTitle>
+        <SectionTitle kicker="Complete Directory">All issuers</SectionTitle>
         {table.length ? (
           <>
             <ResponsiveTable>
@@ -432,6 +432,7 @@ export default async function InsidersPage({
 
       <section>
         <SectionTitle
+          kicker="Live Filings"
           right={
             <PillLinks
               label="Direction"
@@ -498,13 +499,13 @@ function InsiderSectors({ sectors }: { sectors: InsiderSectorRow[] }) {
   const issuersKnown = classified.reduce((n, s) => n + s.issuers, 0);
   return (
     <section>
-      <SectionTitle right={<span>same window as above</span>}>
+      <SectionTitle kicker="Industry Breakdown" right={<span>same window as above</span>}>
         By sector
       </SectionTitle>
       {classified.length ? (
         <div className="grid gap-6 lg:grid-cols-2">
           <Card>
-            <h3 className="mb-3 text-[13px] font-semibold text-muted-foreground">
+            <h3 className="apple-section-kicker mb-3">
               Bought
             </h3>
             {list("buy_value").length ? (
@@ -514,7 +515,7 @@ function InsiderSectors({ sectors }: { sectors: InsiderSectorRow[] }) {
             )}
           </Card>
           <Card>
-            <h3 className="mb-3 text-[13px] font-semibold text-muted-foreground">
+            <h3 className="apple-section-kicker mb-3">
               Sold
             </h3>
             {list("sell_value").length ? (
@@ -718,7 +719,7 @@ async function IssuerDetail({ ticker }: { ticker: string }) {
       <PriceOverlay ticker={issuer.ticker ?? ticker} focus="insider" />
 
       <section>
-        <SectionTitle right={<span>{plural(insiders.length, "insider")} · shares × reported price</span>}>Who traded</SectionTitle>
+        <SectionTitle kicker="Corporate Filers" right={<span>{plural(insiders.length, "insider")} · shares × reported price</span>}>Who traded</SectionTitle>
         <GroupedList>
           {insiders.map((p) => (
             <ValueRow
@@ -750,7 +751,7 @@ async function IssuerDetail({ ticker }: { ticker: string }) {
       </section>
 
       <section>
-        <SectionTitle>Every stored trade</SectionTitle>
+        <SectionTitle kicker="Complete Ledger">Every stored trade</SectionTitle>
         <p className="mb-1 pl-1 text-[13px] text-muted-foreground">
           Open-market buys and sells from filings that cleared the $50k floor.
         </p>
@@ -795,6 +796,7 @@ async function MembersInTicker({ ticker }: { ticker: string }) {
   return (
     <section>
       <SectionTitle
+        kicker="Congressional Overlap"
         right={
           <span>last {CROSS_WINDOW_DAYS} days · House &amp; Senate disclosures</span>
         }

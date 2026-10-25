@@ -49,16 +49,16 @@ export function Disclosure({
         className
       )}
     >
-      {lead ? <p className={size === "md" ? "text-[15px] leading-normal text-ink-2" : undefined}>{lead}</p> : null}
+      {lead ? <p className={size === "md" ? "text-[15px] leading-relaxed text-ink-2" : undefined}>{lead}</p> : null}
       {children ? (
-        <details className={cn("group/disclosure", lead ? (size === "md" ? "mt-1.5" : "mt-1") : undefined)}>
+        <details className={cn("group/disclosure", lead ? (size === "md" ? "mt-2.5" : "mt-2") : undefined)}>
           <summary
             className={cn(
-              "inline-flex cursor-pointer select-none list-none items-center gap-1 rounded-sm py-0.5 pr-1 font-medium text-ink-2",
-              "underline decoration-transparent underline-offset-[3px] transition-colors duration-150 ease-out hover:text-foreground hover:decoration-current motion-reduce:transition-none",
+              "inline-flex cursor-pointer select-none list-none items-center gap-1 rounded-full bg-fill/85 px-3 py-1 font-medium text-ink-2 ring-1 ring-black/[0.04] dark:ring-white/[0.08]",
+              "transition-all duration-150 ease-out hover:bg-foreground/[0.09] hover:text-foreground motion-reduce:transition-none",
               "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
               "[&::-webkit-details-marker]:hidden",
-              size === "sm" ? "text-[13px]" : "text-[14px]"
+              size === "sm" ? "text-[12px]" : "text-[13px]"
             )}
           >
             <ChevronRight
@@ -69,8 +69,8 @@ export function Disclosure({
           </summary>
           <div
             className={cn(
-              "mt-2 space-y-2",
-              size === "sm" ? "pl-[18px]" : "pl-[18px] text-muted-foreground"
+              "mt-2.5 space-y-2.5 rounded-[16px] bg-fill/50 p-4 ring-1 ring-black/[0.04] dark:ring-white/[0.07]",
+              size === "sm" ? "text-[12.5px]" : "text-[13.5px] text-muted-foreground"
             )}
           >
             {children}

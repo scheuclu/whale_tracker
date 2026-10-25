@@ -87,6 +87,7 @@ export function OutcomeSummarySection({ summary: s }: { summary: OutcomeSummary 
   return (
     <section aria-labelledby="outcomes-title">
       <SectionTitle
+        kicker="Post-Alert Move"
         right={
           s.available ? (
             <span className="text-[11px] text-muted-foreground">

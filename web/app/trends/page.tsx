@@ -251,7 +251,7 @@ export default async function TrendsPage({
       </PageHeader>
 
       <section>
-        <SectionTitle right={<span className="text-[11px] text-muted-foreground">rows disclosed, by trade month</span>}>
+        <SectionTitle kicker="Monthly Activity" right={<span className="text-[11px] text-muted-foreground">rows disclosed, by trade month</span>}>
           Trades by direction and party
         </SectionTitle>
         <Card>
@@ -298,7 +298,7 @@ export default async function TrendsPage({
       </section>
 
       <section>
-        <SectionTitle right={<span className="text-[11px] text-muted-foreground">days from trade to filing, by trade month</span>}>
+        <SectionTitle kicker="Reporting Compliance" right={<span className="text-[11px] text-muted-foreground">days from trade to filing, by trade month</span>}>
           Disclosure delay
         </SectionTitle>
         <Card>
@@ -361,8 +361,8 @@ export default async function TrendsPage({
       </section>
 
       <section className="grid gap-6 lg:grid-cols-2">
-        <div>
-          <SectionTitle right={<span className="text-[12px] text-muted-foreground">members gained, month on month</span>}>
+        <div className="min-w-0">
+          <SectionTitle kicker="Momentum" right={<span className="text-[12px] text-muted-foreground">members gained, month on month</span>}>
             Rising tickers
           </SectionTitle>
           <Card>
@@ -411,8 +411,8 @@ export default async function TrendsPage({
           </Card>
         </div>
 
-        <div>
-          <SectionTitle right={<span className="text-[11px] text-muted-foreground">shares × reported price, by trade month</span>}>
+        <div className="min-w-0">
+          <SectionTitle kicker="Corporate Form 4" right={<span className="text-[11px] text-muted-foreground">shares × reported price, by trade month</span>}>
             Insider buying and selling
           </SectionTitle>
           <Card>
@@ -461,7 +461,7 @@ export default async function TrendsPage({
       </section>
 
       <section>
-        <SectionTitle right={<span className="text-[11px] text-muted-foreground">paper filings, by filing month</span>}>
+        <SectionTitle kicker="Paper Filings" right={<span className="text-[11px] text-muted-foreground">paper filings, by filing month</span>}>
           Scans transcribed
         </SectionTitle>
         <Card>

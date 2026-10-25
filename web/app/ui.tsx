@@ -154,8 +154,8 @@ export function ActionBadge({ action }: { action: string }) {
   const t = ACTION_TONE[action] ?? ACTION_TONE.exchange;
   const Glyph = t.glyph;
   return (
-    <span className={cn(CHIP, "gap-0.5 pl-1.5 pr-2 font-semibold", t.cls)}>
-      <Glyph className="size-3 shrink-0" strokeWidth={2.25} aria-hidden />
+    <span className={cn(CHIP, "rounded-full gap-0.5 pl-1.5 pr-2.5 font-semibold", t.cls)}>
+      <Glyph className="size-3 shrink-0" strokeWidth={2.4} aria-hidden />
       {ACTION_LABEL[action] ?? action}
     </span>
   );
@@ -307,9 +307,9 @@ export function TickerChip({
       className={cn(
         CHIP,
         FOCUS_RING,
-        "bg-fill px-2 text-[12.5px] font-semibold tracking-[0.005em] text-foreground",
-        "transition-[background-color,color] duration-(--dur) ease-(--ease-out)",
-        "hover:bg-accent active:bg-foreground/[0.2]"
+        "rounded-[7px] bg-fill/85 px-2.5 text-[12.5px] font-semibold tracking-[0.005em] text-foreground ring-1 ring-black/[0.05] dark:ring-white/[0.08]",
+        "transition-all duration-(--dur) ease-(--ease-out)",
+        "hover:bg-accent hover:ring-black/[0.1] dark:hover:ring-white/[0.16] active:bg-foreground/[0.2]"
       )}
     >
       {ticker}
@@ -586,43 +586,43 @@ export function Amount({
 
 /** A secondary button / link-button: a grey capsule. */
 export const BUTTON = cn(
-  "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full",
-  "bg-fill px-3.5 text-[13px] font-medium text-foreground",
-  "transition-[background-color,color] duration-(--dur) ease-(--ease-out)",
-  "hover:bg-foreground/[0.1] active:bg-foreground/[0.16]",
+  "inline-flex h-8.5 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full",
+  "bg-fill/85 px-4 text-[13px] font-medium text-foreground ring-1 ring-black/[0.05] dark:ring-white/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] dark:shadow-none",
+  "transition-all duration-(--dur) ease-(--ease-out)",
+  "hover:bg-foreground/[0.1] active:scale-[0.98] active:bg-foreground/[0.16]",
   FOCUS_RING
 );
 /** The one filled button in a form: its submit. A graphite capsule. */
 export const BUTTON_PRIMARY = cn(
-  "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-primary px-4",
-  "text-[13px] font-semibold text-primary-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_1px_2px_rgba(0,0,0,0.1)]",
-  "transition-all duration-(--dur) ease-(--ease-out) hover:opacity-90 active:opacity-80",
+  "inline-flex h-8.5 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-primary px-4.5",
+  "text-[13px] font-semibold text-primary-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_2px_6px_rgba(0,0,0,0.14)]",
+  "transition-all duration-(--dur) ease-(--ease-out) hover:opacity-92 active:scale-[0.98] active:opacity-85",
   FOCUS_RING
 );
 
 /** Text inputs and selects: one height, radius, hover and focus treatment. */
 export const FIELD = cn(
-  "h-9 w-full min-w-0 rounded-control border-0 bg-[var(--field)] px-3 text-[14px] text-foreground",
-  "transition-[background-color,box-shadow] duration-(--dur) ease-(--ease-out) dark:[color-scheme:dark]",
-  "hover:bg-foreground/[0.09]",
+  "h-9 w-full min-w-0 rounded-control border border-black/[0.05] dark:border-white/[0.08] bg-[var(--field)] px-3 text-[14px] text-foreground shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)]",
+  "transition-all duration-(--dur) ease-(--ease-out) dark:[color-scheme:dark]",
+  "hover:bg-foreground/[0.09] focus:bg-card",
   "placeholder:text-muted-foreground"
 );
 
 /** One option of a segmented control (see `Segmented`). */
 export function segmentClass(active: boolean) {
   return cn(
-    "inline-flex h-7 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[7px] px-3 text-[13px] font-medium",
-    "transition-[background-color,color,box-shadow] duration-(--dur) ease-(--ease-out)",
+    "inline-flex h-7 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-[13px] sm:px-3.5",
+    "transition-all duration-(--dur) ease-(--ease-out)",
     FOCUS_RING,
     "focus-visible:outline-offset-1",
     active
-      ? "bg-card text-foreground shadow-segment dark:bg-[#3a3a3c] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_1px_2px_rgba(0,0,0,0.4)]"
-      : "text-ink-2 hover:text-foreground active:bg-foreground/[0.06]"
+      ? "bg-card font-semibold text-foreground shadow-segment ring-1 ring-black/[0.04] dark:bg-[#3a3a3c] dark:ring-white/[0.08] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_1px_3px_rgba(0,0,0,0.45)]"
+      : "font-medium text-ink-2 hover:text-foreground active:bg-foreground/[0.06]"
   );
 }
 
 /** The segmented control's track. */
-export const SEGMENT_TRACK = "inline-flex max-w-full items-center gap-0.5 rounded-[9px] bg-fill p-0.5 border border-black/[0.04] dark:border-white/[0.06]";
+export const SEGMENT_TRACK = "inline-flex max-w-full overflow-x-auto scrollbar-none items-center gap-0.5 rounded-full bg-fill/90 p-[3px] shadow-[inset_0_1px_2px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(0,0,0,0.35)] border border-black/[0.04] dark:border-white/[0.07]";
 
 /**
  * A segmented control of links: the state is the URL, so each option is a

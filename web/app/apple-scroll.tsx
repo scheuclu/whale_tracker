@@ -1,33 +1,32 @@
 "use client";
 
 import React, { useEffect } from "react";
+import { usePathname } from "next/navigation";
+
+const REVEAL_SELECTOR = ".apple-headline-reveal, .apple-card-reveal, .apple-stagger-item";
 
 /**
- * AppleScrollObserver coordinates Apple-style scroll interactions:
- * - Headlines and content tiles glide smoothly into position as you scroll there.
- * - Sections snap cleanly into place with proximity snap.
+ * AppleScrollObserver coordinates Apple-style scroll interactions across all routes:
+ * - Headlines, Bento cards, and staggered tiles glide smoothly into position on scroll.
+ * - Automatically observes newly mounted elements across client-side route transitions.
  * - Respects prefers-reduced-motion accessibility preferences.
  */
 export function AppleScrollObserver({
   children,
 }: {
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }) {
+  const pathname = usePathname();
+
   useEffect(() => {
-    // Check if user prefers reduced motion
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (prefersReducedMotion) {
       document.documentElement.classList.remove("apple-reveal-active");
       return;
     }
 
-    // Enable the Apple reveal motion styles
     document.documentElement.classList.add("apple-reveal-active");
 
-    const revealSelector = ".apple-headline-reveal, .apple-card-reveal, .apple-stagger-item";
-    const revealElements = Array.from(document.querySelectorAll<HTMLElement>(revealSelector));
-
-    // IntersectionObserver for elements moving smoothly into position
     const revealObserver = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -38,26 +37,39 @@ export function AppleScrollObserver({
         }
       },
       {
-        threshold: 0.08,
-        rootMargin: "0px 0px -40px 0px",
+        threshold: 0.06,
+        rootMargin: "0px 0px -32px 0px",
       }
     );
 
-    for (const el of revealElements) {
-      // Check if already in viewport on mount (e.g. above the fold)
-      const rect = el.getBoundingClientRect();
-      if (rect.top < window.innerHeight - 40 && rect.bottom > 0) {
-        el.classList.add("is-revealed");
-      } else {
-        revealObserver.observe(el);
+    const scanAndObserve = () => {
+      const elements = document.querySelectorAll<HTMLElement>(REVEAL_SELECTOR);
+      for (const el of elements) {
+        if (el.classList.contains("is-revealed")) continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.top < window.innerHeight - 24 && rect.bottom > 0) {
+          el.classList.add("is-revealed");
+        } else {
+          revealObserver.observe(el);
+        }
       }
-    }
+    };
+
+    scanAndObserve();
+
+    const mutationObserver = new MutationObserver(() => {
+      scanAndObserve();
+    });
+    mutationObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
 
     return () => {
+      mutationObserver.disconnect();
       revealObserver.disconnect();
-      document.documentElement.classList.remove("apple-reveal-active");
     };
-  }, []);
+  }, [pathname]);
 
-  return <div className="apple-page-container w-full">{children}</div>;
+  return children ? <>{children}</> : null;
 }

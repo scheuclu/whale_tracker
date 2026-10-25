@@ -50,7 +50,10 @@ export default async function PipelinePage() {
       </PageHeader>
 
       <section aria-labelledby="coverage-title">
-        <SectionTitle right={<span className="text-[12px] text-muted-foreground">three sources</span>}>
+        <SectionTitle
+          kicker="Data Sources"
+          right={<span className="text-[12px] text-muted-foreground">three sources</span>}
+        >
           <span id="coverage-title">Coverage</span>
         </SectionTitle>
         <Card className="p-0 sm:p-0">
@@ -134,7 +137,7 @@ export default async function PipelinePage() {
 
       <section className="grid gap-x-6 gap-y-7 lg:grid-cols-2">
         <div>
-          <SectionTitle>Filings by status</SectionTitle>
+          <SectionTitle kicker="Ingestion Breakdown">Filings by status</SectionTitle>
           <Card className="space-y-2">
             {p.byStatus.map((s) => (
               <div key={`${s.chamber}-${s.status}`} className="flex items-center gap-3 text-[13px]">
@@ -165,6 +168,7 @@ export default async function PipelinePage() {
 
         <div>
           <SectionTitle
+            kicker="Parser & Vision"
             right={
               <a href="/scans" className="text-[12px] text-muted-foreground underline-offset-2 hover:text-primary hover:underline">
                 inspect scans
@@ -214,6 +218,7 @@ export default async function PipelinePage() {
 
       <section aria-labelledby="alerts-sent-title">
         <SectionTitle
+          kicker="Notifications"
           right={
             <a
               href="/alerts"
@@ -292,7 +297,7 @@ export default async function PipelinePage() {
       ) : null}
 
       <section aria-labelledby="runs-title">
-        <SectionTitle>
+        <SectionTitle kicker="Execution Log">
           <span id="runs-title">Recent runs</span>
         </SectionTitle>
         {p.runs.length ? (

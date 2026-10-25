@@ -19,6 +19,7 @@ export function TickerMembers({ ticker, members }: { ticker: string; members: Ti
   return (
     <section>
       <SectionTitle
+        kicker="Congressional Holders"
         right={
           <span>
             {members.length} member{members.length === 1 ? "" : "s"} · by est. volume · disclosed range

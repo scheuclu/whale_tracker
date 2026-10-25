@@ -63,20 +63,20 @@ export function StatTile({
     <div
       data-stat-tile
       className={cn(
-        "viz-rise group/tile flex h-full min-w-0 flex-col rounded-tile bg-card/85 backdrop-blur-xl p-4 shadow-card border border-black/[0.05] dark:border-white/[0.09] max-[359px]:px-3.5 sm:px-5 sm:pb-5 sm:pt-4 transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-card-hover hover:border-black/[0.1] dark:hover:border-white/[0.18]",
+        "apple-stagger-item viz-rise group/tile flex h-full min-w-0 flex-col rounded-tile bg-card p-4 shadow-card border border-black/[0.05] dark:border-white/[0.09] max-[359px]:px-3.5 sm:px-6 sm:pb-5 sm:pt-5 transition-all duration-300 ease-out hover:-translate-y-0.5 hover:shadow-elevated hover:border-black/[0.09] dark:hover:border-white/[0.16]",
         className
       )}
     >
-      <div className="flex items-baseline justify-between gap-2">
-        <div className="truncate text-[13px] font-semibold tracking-tight leading-5 text-muted-foreground">{label}</div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="truncate text-[11.5px] font-semibold uppercase tracking-[0.06em] leading-5 text-muted-foreground">{label}</div>
         {trend?.length && trendCaption ? (
-          <div className="shrink-0 truncate text-[11px] font-medium leading-5 text-muted-foreground/80">{trendCaption}</div>
+          <div className="shrink-0 truncate rounded-full bg-fill/80 px-2 py-0.5 text-[10.5px] font-medium leading-4 text-muted-foreground">{trendCaption}</div>
         ) : null}
       </div>
-      <div className={cn("mt-2.5 flex flex-wrap items-end justify-between gap-x-3 gap-y-2.5", zero && "[&>svg]:opacity-60")}>
+      <div className={cn("mt-3 flex flex-wrap items-end justify-between gap-x-3 gap-y-2.5", zero && "[&>svg]:opacity-60")}>
         <div
           className={cn(
-            "figure font-display tracking-tight text-[30px] leading-none sm:text-[36px]",
+            "figure font-display tracking-[-0.03em] text-[30px] leading-none sm:text-[38px]",
             zero ? "text-muted-foreground" : "text-foreground"
           )}
         >
@@ -87,13 +87,13 @@ export function StatTile({
         ) : null}
       </div>
       {hint ? (
-        <div className="mt-auto pt-2.5 text-[13px] leading-snug text-muted-foreground max-[359px]:text-[12px]">
+        <div className="mt-auto pt-3 border-t border-border/50 text-[13px] leading-snug text-muted-foreground max-[359px]:text-[12px]">
           <Hint text={hint} />
         </div>
       ) : null}
       {delta ? (
         <div
-          className="tabular mt-2 inline-flex items-center gap-1.5 rounded-full bg-black/[0.035] dark:bg-white/[0.06] border border-black/[0.05] dark:border-white/[0.08] px-2.5 py-0.5 text-[11px] font-medium leading-tight text-ink-2 max-[359px]:text-[10px] w-fit shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-sm"
+          className="tabular mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-fill/75 border border-black/[0.04] dark:border-white/[0.08] px-2.5 py-0.5 text-[11px] font-medium leading-tight text-ink-2 max-[359px]:text-[10px] w-fit shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
           title={delta.title}
         >
           <span aria-hidden className="mr-0.5 text-[8px] text-muted-foreground">
@@ -184,9 +184,9 @@ function Figure({ value }: { value: string }) {
  */
 function Sparkbars({ values, label, names }: { values: number[]; label: string; names?: string[] }) {
   const max = Math.max(...values, 1);
-  const w = 4;
+  const w = 5;
   const gap = 3;
-  const h = 28;
+  const h = 30;
   const width = values.length * (w + gap) - gap;
   return (
     <svg
@@ -195,11 +195,11 @@ function Sparkbars({ values, label, names }: { values: number[]; label: string; 
       height={h}
       role="img"
       aria-label={`${label}: ${values.join(", ")}`}
-      className="mb-1 h-[28px] w-auto shrink-0 overflow-visible sm:max-w-[45%]"
+      className="mb-0.5 h-[30px] w-auto shrink-0 overflow-visible sm:max-w-[45%]"
       preserveAspectRatio="none"
     >
       {values.map((v, i) => {
-        const bh = v > 0 ? Math.max((v / max) * h, 2) : 1;
+        const bh = v > 0 ? Math.max((v / max) * h, 3) : 2;
         const current = i === values.length - 1;
         return (
           <g key={i} className="viz-spark group/spark">
@@ -207,12 +207,21 @@ function Sparkbars({ values, label, names }: { values: number[]; label: string; 
             <rect x={i * (w + gap) - gap / 2} y={0} width={w + gap} height={h} fill="transparent" />
             <rect
               x={i * (w + gap)}
+              y={0}
+              width={w}
+              height={h}
+              rx={2.5}
+              fill="var(--viz-track)"
+              opacity={0.45}
+            />
+            <rect
+              x={i * (w + gap)}
               y={h - bh}
               width={w}
               height={bh}
-              rx={2}
-              fill={current ? "var(--viz-seq)" : "var(--viz-axis)"}
-              opacity={current ? 1 : v > 0 ? 0.45 : 0.25}
+              rx={2.5}
+              fill={current ? "var(--foreground)" : "var(--viz-seq)"}
+              opacity={current ? 0.92 : v > 0 ? 0.55 : 0.25}
               // The column under the pointer lifts to full ink; its count is in the title.
               className="viz-grow-y transition-opacity duration-(--dur) group-hover/spark:opacity-100 motion-reduce:transition-none"
               style={{ "--viz-i": i } as React.CSSProperties}
@@ -304,14 +313,13 @@ export function MagnitudeBars({
               ) : null}
             </div>
             <div
-              className="relative h-2 rounded-full"
-              style={{ background: "var(--viz-track)" }}
+              className="apple-inset-well relative h-2.5 rounded-full"
               role="img"
               aria-label={`${d.label}: ${d.valueLabel}`}
             >
               {/* Rounded data-end, square at the baseline. */}
               <div
-                className="viz-grow-x viz-bar h-2"
+                className="viz-grow-x viz-bar h-2.5"
                 style={{
                   width: `${pct}%`,
                   background: "var(--viz-seq)",
@@ -365,11 +373,11 @@ export const VIZ_FOCUS =
  * the 12px meta size.
  */
 export const TIP_SURFACE =
-  "rounded-xl bg-popover px-3 py-2 text-left text-[12px] leading-snug text-popover-foreground shadow-popover";
+  "rounded-[14px] bg-popover/95 backdrop-blur-xl px-3.5 py-2.5 text-left text-[12px] leading-snug text-popover-foreground shadow-popover ring-1 ring-black/[0.06] dark:ring-white/[0.1]";
 
 /** A bar row: the hit target is the whole row, washed on hover, with a visible focus ring. */
 export const BAR_ROW = cn(
-  "block rounded-[10px] px-2 py-1.5 transition-colors duration-(--dur) ease-(--ease-out) motion-reduce:transition-none hover:bg-foreground/[0.04]",
+  "block rounded-[12px] px-2.5 py-1.5 transition-colors duration-(--dur) ease-(--ease-out) motion-reduce:transition-none hover:bg-fill/70",
   VIZ_FOCUS
 );
 
@@ -593,9 +601,9 @@ export function DivergingSplit({ data, unit }: { data: SplitDatum[]; unit: strin
 function SplitBar({ value, pct, side, i }: { value: number; pct: number; side: "buy" | "sell"; i: number }) {
   const buy = side === "buy";
   return (
-    <div className="relative h-2 shrink-0" style={{ width: `max(${pct}%, 8px)` }}>
+    <div className="relative h-2.5 shrink-0" style={{ width: `max(${pct}%, 8px)` }}>
       <div
-        className={cn("viz-bar h-2", buy ? "viz-grow-x-end" : "viz-grow-x")}
+        className={cn("viz-bar h-2.5 shadow-2xs", buy ? "viz-grow-x-end" : "viz-grow-x")}
         style={{
           background: buy ? "var(--viz-buy)" : "var(--viz-sell)",
           // A capsule: both ends round. The 2px surface gap either side of
@@ -606,7 +614,7 @@ function SplitBar({ value, pct, side, i }: { value: number; pct: number; side: "
       />
       <span
         className={cn(
-          "viz-fade tabular absolute top-1/2 -translate-y-1/2 text-[12px] leading-none text-muted-foreground transition-colors duration-(--dur) group-hover/bar:text-foreground group-focus-visible/bar:text-foreground motion-reduce:transition-none",
+          "viz-fade tabular absolute top-1/2 -translate-y-1/2 text-[12px] font-medium leading-none text-muted-foreground transition-colors duration-(--dur) group-hover/bar:text-foreground group-focus-visible/bar:text-foreground motion-reduce:transition-none",
           buy ? "right-full pr-1.5" : "left-full pl-1.5"
         )}
         style={{ "--viz-i": i } as React.CSSProperties}
@@ -801,10 +809,10 @@ export function SectionTitle({
   className?: string;
 }) {
   return (
-    <div className={cn("mb-3 sm:mb-4 apple-headline-reveal", className)}>
-      {kicker ? <div className="kicker mb-1 font-semibold tracking-[0.06em] uppercase text-[11px] text-muted-foreground/80">{kicker}</div> : null}
+    <div className={cn("mb-3.5 sm:mb-4 apple-headline-reveal", className)}>
+      {kicker ? <div className="apple-section-kicker mb-1.5">{kicker}</div> : null}
       <div className="flex min-h-8 flex-wrap items-end justify-between gap-x-4 gap-y-2">
-        <h2 className="font-display text-[24px] font-bold leading-tight tracking-[-0.024em] text-foreground sm:text-[28px] lg:text-[30px]">
+        <h2 className="font-display text-[24px] font-bold leading-[1.12] tracking-[-0.025em] text-foreground sm:text-[28px] lg:text-[31px]">
           {children}
         </h2>
         {right ? (
@@ -821,7 +829,7 @@ export function SectionTitle({
  * Where a section's content sits.
  *
  * - `tile` (the default): the white (dark: iOS grey) rounded surface on the
- *   canvas, 20px corners, a shadow you only notice when it is missing.
+ *   canvas, 24px corners, a shadow you only notice when it is missing.
  *   Charts, lists, tables and forms all sit in one.
  * - `panel`: the same tile (kept as a name for forms and link cards).
  * - `open`: no surface at all, for content that sits on the canvas.
@@ -840,7 +848,7 @@ export function Card({
       className={cn(
         variant === "open"
           ? "min-w-0"
-          : "min-w-0 rounded-tile bg-card/85 backdrop-blur-xl p-4 shadow-card border border-black/[0.05] dark:border-white/[0.09] sm:p-6 transition-all duration-300",
+          : "apple-card-reveal min-w-0 rounded-tile bg-card p-5 shadow-card border border-black/[0.05] dark:border-white/[0.09] sm:p-6 transition-shadow duration-300",
         className
       )}
     >
@@ -862,12 +870,17 @@ export function FactStrip({
   className?: string;
 }) {
   return (
-    <dl className={cn("flex flex-wrap items-baseline gap-x-7 gap-y-2", className)}>
+    <dl
+      className={cn(
+        "apple-card-reveal flex flex-wrap items-baseline gap-x-8 gap-y-3 rounded-[20px] bg-card px-5 py-4 shadow-card border border-black/[0.05] dark:border-white/[0.09]",
+        className
+      )}
+    >
       {items.map((it) => (
-        <div key={it.label} className="flex items-baseline gap-1.5" title={it.title}>
+        <div key={it.label} className="flex items-baseline gap-2" title={it.title}>
           {/* dt first, as <dl> requires; the value is drawn first. */}
-          <dt className="order-2 text-[13px] text-muted-foreground">{it.label}</dt>
-          <dd className="figure order-1 text-[22px] leading-none text-foreground">
+          <dt className="order-2 text-[13px] font-medium text-muted-foreground">{it.label}</dt>
+          <dd className="figure order-1 text-[24px] leading-none text-foreground">
             <Figure value={it.value} />
           </dd>
         </div>
