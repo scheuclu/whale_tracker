@@ -16,6 +16,7 @@ import { assetLabel } from "@/lib/asset-label";
 import { Disclosure, RangeCaption } from "../../disclosure";
 import { BackLink, DataError, PAGE_STACK, Quiet } from "../../page-header";
 import { ShareControl } from "../../share-control";
+import { FollowButton, GetAlertsPopover } from "../../watchlist-client";
 import { absoluteUrl, plural } from "@/lib/site";
 import { longDate, tradeSummary } from "@/lib/members";
 import { cn } from "@/lib/utils";
@@ -36,13 +37,14 @@ export async function TickerDetail({ stat }: { stat: TickerRow }) {
   const ticker = stat.ticker;
   // Caught like every other detail page: uncaught, a failed fetch threw out
   // of the server component instead of rendering the data-error state.
-  let trades, optionTrades, timeline, members;
+  let trades, optionTrades, timeline, members, recentInsider;
   try {
-    [trades, optionTrades, timeline, members] = await Promise.all([
+    [trades, optionTrades, timeline, members, recentInsider] = await Promise.all([
       getTransactions({ ticker, limit: 200 }),
       getTransactions({ ticker, options: true, limit: 500 }),
       getTimelineTrades({ ticker }),
       getTickerMembers(ticker, undefined, 1000),
+      getInsiderIssuer(ticker, CROSS_WINDOW_DAYS).catch(() => null),
     ]);
   } catch (err) {
     return <DataError error={err} />;
@@ -88,7 +90,20 @@ export async function TickerDetail({ stat }: { stat: TickerRow }) {
           summary={<>{tradeSummary({ trades: stat.trades, tickers: 0, buys: stat.buys, sells: stat.sells }, plural(stat.politicians, "member"))}.</>}
           facts={stat.last_tx_date ? `last traded ${longDate(stat.last_tx_date)}` : null}
           actions={
-            <ShareControl url={absoluteUrl(tickerHref(ticker))} text={`${ticker}: stock trades disclosed by members of Congress`} />
+            <>
+              <FollowButton kind="ticker" id={ticker} label={ticker} />
+              <GetAlertsPopover subject={{ kind: "ticker", id: ticker, label: ticker }} />
+              {recentInsider && recentInsider.insiders > 0 ? (
+                <a
+                  href="#insiders-in-issuer"
+                  className={cn(BUTTON, "h-8 px-3.5 text-[13px]")}
+                  title="Jump to SEC Form 4 corporate insider filings for this symbol"
+                >
+                  {plural(recentInsider.insiders, "corporate insider")} (90d)
+                </a>
+              ) : null}
+              <ShareControl url={absoluteUrl(tickerHref(ticker))} text={`${ticker}: stock trades disclosed by members of Congress`} />
+            </>
           }
         />
         <div className="space-y-3 sm:space-y-4">
@@ -289,7 +304,7 @@ async function InsidersInIssuer({ ticker }: { ticker: string }) {
   const href = `/insiders?t=${encodeURIComponent(ticker)}`;
 
   return (
-    <section>
+    <section id="insiders-in-issuer" className="table-anchor">
       <SectionTitle
         kicker="Corporate Filings"
         right={

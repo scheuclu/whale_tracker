@@ -51,6 +51,8 @@ import type { Metadata } from "next";
 import { clip, pageCard, pageMetadata } from "@/lib/seo";
 import { absoluteUrl, plural } from "@/lib/site";
 import { ShareControl } from "../share-control";
+import { FollowButton, GetAlertsPopover } from "../watchlist-client";
+import { isWatchTicker } from "@/lib/watchlist";
 
 export const dynamic = "force-dynamic";
 
@@ -628,17 +630,20 @@ function TradeList({ trades, showIssuer }: { trades: InsiderTradeRow[]; showIssu
 }
 
 async function IssuerDetail({ ticker }: { ticker: string }) {
-  let issuer, insiders, trades;
+  let issuer, insiders, trades, congressRecent;
   try {
-    [issuer, insiders, trades] = await Promise.all([
+    [issuer, insiders, trades, congressRecent] = await Promise.all([
       getInsiderIssuer(ticker),
       getIssuerInsiders(ticker),
       getInsiderTrades({ ticker, limit: 200 }),
+      getTickerDetail(ticker, CROSS_WINDOW_DAYS).catch(() => null),
     ]);
   } catch (err) {
     return <DataError error={err} />;
   }
   if (!issuer) return <Empty>No stored insider trades for {ticker}.</Empty>;
+  const sym = issuer.ticker ?? ticker;
+  const watchable = isWatchTicker(sym);
   // The three insiders with the most value traded, for the glance tile.
   const topInsiders = [...insiders].sort((a, b) => b.bought + b.sold - (a.bought + a.sold)).slice(0, 3);
 
@@ -673,10 +678,27 @@ async function IssuerDetail({ ticker }: { ticker: string }) {
             </>
           }
           actions={
-            <ShareControl
-              url={absoluteUrl(insiderIssuerHref(issuer.ticker ?? ticker))}
-              text={`${issuer.ticker ?? ticker}${issuer.issuer_name ? ` (${issuer.issuer_name})` : ""}: corporate insider trades from SEC Form 4`}
-            />
+            <>
+              {watchable ? (
+                <>
+                  <FollowButton kind="ticker" id={sym} label={sym} />
+                  <GetAlertsPopover subject={{ kind: "ticker", id: sym, label: sym }} />
+                </>
+              ) : null}
+              {congressRecent && congressRecent.politicians > 0 ? (
+                <a
+                  href="#congress-in-ticker"
+                  className={cn(BUTTON, "h-8 px-3.5 text-[13px]")}
+                  title="Jump to congressional STOCK Act trades in this symbol"
+                >
+                  {plural(congressRecent.politicians, "member")} in Congress (90d)
+                </a>
+              ) : null}
+              <ShareControl
+                url={absoluteUrl(insiderIssuerHref(sym))}
+                text={`${sym}${issuer.issuer_name ? ` (${issuer.issuer_name})` : ""}: corporate insider trades from SEC Form 4`}
+              />
+            </>
           }
         />
         <div className="space-y-3 sm:space-y-4">
@@ -794,7 +816,7 @@ async function MembersInTicker({ ticker }: { ticker: string }) {
   const href = tickerHref(ticker);
 
   return (
-    <section>
+    <section id="congress-in-ticker" className="table-anchor">
       <SectionTitle
         kicker="Congressional Overlap"
         right={

@@ -16,6 +16,7 @@ import { getInsiderTotals } from "@/lib/insider-queries";
 import { relativeTime } from "@/lib/format";
 import { SITE_DESCRIPTION, SITE_NAME, siteUrl } from "@/lib/site";
 import { SearchForm, SearchLink, Tabs, ThemeToggle } from "./nav";
+import { HeaderWatchlistPill } from "./watchlist-client";
 import "./globals.css";
 import "./motion.css";
 
@@ -101,6 +102,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   1024px the tools are moved up into the brand row visually. */}
               <Tabs className="order-3 basis-full pb-1 sm:pb-1.5 lg:order-none lg:basis-auto lg:pb-0" />
               <div className="order-2 flex h-12 items-center justify-end gap-1.5 sm:gap-2 lg:order-none lg:h-[54px] lg:flex-1">
+                <HeaderWatchlistPill />
                 <SearchForm className="hidden w-56 sm:flex md:w-64 lg:w-56 xl:w-64" />
                 <SearchLink className="sm:hidden" />
                 <ThemeToggle />

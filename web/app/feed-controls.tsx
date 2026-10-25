@@ -83,8 +83,9 @@ function Select({
  * counts the filters in force; "Reset" appears beside it when there are.
  */
 export function FilterBar({ filters, ignored }: { filters: TransactionFilters; ignored: string[] }) {
-  const set = Object.keys(filters).filter((k) => k !== "action" && k !== "ticker" && k !== "member");
-  const active = Object.keys(filters).filter((k) => k !== "action").length > 0;
+  const set = Object.keys(filters).filter((k) => k !== "action" && k !== "ticker" && k !== "member" && k !== "watch");
+  const active = Object.keys(filters).filter((k) => k !== "action" && k !== "watch").length > 0;
+  const watchParam = filters.watch ? [...filters.watch.members, ...filters.watch.tickers].join(",") : undefined;
   return (
     <>
       <details className="group/filter">
@@ -115,6 +116,7 @@ export function FilterBar({ filters, ignored }: { filters: TransactionFilters; i
             {/* The direction control owns this one; the form must not lose it. */}
             {filters.action ? <input type="hidden" name="action" value={filters.action} /> : null}
             {filters.ticker ? <input type="hidden" name="ticker" value={filters.ticker} /> : null}
+            {watchParam ? <input type="hidden" name="watch" value={watchParam} /> : null}
             <Field label="Chamber">
               <Select
                 name="chamber"

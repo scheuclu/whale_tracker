@@ -22,6 +22,7 @@ import { MemberAvatar } from "./avatar";
 import { BracketAmount } from "./bracket-glyph";
 import { Card } from "./charts";
 import { ActionBadge, AsFiled, DelayTag, OptionBadge, OwnerTag, PartyBadge, ScanTag, SectorTag, TickerChip } from "./ui";
+import { OutboundLink } from "./outbound-link";
 
 /* ---------------------------------------------------------------- cells */
 
@@ -89,15 +90,14 @@ export function TradeDelay({ r }: { r: Pick<TransactionRow, "tx_date" | "filing_
 
 function FilingLink({ href }: { href: string }) {
   return (
-    <a
+    <OutboundLink
       href={href}
-      target="_blank"
-      rel="noreferrer"
+      kind="filing"
       className="rounded-sm text-[12px] text-muted-foreground underline decoration-border-strong underline-offset-[3px] transition-colors duration-(--dur-fast) hover:text-foreground hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
     >
       filing<span aria-hidden>&nbsp;↗</span>
       <span className="sr-only"> (opens the original filing)</span>
-    </a>
+    </OutboundLink>
   );
 }
 

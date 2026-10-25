@@ -12,6 +12,7 @@ import { assetLabel } from "@/lib/asset-label";
 import { Disclosure, RangeCaption } from "../../disclosure";
 import { BackLink, DataError, PAGE_STACK, Quiet } from "../../page-header";
 import { ShareControl } from "../../share-control";
+import { FollowButton, GetAlertsPopover } from "../../watchlist-client";
 import { absoluteUrl } from "@/lib/site";
 import { Segmented } from "../../ui";
 import { MemberTrack } from "./member-track";
@@ -80,10 +81,18 @@ export async function MemberDetail({
           scanCount={scans.length}
           scansHref={`/scans?m=${encodeURIComponent(member)}`}
           share={
-            <ShareControl
-              url={absoluteUrl(memberHref(member, bioguideId))}
-              text={`${member}${detail.party && detail.state ? ` (${detail.party}-${detail.state})` : ""}: disclosed stock trades from STOCK Act filings`}
-            />
+            <>
+              {bioguideId ? (
+                <>
+                  <FollowButton kind="member" id={bioguideId} label={member} />
+                  <GetAlertsPopover subject={{ kind: "member", id: bioguideId, label: member }} />
+                </>
+              ) : null}
+              <ShareControl
+                url={absoluteUrl(memberHref(member, bioguideId))}
+                text={`${member}${detail.party && detail.state ? ` (${detail.party}-${detail.state})` : ""}: disclosed stock trades from STOCK Act filings`}
+              />
+            </>
           }
         />
         <div className="space-y-3 sm:space-y-4">

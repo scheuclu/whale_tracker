@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, Link2, Share2 } from "lucide-react";
 import { shareTargets, type ShareNetwork } from "@/lib/share";
 import { cn } from "@/lib/utils";
+import { trackEvent } from "@/lib/analytics";
 
 /**
  * One row of share buttons for an entity or view page: the device's own
@@ -89,12 +90,17 @@ export function ShareControl({ url, text, className }: { url: string; text: stri
     } catch {
       ok = legacyCopy(url);
     }
-    if (ok) announce("Link copied", true);
-    else window.prompt("Copy this link:", url);
+    if (ok) {
+      trackEvent("share_link_copied", { url });
+      announce("Link copied", true);
+    } else {
+      window.prompt("Copy this link:", url);
+    }
   }
 
   async function nativeShare() {
     try {
+      trackEvent("share_native_opened", { url });
       await navigator.share({ title: text, text, url });
     } catch {
       /* dismissed by the reader, or refused: nothing to report */
@@ -121,6 +127,7 @@ export function ShareControl({ url, text, className }: { url: string; text: stri
           target="_blank"
           rel="noopener noreferrer"
           className={ITEM}
+          onClick={() => trackEvent("share_network_clicked", { network: t.network, url })}
           aria-label={`Share on ${t.name} (opens in a new tab)`}
           title={`Share on ${t.name}`}
         >

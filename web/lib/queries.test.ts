@@ -397,3 +397,21 @@ test("getPipeline().lastUpdated is the last pipeline run, not the last filing ch
   assert.ok(run, "fixture database has sync_state rows");
   assert.equal(p.lastUpdated, run);
 });
+
+test("watch filter matches rows by bioguide_id or ticker", async () => {
+  const rows = await q.getTransactions({
+    watch: { members: ["P000197"], tickers: ["MSFT"] },
+    limit: 200,
+  });
+  assert.ok(rows.length > 0, "watched member or ticker has rows");
+  for (const r of rows) {
+    assert.ok(
+      r.bioguide_id === "P000197" || r.ticker === "MSFT",
+      `row ${r.id} matches watched member or ticker`
+    );
+  }
+  const totals = await q.getTransactionTotals({
+    watch: { members: ["P000197"], tickers: ["MSFT"] },
+  });
+  assert.ok(totals.trades >= rows.length);
+});

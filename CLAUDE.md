@@ -21,6 +21,19 @@ branch, commit there, push, and open a PR for review.
 `data/trades.sqlite3` (pipeline state) directly to `main` — that is by design
 and must stay.
 
+## Web Analytics: instrument custom events for new features
+
+Vercel Web Analytics is active on the production dashboard. Whenever adding or
+modifying user-facing features on the web app (`web/`), consider whether user
+interactions should be instrumented with custom events:
+
+- Use `trackEvent(name, properties)` from `web/lib/analytics.ts`.
+- Instrument meaningful user actions (e.g. search submissions, filter toggles,
+  table sorts, row navigations, share button clicks, outbound filing links).
+- Never log personally identifiable information (PII).
+- `trackEvent` is safe to call across browser and server contexts (safely no-ops
+  during SSR, node unit tests, or if an ad blocker prevents analytics loading).
+
 ## Non-negotiable: amounts are ranges
 
 The STOCK Act requires only a bracket ("$1,001 - $15,000"). Any code path that

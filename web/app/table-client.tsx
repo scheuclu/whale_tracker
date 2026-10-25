@@ -3,6 +3,7 @@
 import { Children, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { stickyShift } from "@/lib/sticky-head";
+import { trackEvent } from "@/lib/analytics";
 
 /**
  * The header row of a leaderboard, kept in view below the site header.
@@ -116,6 +117,7 @@ export function SortLink({
       className={className}
       {...rest}
       onClick={(e) => {
+        trackEvent("table_sort", { href });
         if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
         e.preventDefault();
         const [path, hash] = href.split("#");
@@ -192,13 +194,17 @@ export function RowLinkBody({
         if (e.button !== 0) return;
         const href = target(e);
         if (!href) return;
+        trackEvent("table_row_click", { href });
         if (e.metaKey || e.ctrlKey) window.open(href, "_blank", "noopener");
         else router.push(href);
       }}
       onAuxClick={(e) => {
         if (e.button !== 1) return;
         const href = target(e);
-        if (href) window.open(href, "_blank", "noopener");
+        if (href) {
+          trackEvent("table_row_click", { href });
+          window.open(href, "_blank", "noopener");
+        }
       }}
     >
       {children}
