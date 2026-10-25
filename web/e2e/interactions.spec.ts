@@ -103,6 +103,21 @@ test("theme toggle switches and persists", async ({ page }) => {
   await expect(html).not.toHaveClass(/\bdark\b/);
 });
 
+test("watchlist follow button persists and filters the feed", async ({ page }) => {
+  await visit(page, "/members/nancy-pelosi-p000197");
+  const followBtn = page.locator("button[data-follow-kind='member'][data-follow-id='P000197']");
+  await expect(followBtn).toHaveAttribute("aria-pressed", "false");
+  await followBtn.click();
+  await expect(followBtn).toHaveAttribute("aria-pressed", "true");
+
+  const headerPill = page.getByRole("link", { name: /watchlist \(1 followed\)/i });
+  await expect(headerPill).toBeVisible();
+  await headerPill.click();
+
+  await expect(page).toHaveURL(/[?&]watch=P000197\b/);
+  await expect(page.locator("[data-watchlist-banner]")).toBeVisible();
+});
+
 /**
  * KNOWN BUG (expected to fail until fixed): on a member page a trade row's
  * tag group (option badge · sector · owner, app/trade-row.tsx) is

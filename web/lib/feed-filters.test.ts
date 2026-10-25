@@ -22,6 +22,7 @@ test("every understood parameter round-trips through the URL", () => {
     from: "2026-01-01",
     to: "2026-06-30",
     scans: "exclude",
+    watch: "p000197,nvda",
   });
   assert.deepEqual(ignored, []);
   assert.deepEqual(filters, {
@@ -35,6 +36,7 @@ test("every understood parameter round-trips through the URL", () => {
     from: "2026-01-01",
     to: "2026-06-30",
     transcribed: "exclude",
+    watch: { members: ["P000197"], tickers: ["NVDA"] },
   });
   const again = parseTransactionFilters(Object.fromEntries(filtersToParams(filters)));
   assert.deepEqual(again.filters, filters);

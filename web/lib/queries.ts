@@ -355,6 +355,18 @@ function transactionWhere(opts: TransactionFilters): { sql: string; params: unkn
   }
   if (opts.transcribed === "only") where.push(TRANSCRIBED);
   if (opts.transcribed === "exclude") where.push(`NOT ${TRANSCRIBED}`);
+  if (opts.watch && (opts.watch.members.length > 0 || opts.watch.tickers.length > 0)) {
+    const clauses: string[] = [];
+    if (opts.watch.members.length > 0) {
+      clauses.push(`p.bioguide_id IN (${opts.watch.members.map(() => "?").join(",")})`);
+      params.push(...opts.watch.members);
+    }
+    if (opts.watch.tickers.length > 0) {
+      clauses.push(`t.ticker IN (${opts.watch.tickers.map(() => "?").join(",")})`);
+      params.push(...opts.watch.tickers);
+    }
+    where.push(`(${clauses.join(" OR ")})`);
+  }
   return { sql: where.join(" AND "), params };
 }
 

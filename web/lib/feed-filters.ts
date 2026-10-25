@@ -8,6 +8,8 @@
  * everything is the kind of silent failure this project exists to avoid.
  */
 
+import { parseWatchParam, serializeWatchParam } from "./watchlist";
+
 export type Transcribed = "only" | "exclude";
 
 export type TransactionFilters = {
@@ -28,6 +30,8 @@ export type TransactionFilters = {
   to?: string;
   /** Rows transcribed from scanned paper filings: only them, or none of them. */
   transcribed?: Transcribed;
+  /** Visitor's watchlist filter (`?watch=P000197,NVDA`). */
+  watch?: { members: string[]; tickers: string[] };
 };
 
 export const CHAMBERS = ["house", "senate"] as const;
@@ -51,6 +55,7 @@ export const FILTER_KEYS = [
   "from",
   "to",
   "scans",
+  "watch",
 ] as const;
 
 type RawParams = Record<string, string | string[] | undefined>;
@@ -101,6 +106,12 @@ export function parseTransactionFilters(raw: RawParams): ParsedFilters {
     else ignored.push(`${key}=${v}`);
   }
   filters.transcribed = keep("scans", TRANSCRIBED);
+  const rawWatch = one(raw, "watch");
+  if (rawWatch !== undefined) {
+    const parsedWatch = parseWatchParam(rawWatch);
+    if (parsedWatch) filters.watch = parsedWatch;
+    else ignored.push(`watch=${rawWatch}`);
+  }
 
   for (const k of Object.keys(filters) as (keyof TransactionFilters)[]) {
     if (filters[k] === undefined) delete filters[k];
@@ -121,6 +132,10 @@ export function filtersToParams(filters: TransactionFilters): URLSearchParams {
   if (filters.from) q.set("from", filters.from);
   if (filters.to) q.set("to", filters.to);
   if (filters.transcribed) q.set("scans", filters.transcribed);
+  if (filters.watch) {
+    const w = serializeWatchParam(filters.watch);
+    if (w) q.set("watch", w);
+  }
   return q;
 }
 
