@@ -6,6 +6,7 @@ import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
 import { Moon, Search, Sun } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { trackEvent } from "@/lib/analytics";
 
 /**
  * The five reader sections. Operator pages (Scans, Pipeline, Alerts) and
@@ -46,6 +47,7 @@ export function Tabs({ className }: { className?: string }) {
               <Link
                 href={href}
                 aria-current={active ? "page" : undefined}
+                onClick={() => trackEvent("nav_tab_click", { tab: href, label })}
                 className={cn(
                   "group/tab flex h-11 items-center whitespace-nowrap text-[13px] tracking-[-0.01em] outline-none sm:h-auto",
                   active ? "font-semibold text-foreground" : "font-medium text-ink-2 hover:text-foreground"
@@ -87,7 +89,11 @@ export function ThemeToggle() {
       type="button"
       className={ICON_BUTTON}
       aria-label={mounted ? `Switch to ${resolvedTheme === "dark" ? "light" : "dark"} theme` : "Toggle theme"}
-      onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+      onClick={() => {
+        const next = resolvedTheme === "dark" ? "light" : "dark";
+        trackEvent("theme_toggle", { theme: next });
+        setTheme(next);
+      }}
     >
       {/* Both icons render; the `.dark` class next-themes sets before paint
           picks one, so the button never flashes the wrong icon on load. */}
@@ -139,7 +145,16 @@ export function SearchForm({ className }: { className?: string }) {
 
   return (
     // The iOS / macOS Spotlight search field: a frosted capsule, magnifier, subtle inner ring.
-    <form method="get" action="/search" role="search" className={cn("relative flex items-center rounded-full", className)}>
+    <form
+      method="get"
+      action="/search"
+      role="search"
+      className={cn("relative flex items-center rounded-full", className)}
+      onSubmit={() => {
+        const q = input.current?.value.trim();
+        if (q) trackEvent("search_submit", { query: q, source: "header" });
+      }}
+    >
       <Search className="pointer-events-none absolute left-3 size-[14px] text-muted-foreground" strokeWidth={2.25} aria-hidden />
       <input
         ref={input}

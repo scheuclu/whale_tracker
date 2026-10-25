@@ -8,6 +8,7 @@ import { BUTTON_PRIMARY, FIELD, PartyBadge } from "../ui";
 import { cn } from "@/lib/utils";
 import { MemberAvatar } from "../avatar";
 import { pageCard, pageMetadata } from "@/lib/seo";
+import { SearchAnalytics } from "./search-analytics";
 
 export const dynamic = "force-dynamic";
 
@@ -238,6 +239,12 @@ async function Results({ q }: { q: string }) {
 
   return (
     <>
+      <SearchAnalytics
+        query={q}
+        membersCount={members.length}
+        tickersCount={tickers.length}
+        issuersCount={issuers.length}
+      />
       <p className="text-[13px] text-muted-foreground" data-testid="search-summary">
         {none
           ? `No members, tickers or insider issuers match “${q}”.`

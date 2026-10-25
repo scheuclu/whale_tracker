@@ -11,6 +11,7 @@ import { memberHref, range, relativeTime, telegramPlainText, usd } from "@/lib/f
 import { Card } from "../charts";
 import { ActionBadge, PartyBadge, Tag, TickerChip } from "../ui";
 import { ROW_LINK } from "../grouped-list";
+import { OutboundLink } from "../outbound-link";
 
 /**
  * One alert, as sent. Exported so later pages — post-alert price outcomes
@@ -182,15 +183,14 @@ function SourceLink({ a }: { a: AlertRow }) {
   const href = a.pdf_url ?? a.source_url;
   if (!href) return null;
   return (
-    <a
+    <OutboundLink
       href={href}
-      target="_blank"
-      rel="noreferrer"
+      kind={a.pdf_url ? "pdf" : "filing"}
       className="ml-auto rounded-sm text-[12px] text-muted-foreground underline decoration-border-strong underline-offset-[3px] transition-colors duration-(--dur-fast) hover:text-foreground hover:decoration-current"
     >
       {a.pdf_url ? "PDF" : "filing"}
       <span aria-hidden>&nbsp;↗</span>
-    </a>
+    </OutboundLink>
   );
 }
 
