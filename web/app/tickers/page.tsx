@@ -56,6 +56,7 @@ import {
   sortHref,
 } from "../sortable-table";
 import { RowLinkBody, StickyThead } from "../table-client";
+import { SymbolMark } from "../symbol-mark";
 
 export const dynamic = "force-dynamic";
 
@@ -232,12 +233,15 @@ export default async function TickersPage({
               {table.map((r) => (
                 <tr key={r.ticker} className={BODY_ROW} data-href={tickerHref(r.ticker)}>
                   <td className="px-3 py-2">
-                    <a
-                      href={tickerHref(r.ticker)}
-                      className="row-name font-semibold"
-                    >
-                      {r.ticker}
-                    </a>
+                    <div className="flex items-center gap-2">
+                      <SymbolMark symbol={r.ticker} size="sm" />
+                      <a
+                        href={tickerHref(r.ticker)}
+                        className="row-name font-semibold"
+                      >
+                        {r.ticker}
+                      </a>
+                    </div>
                   </td>
                   <td className="max-w-[10rem] truncate px-3 py-2 text-muted-foreground sm:max-w-[18rem]" title={r.asset_name ?? undefined}>
                     {assetLabel(r.asset_name, { ticker: r.ticker }) || r.asset_name}

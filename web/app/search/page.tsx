@@ -7,6 +7,7 @@ import { DataError, PAGE_STACK, PageHeader, Quiet } from "../page-header";
 import { BUTTON_PRIMARY, FIELD, PartyBadge } from "../ui";
 import { cn } from "@/lib/utils";
 import { MemberAvatar } from "../avatar";
+import { SymbolMark } from "../symbol-mark";
 import { pageCard, pageMetadata } from "@/lib/seo";
 import { SearchAnalytics } from "./search-analytics";
 
@@ -177,6 +178,7 @@ async function Results({ q }: { q: string }) {
                 href={tickerHref(t.ticker)}
                 className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-[13px] transition-colors duration-150 hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"
               >
+                <SymbolMark symbol={t.ticker} size="md" />
                 <span className="font-semibold">{t.ticker}</span>
                 <span className="min-w-0 truncate text-muted-foreground">{t.asset_name}</span>
                 <span className="ml-auto tabular text-xs text-muted-foreground">
@@ -206,6 +208,7 @@ async function Results({ q }: { q: string }) {
             {issuers.map((i) => {
               const inner = (
                 <>
+                  {i.ticker ? <SymbolMark symbol={i.ticker} size="md" /> : null}
                   <span className="font-semibold">{i.ticker ?? "—"}</span>
                   <span className="min-w-0 truncate text-muted-foreground">{i.issuer_name}</span>
                   <span className="ml-auto tabular text-xs text-muted-foreground">

@@ -21,7 +21,7 @@ import { Disclosure } from "../disclosure";
 import { PriceOverlay } from "../price-overlay";
 import { BackLink, DataError, PAGE_STACK, PageHeader, PillLinks, Quiet } from "../page-header";
 import { GroupedList, LIST_FOOT_LINK, ROW_LINK, ValueRow } from "../grouped-list";
-import { SymbolHero } from "../symbol-hero";
+import { SymbolHero, SymbolMark } from "../symbol-hero";
 import { DirectionSplit, GlanceTile } from "../politicians/member-hero";
 import { longDate, tradeSummary } from "@/lib/members";
 import { cn } from "@/lib/utils";
@@ -393,9 +393,12 @@ export default async function InsidersPage({
                     >
                       <td className="px-3 py-2">
                         {r.ticker ? (
-                          <a href={issuerHref(r.ticker)} className="row-name font-semibold">
-                            {r.ticker}
-                          </a>
+                          <div className="flex items-center gap-2">
+                            <SymbolMark symbol={r.ticker} size="sm" />
+                            <a href={issuerHref(r.ticker)} className="row-name font-semibold">
+                              {r.ticker}
+                            </a>
+                          </div>
                         ) : (
                           <span className="text-[12px] text-muted-foreground">no ticker</span>
                         )}
