@@ -26,9 +26,41 @@ const MARK_TYPE = [
  * - once loaded, the squircle transitions to an ivory/white icon pad so dark
  *   or navy corporate logos remain legible in dark mode as well as light mode.
  */
+/**
+ * Detect whether a decoded logo is a monochrome white-on-transparent glyph
+ * (e.g. FMP's `BA.png` for Boeing, which is pure `#ffffff` on `alpha = 0` and
+ * would otherwise vanish against the white icon pad). Because `next/image`
+ * proxies logos from `'self'`, a tiny offscreen canvas read never taints CORS.
+ */
+function isWhiteOnTransparent(img: HTMLImageElement): boolean {
+  try {
+    const size = 24;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return false;
+    ctx.drawImage(img, 0, 0, size, size);
+    const { data } = ctx.getImageData(0, 0, size, size);
+    let opaque = 0;
+    let nearWhite = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      const a = data[i + 3];
+      if (a < 48) continue;
+      opaque++;
+      const lum = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+      if (lum > 225) nearWhite++;
+    }
+    return opaque > 0 && opaque < size * size * 0.9 && nearWhite / opaque > 0.92;
+  } catch {
+    return false;
+  }
+}
+
 export function SymbolMark({ symbol, className }: { symbol: string; className?: string }) {
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [whiteGlyph, setWhiteGlyph] = useState(false);
   const src = failed ? null : tickerLogoUrl(symbol);
   const len = symbol.length;
   const type = MARK_TYPE[Math.min(Math.max(len - 2, 0), MARK_TYPE.length - 1)];
@@ -70,11 +102,17 @@ export function SymbolMark({ symbol, className }: { symbol: string; className?: 
           fetchPriority="high"
           onError={() => setFailed(true)}
           onLoad={(e) => {
-            if ((e.currentTarget as HTMLImageElement).naturalWidth) setLoaded(true);
-            else setFailed(true);
+            const img = e.currentTarget as HTMLImageElement;
+            if (img.naturalWidth) {
+              setWhiteGlyph(isWhiteOnTransparent(img));
+              setLoaded(true);
+            } else {
+              setFailed(true);
+            }
           }}
           className={cn(
             "absolute inset-0 size-full object-contain p-3.5 transition-opacity duration-300 motion-reduce:transition-none sm:p-4",
+            whiteGlyph && "brightness-[0.14]",
             loaded ? "opacity-100" : "opacity-0"
           )}
         />
