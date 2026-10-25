@@ -17,6 +17,7 @@
 import { useId } from "react";
 import { cn } from "@/lib/utils";
 import { usd } from "@/lib/format";
+import { SymbolMark } from "./symbol-mark";
 
 /* ---------------------------------------------------------------- stat tile */
 
@@ -290,27 +291,30 @@ export function MagnitudeBars({
               "grid items-center gap-x-2.5 sm:gap-x-3",
               isName
                 ? "grid-cols-[1rem_8rem_minmax(0,1fr)_4rem] sm:grid-cols-[1.25rem_11rem_minmax(0,1fr)_5rem]"
-                : "grid-cols-[1rem_6.5rem_minmax(0,1fr)_4rem] sm:grid-cols-[1.25rem_7.5rem_minmax(0,1fr)_5rem]"
+                : "grid-cols-[1rem_8.5rem_minmax(0,1fr)_4rem] sm:grid-cols-[1.25rem_10rem_minmax(0,1fr)_5rem]"
             )}
           >
             <div aria-hidden className="tabular text-right text-[12px] text-muted-foreground">
               {i + 1}
             </div>
-            <div className="min-w-0">
-              <div
-                title={d.label}
-                className={cn(
-                  "truncate text-[14px] leading-5 tracking-[-0.01em]",
-                  isName ? "font-medium" : "font-semibold"
-                )}
-              >
-                {d.label}
-              </div>
-              {d.sublabel ? (
-                <div title={d.title ?? d.sublabel} className="truncate text-[12px] leading-4 text-muted-foreground">
-                  {d.sublabel}
+            <div className={cn("min-w-0", !isName && "flex items-center gap-2")}>
+              {!isName ? <SymbolMark symbol={d.label} size="md" /> : null}
+              <div className="min-w-0">
+                <div
+                  title={d.label}
+                  className={cn(
+                    "truncate text-[14px] leading-5 tracking-[-0.01em]",
+                    isName ? "font-medium" : "font-semibold"
+                  )}
+                >
+                  {d.label}
                 </div>
-              ) : null}
+                {d.sublabel ? (
+                  <div title={d.title ?? d.sublabel} className="truncate text-[12px] leading-4 text-muted-foreground">
+                    {d.sublabel}
+                  </div>
+                ) : null}
+              </div>
             </div>
             <div
               className="apple-inset-well relative h-2.5 rounded-full"
@@ -477,7 +481,7 @@ export function DivergingSplit({ data, unit }: { data: SplitDatum[]; unit: strin
   // The label column is one aligned track. Narrow containers (a phone, a
   // half-width card) stack ticker over name; wider ones set them on one line.
   const rowCols =
-    "grid grid-cols-[7rem_minmax(0,1fr)] gap-x-3 @md:grid-cols-[13rem_minmax(0,1fr)] @3xl:grid-cols-[17rem_minmax(0,1fr)]";
+    "grid grid-cols-[8.75rem_minmax(0,1fr)] gap-x-3 @md:grid-cols-[14.75rem_minmax(0,1fr)] @3xl:grid-cols-[18.5rem_minmax(0,1fr)]";
 
   return (
     <div className="@container">
@@ -518,16 +522,19 @@ export function DivergingSplit({ data, unit }: { data: SplitDatum[]; unit: strin
               <div className={cn(rowCols, "items-center")}>
                 <div
                   title={name}
-                  className="flex min-w-0 flex-col @md:flex-row @md:items-baseline @md:gap-2"
+                  className="flex min-w-0 items-center gap-2"
                 >
-                  <span className="truncate text-[14px] font-semibold leading-5 tracking-[-0.01em] @md:w-[3.75rem] @md:shrink-0">
-                    {d.label}
-                  </span>
-                  {d.sublabel ? (
-                    <span className="truncate text-[12px] leading-4 text-muted-foreground @md:leading-5">
-                      {d.sublabel}
+                  <SymbolMark symbol={d.label} size="sm" />
+                  <div className="flex min-w-0 flex-col @md:flex-row @md:items-baseline @md:gap-2">
+                    <span className="truncate text-[14px] font-semibold leading-5 tracking-[-0.01em] @md:w-[3.75rem] @md:shrink-0">
+                      {d.label}
                     </span>
-                  ) : null}
+                    {d.sublabel ? (
+                      <span className="truncate text-[12px] leading-4 text-muted-foreground @md:leading-5">
+                        {d.sublabel}
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
                 <div
                   className="relative grid h-6 items-center"

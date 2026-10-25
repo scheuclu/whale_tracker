@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { range, usd } from "./format.ts";
+import { range, tickerLogoUrl, usd } from "./format.ts";
 
 // `usd` takes cents. The insiders page sums Form 4 values past a billion
 // dollars, which used to render as "$2883M"; every unit boundary is pinned
@@ -63,4 +63,12 @@ test("range keeps the open-ended top bracket open", () => {
   assert.equal(range(dollars(50_000_001), null), "≥$50M");
   assert.equal(range(dollars(1_001), dollars(15_000)), "$1,001–$15k");
   assert.equal(range(dollars(1_000_000_000), dollars(5_000_000_000)), "$1B–$5B");
+});
+
+test("tickerLogoUrl builds FMP logo URLs for valid stock symbols only", () => {
+  assert.equal(tickerLogoUrl("BA"), "https://financialmodelingprep.com/image-stock/BA.png");
+  assert.equal(tickerLogoUrl("brk.b"), "https://financialmodelingprep.com/image-stock/BRK.B.png");
+  assert.equal(tickerLogoUrl("0001045810"), null);
+  assert.equal(tickerLogoUrl(""), null);
+  assert.equal(tickerLogoUrl(null), null);
 });

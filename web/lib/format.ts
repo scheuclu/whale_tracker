@@ -197,6 +197,21 @@ export function tickerHref(symbol: string): string {
   return `/tickers/${encodeURIComponent(symbol.toUpperCase())}`;
 }
 
+const LOGO_TICKER_RE = /^[A-Z]{1,6}(?:\.[A-Z]{1,2})?$/;
+export const LOGO_ORIGIN = "https://financialmodelingprep.com";
+
+/**
+ * The issuer's logo on Financial Modeling Prep (`image-stock/<SYMBOL>.png`),
+ * or `null` when `symbol` is not a stock ticker (e.g. a bare 10-digit CIK).
+ * Served through `next/image` so the browser requests it from this origin.
+ */
+export function tickerLogoUrl(symbol: string | null | undefined): string | null {
+  if (!symbol) return null;
+  const sym = symbol.trim().toUpperCase();
+  if (!LOGO_TICKER_RE.test(sym)) return null;
+  return `${LOGO_ORIGIN}/image-stock/${encodeURIComponent(sym)}.png`;
+}
+
 /** An issuer's Form 4 insider page. */
 export function insiderIssuerHref(symbol: string): string {
   return `/insiders?t=${encodeURIComponent(symbol.toUpperCase())}`;
