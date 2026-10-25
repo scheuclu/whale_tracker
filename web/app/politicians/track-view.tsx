@@ -153,6 +153,7 @@ export async function TrackView({ horizon }: { horizon: TrackHorizon }) {
 
       <section aria-labelledby="ranked-title">
         <SectionTitle
+          kicker="Leaderboard"
           right={
             <span className="text-[11px] text-muted-foreground">
               {plural(board.ranked.length, "member")} · {board.min_decisions}+ decisions over {board.min_filings}+ filings
@@ -238,12 +239,12 @@ function RankedTable({ rows, horizon, scale }: { rows: TrackScoreRow[]; horizon:
             const href = memberHref(r.member_name, r.bioguide_id);
             const label = `${r.member_name}: ${points(r.trade.score)} points vs ${TRACK_BENCHMARK} over ${horizon} trading days after the trade (shrunk; unshrunk average ${points(r.trade.mean)}), 90% interval ${intervalText(r.trade.lo, r.trade.hi)}`;
             return (
-              <tr key={r.member_name} className="border-t border-border" data-track-row={r.rank ?? undefined}>
-                <th scope="row" className="px-4 py-2 text-left font-normal">
+              <tr key={r.member_name} className="group border-t border-border transition-colors hover:bg-fill/45" data-track-row={r.rank ?? undefined}>
+                <th scope="row" className="px-4 py-2.5 text-left font-normal">
                   <div className="flex items-center gap-2.5">
-                    <span className="tabular w-5 shrink-0 text-right text-[12px] text-muted-foreground">{r.rank}</span>
+                    <span className="tabular w-5 shrink-0 text-right text-[12px] font-medium text-muted-foreground">{r.rank}</span>
                     <MemberAvatar name={r.member_name} bioguideId={r.bioguide_id} size="sm" />
-                    <a href={href} className="row-name max-w-[7.5rem] truncate font-medium sm:max-w-none" title={r.member_name}>
+                    <a href={href} className="row-name max-w-[7.5rem] truncate font-semibold tracking-[-0.01em] sm:max-w-none" title={r.member_name}>
                       {r.member_name}
                     </a>
                     <span className="hidden sm:inline-flex">
@@ -251,23 +252,23 @@ function RankedTable({ rows, horizon, scale }: { rows: TrackScoreRow[]; horizon:
                     </span>
                   </div>
                 </th>
-                <td className="px-4 py-2 text-right font-semibold text-foreground">
+                <td className="px-4 py-2.5 text-right font-semibold text-foreground">
                   <Points value={r.trade.score} />
                 </td>
-                <td className="px-4 py-2">
+                <td className="px-4 py-2.5">
                   <IntervalBar score={r.trade.score} lo={r.trade.lo} hi={r.trade.hi} scale={scale} label={label} />
                   <div className="tabular mt-0.5 text-[11px] text-muted-foreground">{intervalText(r.trade.lo, r.trade.hi)}</div>
                 </td>
-                <td className="tabular px-4 py-2 text-right text-ink-2">{percent(r.trade.hit_rate)}</td>
-                <td className="tabular px-4 py-2 text-right text-ink-2">
+                <td className="tabular px-4 py-2.5 text-right text-ink-2">{percent(r.trade.hit_rate)}</td>
+                <td className="tabular px-4 py-2.5 text-right text-ink-2">
                   {r.n}
                   <span className="text-muted-foreground"> · {plural(r.filings, "filing")}</span>
                 </td>
-                <td className="px-4 py-2 text-right text-ink-2" title={`Timing lost to the disclosure delay: ${points(r.trade.score - r.disclosure.score)} points`}>
+                <td className="px-4 py-2.5 text-right text-ink-2" title={`Timing lost to the disclosure delay: ${points(r.trade.score - r.disclosure.score)} points`}>
                   <Points value={r.disclosure.score} />
                 </td>
                 <td
-                  className="tabular px-4 py-2 text-right text-ink-2"
+                  className="tabular px-4 py-2.5 text-right text-ink-2"
                   title={
                     r.trade.luck == null
                       ? "No luck check: too few other members traded on this member's dates to compare with (old catch-up filings)"
@@ -300,12 +301,13 @@ function UnrankedList({
   return (
     <section aria-labelledby="unranked-title">
       <SectionTitle
+        kicker="Below threshold"
         right={<span className="text-[11px] text-muted-foreground">what each still needs</span>}
       >
         <span id="unranked-title">Not enough matured trades yet</span>
       </SectionTitle>
       <Card>
-        <p className="mb-3 text-[13px] text-muted-foreground">
+        <p className="mb-3.5 text-[13px] text-muted-foreground">
           {plural(rows.length, "member")} with fewer than {minimum} decisions measured over {horizon} trading days, or
           fewer than {minFilings} filings behind them. Listed, never ranked.
         </p>
@@ -314,7 +316,7 @@ function UnrankedList({
             <li key={r.member_name}>
               <a
                 href={memberHref(r.member_name, r.bioguide_id)}
-                className="inline-flex h-7 items-center gap-1.5 rounded-full bg-fill pl-1 pr-2.5 text-[12px] font-medium text-ink-2 transition-colors duration-(--dur) hover:text-foreground"
+                className="inline-flex h-7 items-center gap-1.5 rounded-full bg-fill/85 pl-1 pr-3 text-[12px] font-medium text-ink-2 ring-1 ring-black/[0.04] transition-all duration-(--dur) hover:bg-foreground/[0.09] hover:text-foreground dark:ring-white/[0.08]"
               >
                 <MemberAvatar name={r.member_name} bioguideId={r.bioguide_id} size="xs" />
                 {r.member_name}
@@ -335,6 +337,7 @@ function CoverageSection({ board }: { board: TrackLeaderboard }) {
   return (
     <section aria-labelledby="coverage-title">
       <SectionTitle
+        kicker="Data accounting"
         right={
           <span className="text-[11px] text-muted-foreground">
             {included ? `${percent(included.rows / (totalRows || 1))} of counted trades eligible` : null}

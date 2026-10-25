@@ -39,7 +39,7 @@ export function GroupedList({
 
 /** One row of a `GroupedList`: 44px minimum, the text inset 16px (20px from 640px). */
 export const GROUPED_ROW =
-  "flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-[14px] sm:px-5";
+  "flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-[14px] transition-colors duration-(--dur-fast) hover:bg-fill/40 sm:px-5";
 
 /**
  * A two-column row of a `GroupedList`, Settings-style: the name (and its
@@ -61,13 +61,13 @@ export function ValueRow({
   className?: string;
 }) {
   return (
-    <li className={cn("grid min-h-11 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 px-4 py-2.5 sm:px-5", className)}>
+    <li className={cn("grid min-h-11 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 px-4 py-2.5 transition-colors duration-(--dur-fast) hover:bg-fill/40 sm:px-5", className)}>
       <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 text-[14px]">
         {name}
         {tags}
       </div>
       <div className="flex flex-col items-end text-right sm:flex-row-reverse sm:items-baseline sm:gap-4">
-        {value ? <span className="tabular whitespace-nowrap text-[14px] text-foreground">{value}</span> : null}
+        {value ? <span className="tabular whitespace-nowrap text-[14px] font-medium text-foreground">{value}</span> : null}
         {meta ? <span className="tabular whitespace-nowrap text-[12px] text-muted-foreground sm:text-[13px]">{meta}</span> : null}
       </div>
     </li>
@@ -80,4 +80,4 @@ export const ROW_LINK =
 
 /** The "every … →" link at the foot of a grouped list. */
 export const LIST_FOOT_LINK =
-  "inline-flex items-center gap-1 rounded-sm text-[13px] font-medium text-ink-2 underline decoration-border-strong underline-offset-[3px] transition-colors duration-(--dur-fast) hover:text-foreground hover:decoration-current";
+  "inline-flex items-center gap-1 rounded-full bg-fill/85 px-3 py-1 text-[12px] font-medium text-ink-2 ring-1 ring-black/[0.04] transition-all duration-(--dur-fast) hover:bg-foreground/[0.09] hover:text-foreground dark:ring-white/[0.08]";

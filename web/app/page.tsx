@@ -28,7 +28,6 @@ import { ActionBadge, ResponsiveTable } from "./ui";
 import { Disclosure } from "./disclosure";
 import { DataError, PAGE_STACK, PageHeader } from "./page-header";
 import { AgentAlternates } from "./agent-alternates";
-import { AppleScrollObserver } from "./apple-scroll";
 
 export const dynamic = "force-dynamic";
 
@@ -138,126 +137,112 @@ export default async function FeedPage({
   const weekLabels = rollingWeekLabels(WEEKS);
 
   return (
-    <AppleScrollObserver>
-      <div className={PAGE_STACK}>
-        <SiteStructuredData />
-        <AgentAlternates markdown="/api/v1/feed.md" json="/api/v1/trades" />
-        <section id="overview" className="apple-snap-section">
-          <PageHeader
-            eyebrow={
-              <span className="inline-flex items-center gap-2 rounded-full border border-black/[0.08] dark:border-white/[0.12] bg-fill/60 px-3 py-1 text-[11px] font-semibold tracking-wider uppercase text-muted-foreground backdrop-blur-md">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                House & Senate · STOCK Act Disclosures
-              </span>
-            }
-            title="Congressional trades"
-            subtitle="Stock trades members of the House and Senate disclose under the STOCK Act, reproduced as filed. Amounts are the disclosed bracket, never one exact figure."
-          >
-            <section aria-label="All disclosed trades" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-              <div className="apple-stagger-item h-full">
-                <StatTile
-                  label="Trades"
-                  value={pipeline.totals.transactions.toLocaleString()}
-                  hint={`disclosed · ${weekly.window.trades.toLocaleString()} in last ${WEEKS} wk`}
-                  trend={weekly.trades}
-                  trendLabels={weekLabels}
-                  trendCaption="per week"
-                  trendLabel={`Trades disclosed per week, last ${WEEKS} weeks, by filing date`}
-                  delta={tradesDelta(weekly.window.trades, weekly.priorTrades)}
-                />
-              </div>
-              <div className="apple-stagger-item h-full">
-                <StatTile
-                  label="Tickers"
-                  value={pipeline.totals.tickers.toLocaleString()}
-                  hint={`distinct symbols · ${weekly.window.tickers.toLocaleString()} in last ${WEEKS} wk`}
-                />
-              </div>
-              <div className="apple-stagger-item h-full">
-                <StatTile
-                  label="Members"
-                  value={pipeline.totals.members.toLocaleString()}
-                  hint={`filing trades · ${weekly.window.members.toLocaleString()} in last ${WEEKS} wk`}
-                />
-              </div>
-              <div className="apple-stagger-item h-full">
-                <StatTile
-                  label="Filings"
-                  value={pipeline.coverage.parsed.toLocaleString()}
-                  hint={`parsed · ${weekly.window.filings.toLocaleString()} in last ${WEEKS} wk`}
-                  trend={weekly.filings}
-                  trendLabels={weekLabels}
-                  trendCaption="per week"
-                  trendLabel={`Filings parsed per week, last ${WEEKS} weeks, by filing date`}
-                />
-              </div>
-            </section>
-          </PageHeader>
-        </section>
-
-        {consensus.length ? (
-          <section id="consensus" className="apple-snap-section">
-            <SectionTitle
-              kicker="Bipartisan Activity"
-              right={<span className="text-muted-foreground">Last 90 days</span>}
-            >
-              Where members agree
-            </SectionTitle>
-            <div className="apple-card-reveal">
-              <Card>
-                <DivergingSplit
-                  unit="members trading, by direction"
-                  data={consensus.map((c) => ({
-                    key: c.ticker,
-                    label: c.ticker,
-                    sublabel: assetLabel(c.asset_name, { ticker: c.ticker }) || undefined,
-                    buy: c.buy_politicians,
-                    sell: c.sell_politicians,
-                    href: tickerHref(c.ticker),
-                  }))}
-                />
-              </Card>
-            </div>
-          </section>
-        ) : null}
-
-        <section id="trades" className="apple-snap-section">
-          <SectionTitle
-            kicker="Live Disclosures"
-            right={<span className="text-muted-foreground">By trade date, newest first</span>}
-          >
-            Recent trades
-          </SectionTitle>
-
-          <div className="apple-card-reveal">
-            <FeedList
-              rows={rows}
-              toolbar={
-                <>
-                  <DirectionFilter current={filters.action} hrefFor={(k) => feedHref({ ...filters, action: k })} />
-                  <FilterBar filters={filters} ignored={ignored} />
-                </>
-              }
-              actions={<ExportLink filters={filters} />}
-              summary={<ShownLine offset={offset} shown={rows.length} totals={totals} />}
-              empty={
-                offset > 0 && totals.trades ? (
-                  <>
-                    Nothing past trade {totals.trades.toLocaleString()}.{" "}
-                    <a href={feedHref(filters)} className="ink-link text-foreground">
-                      Back to the newest
-                    </a>
-                  </>
-                ) : undefined
-              }
+    <div className={PAGE_STACK}>
+      <SiteStructuredData />
+      <AgentAlternates markdown="/api/v1/feed.md" json="/api/v1/trades" />
+      <section id="overview" className="apple-snap-section">
+        <PageHeader
+          eyebrow={
+            <>
+              <span className="size-1.5 rounded-full bg-ok motion-safe:animate-pulse" aria-hidden />
+              House &amp; Senate · STOCK Act Disclosures
+            </>
+          }
+          title="Congressional trades"
+          subtitle="Stock trades members of the House and Senate disclose under the STOCK Act, reproduced as filed. Amounts are the disclosed bracket, never one exact figure."
+        >
+          <section aria-label="All disclosed trades" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+            <StatTile
+              label="Trades"
+              value={pipeline.totals.transactions.toLocaleString()}
+              hint={`disclosed · ${weekly.window.trades.toLocaleString()} in last ${WEEKS} wk`}
+              trend={weekly.trades}
+              trendLabels={weekLabels}
+              trendCaption="per week"
+              trendLabel={`Trades disclosed per week, last ${WEEKS} weeks, by filing date`}
+              delta={tradesDelta(weekly.window.trades, weekly.priorTrades)}
             />
-            <Pagination filters={filters} offset={offset} shown={rows.length} total={totals.trades} page={PAGE} />
-          </div>
-        </section>
+            <StatTile
+              label="Tickers"
+              value={pipeline.totals.tickers.toLocaleString()}
+              hint={`distinct symbols · ${weekly.window.tickers.toLocaleString()} in last ${WEEKS} wk`}
+            />
+            <StatTile
+              label="Members"
+              value={pipeline.totals.members.toLocaleString()}
+              hint={`filing trades · ${weekly.window.members.toLocaleString()} in last ${WEEKS} wk`}
+            />
+            <StatTile
+              label="Filings"
+              value={pipeline.coverage.parsed.toLocaleString()}
+              hint={`parsed · ${weekly.window.filings.toLocaleString()} in last ${WEEKS} wk`}
+              trend={weekly.filings}
+              trendLabels={weekLabels}
+              trendCaption="per week"
+              trendLabel={`Filings parsed per week, last ${WEEKS} weeks, by filing date`}
+            />
+          </section>
+        </PageHeader>
+      </section>
 
-        <BothSides />
-      </div>
-    </AppleScrollObserver>
+      {consensus.length ? (
+        <section id="consensus" className="apple-snap-section">
+          <SectionTitle
+            kicker="Bipartisan Activity"
+            right={<span className="text-muted-foreground">Last 90 days</span>}
+          >
+            Where members agree
+          </SectionTitle>
+          <Card>
+            <DivergingSplit
+              unit="members trading, by direction"
+              data={consensus.map((c) => ({
+                key: c.ticker,
+                label: c.ticker,
+                sublabel: assetLabel(c.asset_name, { ticker: c.ticker }) || undefined,
+                buy: c.buy_politicians,
+                sell: c.sell_politicians,
+                href: tickerHref(c.ticker),
+              }))}
+            />
+          </Card>
+        </section>
+      ) : null}
+
+      <section id="trades" className="apple-snap-section">
+        <SectionTitle
+          kicker="Live Disclosures"
+          right={<span className="text-muted-foreground">By trade date, newest first</span>}
+        >
+          Recent trades
+        </SectionTitle>
+
+        <FeedList
+          rows={rows}
+          toolbar={
+            <>
+              <DirectionFilter current={filters.action} hrefFor={(k) => feedHref({ ...filters, action: k })} />
+              <FilterBar filters={filters} ignored={ignored} />
+            </>
+          }
+          actions={<ExportLink filters={filters} />}
+          summary={<ShownLine offset={offset} shown={rows.length} totals={totals} />}
+          empty={
+            offset > 0 && totals.trades ? (
+              <>
+                Nothing past trade {totals.trades.toLocaleString()}.{" "}
+                <a href={feedHref(filters)} className="ink-link text-foreground">
+                  Back to the newest
+                </a>
+              </>
+            ) : undefined
+          }
+        />
+        <Pagination filters={filters} offset={offset} shown={rows.length} total={totals.trades} page={PAGE} />
+      </section>
+
+      <BothSides />
+    </div>
   );
 }
 

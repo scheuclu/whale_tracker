@@ -232,7 +232,7 @@ export function SplitCell({ buys, sells, className }: { buys: number; sells: num
         </span>
         <span
           aria-hidden
-          className="split-track flex h-1.5 w-10 shrink-0 gap-[2px] overflow-hidden rounded-full"
+          className="split-track flex h-2 w-11 shrink-0 gap-[2px] overflow-hidden rounded-full"
           title={total ? `${Math.round(buyPct)}% buys` : "no buys or sells"}
         >
           {buys ? <span className="bar-buy block h-full rounded-full" style={{ flexGrow: buys }} /> : null}
@@ -302,19 +302,19 @@ export function TableFooter({
   allHref?: string;
 }) {
   return (
-    <p className="tabular mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted-foreground">
+    <p className="tabular mt-3.5 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[12px] text-muted-foreground">
       <span>
         {shown < total ? `${shown} of ${total.toLocaleString()} ${noun}` : `All ${total.toLocaleString()} ${noun}`}, by{" "}
         {orderLabel}
       </span>
       {shown < total && moreHref ? (
         <SortLink href={moreHref} jump={false} className={FOOTER_LINK}>
-          show {Math.min(total, 200)}
+          Show {Math.min(total, 200)}
         </SortLink>
       ) : null}
       {shown < total && allHref ? (
         <SortLink href={allHref} jump={false} className={FOOTER_LINK}>
-          show all
+          Show all
         </SortLink>
       ) : null}
     </p>
@@ -322,4 +322,4 @@ export function TableFooter({
 }
 
 const FOOTER_LINK =
-  "rounded-sm text-ink-2 underline decoration-border underline-offset-[3px] transition-colors duration-(--dur-fast) hover:text-primary hover:decoration-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
+  "inline-flex items-center rounded-full bg-fill/85 px-2.5 py-0.5 text-[11.5px] font-medium text-ink-2 ring-1 ring-black/[0.04] transition-all duration-(--dur-fast) hover:bg-foreground/[0.09] hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring dark:ring-white/[0.08]";

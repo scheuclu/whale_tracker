@@ -17,6 +17,7 @@ import { useEffect, useState } from "react";
  */
 export function HeaderShell({ children }: { children: React.ReactNode }) {
   const [firstLoad, setFirstLoad] = useState(true);
+  const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
     if (!firstLoad) return;
@@ -28,8 +29,22 @@ export function HeaderShell({ children }: { children: React.ReactNode }) {
     };
   }, [firstLoad]);
 
+  useEffect(() => {
+    const onScroll = () => {
+      const isScrolled = window.scrollY > 10;
+      setScrolled((prev) => (prev !== isScrolled ? isScrolled : prev));
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   return (
-    <header data-first-load={firstLoad ? "" : undefined} className="site-header z-30">
+    <header
+      data-first-load={firstLoad ? "" : undefined}
+      data-scrolled={scrolled ? "true" : "false"}
+      className="site-header z-30"
+    >
       {children}
     </header>
   );

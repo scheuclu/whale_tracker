@@ -34,24 +34,24 @@ export function SymbolHero({
   actions?: React.ReactNode;
 }) {
   return (
-    <section className="flex flex-col items-center text-center">
+    <section className="apple-hero-surface apple-card-reveal relative flex flex-col items-center overflow-hidden rounded-[28px] px-5 py-8 text-center sm:px-10 sm:py-11">
       <SymbolMark symbol={symbol} />
-      <h1 className="display mt-4 max-w-full break-words text-[32px] leading-[1.1] sm:mt-5 sm:text-[44px] sm:leading-[1.05]">
+      {badges ? <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5">{badges}</div> : null}
+      <h1 className="display mt-3 max-w-full break-words text-[34px] leading-[1.06] tracking-[-0.032em] sm:text-[48px] sm:leading-[1.03]">
         {symbol}
       </h1>
       {identity ? (
-        <p className="mt-1.5 max-w-[40ch] text-balance text-[17px] leading-snug text-muted-foreground sm:text-[19px]">
+        <p className="mt-1.5 max-w-[44ch] text-balance text-[17px] font-medium leading-snug text-muted-foreground sm:text-[20px]">
           {identity}
         </p>
       ) : null}
-      {badges ? <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">{badges}</div> : null}
       {summary ? (
-        <p className="mt-3 max-w-[46ch] text-pretty text-[15px] leading-normal text-ink-2 first-letter:uppercase sm:text-[16px]">
+        <p className="mt-3 max-w-[50ch] text-pretty text-[16px] leading-[1.45] text-ink-2 first-letter:uppercase sm:text-[18px]">
           {summary}
         </p>
       ) : null}
-      {facts ? <p className="tabular mt-0.5 text-[13px] text-muted-foreground sm:text-[14px]">{facts}</p> : null}
-      {actions ? <div className="mt-5 flex flex-wrap items-center justify-center gap-2">{actions}</div> : null}
+      {facts ? <p className="tabular mt-1.5 text-[13px] font-medium text-muted-foreground sm:text-[14px]">{facts}</p> : null}
+      {actions ? <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">{actions}</div> : null}
     </section>
   );
 }
@@ -65,7 +65,7 @@ const MARK_TYPE = [
   "text-[18px] sm:text-[22px]",
 ];
 
-/** A symbol's mark: its letters on a neutral rounded square, 96px (120px from 640px). */
+/** A symbol's mark: its letters on a neutral iOS app-icon squircle, 96px (116px from 640px). */
 export function SymbolMark({ symbol, className }: { symbol: string; className?: string }) {
   const len = symbol.length;
   const type = MARK_TYPE[Math.min(Math.max(len - 2, 0), MARK_TYPE.length - 1)];
@@ -73,14 +73,17 @@ export function SymbolMark({ symbol, className }: { symbol: string; className?: 
     <span
       aria-hidden
       className={cn(
-        "relative inline-flex size-[96px] shrink-0 select-none items-center justify-center overflow-hidden rounded-[28%] sm:size-[120px]",
-        "bg-[color-mix(in_oklab,var(--foreground)_6%,var(--card-solid))] text-[color-mix(in_oklab,var(--foreground)_62%,var(--card-solid))]",
-        "dark:bg-[color-mix(in_oklab,var(--foreground)_9%,var(--card-solid))] dark:text-[color-mix(in_oklab,var(--foreground)_70%,var(--card-solid))]",
+        "relative inline-flex size-[96px] shrink-0 select-none items-center justify-center overflow-hidden rounded-[26%] sm:size-[116px]",
+        "bg-[linear-gradient(180deg,color-mix(in_oklab,var(--foreground)_5%,var(--card-solid)),color-mix(in_oklab,var(--foreground)_10%,var(--card-solid)))]",
+        "text-[color-mix(in_oklab,var(--foreground)_72%,var(--card-solid))]",
+        "dark:bg-[linear-gradient(180deg,color-mix(in_oklab,var(--foreground)_13%,var(--card-solid)),color-mix(in_oklab,var(--foreground)_7%,var(--card-solid)))]",
+        "dark:text-[color-mix(in_oklab,var(--foreground)_78%,var(--card-solid))]",
+        "shadow-[0_10px_28px_-6px_rgba(0,0,0,0.12),inset_0_1px_0_rgba(255,255,255,0.75)] dark:shadow-[0_12px_32px_-6px_rgba(0,0,0,0.65),inset_0_1px_0_rgba(255,255,255,0.16)]",
         className
       )}
     >
       <span className={cn("figure px-2 font-semibold leading-none tracking-[-0.03em]", type)}>{symbol}</span>
-      <span className="pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-inset ring-black/[0.06] dark:ring-white/[0.08]" />
+      <span className="pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-inset ring-black/[0.08] dark:ring-white/[0.1]" />
     </span>
   );
 }

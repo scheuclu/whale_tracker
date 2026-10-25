@@ -36,23 +36,27 @@ export function IntervalBar({
   const left = lo == null ? null : at(lo);
   const right = hi == null ? null : at(hi);
   return (
-    <div role="img" aria-label={label} title={label} className={cn("relative h-4 w-full min-w-24", className)}>
-      {/* Track and zero axis. */}
-      <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2" style={{ background: "var(--viz-grid)" }} />
-      <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2" style={{ background: "var(--viz-axis)", opacity: 0.6 }} />
+    <div role="img" aria-label={label} title={label} className={cn("relative h-5 w-full min-w-24", className)}>
+      {/* Recessed capsule track and zero axis. */}
+      <div className="apple-inset-well absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-full" />
+      <div className="absolute inset-y-0.5 left-1/2 w-px -translate-x-1/2" style={{ background: "var(--viz-axis)", opacity: 0.7 }} />
       {left != null && right != null ? (
         <div
-          className="viz-grow-x absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full"
+          className="viz-grow-x absolute top-1/2 h-2 -translate-y-1/2 rounded-full"
           style={{
             left: `${left}%`,
-            width: `${Math.max(right - left, 1)}%`,
-            background: "color-mix(in oklab, var(--viz-seq) 45%, transparent)",
+            width: `${Math.max(right - left, 1.5)}%`,
+            background: "color-mix(in oklab, var(--viz-seq) 55%, transparent)",
           }}
         />
       ) : null}
       <div
-        className="viz-fade absolute top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full"
-        style={{ left: `${at(score)}%`, background: "var(--viz-price)", boxShadow: "0 0 0 2px var(--card-solid)" }}
+        className="viz-fade absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full transition-transform duration-200 group-hover:scale-110"
+        style={{
+          left: `${at(score)}%`,
+          background: "var(--foreground)",
+          boxShadow: "0 0 0 2px var(--card-solid), 0 1px 3px rgba(0,0,0,0.22)",
+        }}
       />
     </div>
   );

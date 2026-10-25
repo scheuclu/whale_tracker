@@ -113,7 +113,7 @@ html {
 .apple-reveal-active .apple-card-reveal.is-revealed,
 .apple-reveal-active .apple-stagger-item.is-revealed {
   opacity: 1;
-  transform: translateY(0) scale(1);
+  transform: none;
 }
 
 /* Native CSS Scroll-Driven Animation progressive enhancement */

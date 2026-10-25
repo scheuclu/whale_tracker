@@ -35,7 +35,7 @@ export function AlertRowCard({ alert: a, extra }: { alert: AlertRow; extra?: Rea
   const kind = a.kind as AlertKind;
   const action = a.direction === "buy" ? "purchase" : a.direction === "sell" ? "sale" : null;
   return (
-    <li data-alert-id={a.id} className="px-4 py-3.5 sm:px-5">
+    <li data-alert-id={a.id} className="px-4 py-4 transition-colors duration-(--dur-fast) hover:bg-fill/45 sm:px-5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <KindBadge kind={a.kind} />
         {action ? (

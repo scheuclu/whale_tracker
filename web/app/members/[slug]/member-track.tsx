@@ -44,7 +44,17 @@ export async function MemberTrack({ member }: { member: string }) {
     );
   }
   const title = (
-    <SectionTitle right={<a href={TRACK_PATH} className="underline decoration-border-strong underline-offset-[3px] hover:text-foreground">All members ›</a>}>
+    <SectionTitle
+      kicker="Post-trade performance"
+      right={
+        <a
+          href={TRACK_PATH}
+          className="inline-flex items-center gap-1 rounded-full bg-fill/85 px-3 py-1 text-[12px] font-medium text-ink-2 ring-1 ring-black/[0.04] transition-all hover:bg-foreground/[0.09] hover:text-foreground dark:ring-white/[0.08]"
+        >
+          All members ›
+        </a>
+      }
+    >
       <span id="track-title">Track record</span>
     </SectionTitle>
   );
@@ -239,9 +249,9 @@ function ScoreTable({ scores }: { scores: TrackScoreRow[] }) {
 
 function DecisionList({ title, rows, empty }: { title: string; rows: TrackDecisionRow[]; empty: string }) {
   return (
-    <div>
-      <h3 className="mb-2 text-[15px] font-semibold text-foreground">
-        {title}{" "}
+    <div className="rounded-[18px] bg-fill/45 p-4 ring-1 ring-black/[0.04] dark:ring-white/[0.07]">
+      <h3 className="mb-2.5 flex items-baseline justify-between gap-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground">
+        <span>{title}</span>
         <span className="text-[12px] font-normal text-muted-foreground">over {DEFAULT_TRACK_HORIZON} trading days</span>
       </h3>
       {rows.length ? null : <Quiet className="text-[13px]">{empty}</Quiet>}

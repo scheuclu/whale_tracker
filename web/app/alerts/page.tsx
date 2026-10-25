@@ -129,6 +129,7 @@ export default async function AlertsPage({
 
       <section aria-labelledby="alert-log-title">
         <SectionTitle
+          kicker="Dispatch History"
           right={
             <span className="text-[12px] text-muted-foreground">
               {totals.last_fired ? `last alert ${relativeTime(totals.last_fired)}` : "no alert yet"}

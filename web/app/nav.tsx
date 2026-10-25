@@ -33,8 +33,8 @@ export function Tabs({ className }: { className?: string }) {
   return (
     // Below 360px the capsules lose a little padding, so all five fit a
     // 320px phone (e2e checks 320 and 390 for sideways scroll).
-    <nav aria-label="Sections" className={cn("min-w-0", className)}>
-      <ul className="-mx-1.5 flex items-stretch justify-between sm:-mx-2.5 sm:justify-start sm:gap-0.5 lg:mx-0">
+    <nav aria-label="Sections" className={cn("min-w-0 flex items-center", className)}>
+      <ul className="-mx-1.5 flex w-full items-center justify-between sm:mx-0 sm:w-auto sm: justify-start sm:gap-1 sm:rounded-full sm:bg-fill/85 sm:p-1 sm:shadow-[inset_0_1px_2px_rgba(0,0,0,0.05)] dark:sm:shadow-[inset_0_1px_2px_rgba(0,0,0,0.35)]">
         {TABS.map(({ href, label }) => {
           // A member's page lives at /members/<slug> but belongs to Members.
           const active =
@@ -47,15 +47,17 @@ export function Tabs({ className }: { className?: string }) {
                 href={href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "group/tab flex h-11 items-center whitespace-nowrap text-[13px] font-medium tracking-[-0.01em] outline-none lg:h-[52px]",
-                  active ? "text-foreground" : "text-ink-2 hover:text-foreground"
+                  "group/tab flex h-11 items-center whitespace-nowrap text-[13px] tracking-[-0.01em] outline-none sm:h-auto",
+                  active ? "font-semibold text-foreground" : "font-medium text-ink-2 hover:text-foreground"
                 )}
               >
                 <span
                   className={cn(
-                    "rounded-full px-[7px] py-[5px] transition-colors duration-(--dur) ease-(--ease-out) min-[360px]:px-2.5",
+                    "rounded-full px-[7px] py-[5px] transition-all duration-(--dur) ease-(--ease-out) min-[360px]:px-2.5 sm:px-3.5 sm:py-1.5",
                     "group-focus-visible/tab:outline-solid group-focus-visible/tab:outline-2 group-focus-visible/tab:outline-ring",
-                    active ? "bg-fill" : "group-hover/tab:bg-foreground/[0.04]"
+                    active
+                      ? "bg-card text-foreground shadow-segment ring-1 ring-black/[0.04] dark:ring-white/[0.08]"
+                      : "group-hover/tab:bg-foreground/[0.05]"
                   )}
                 >
                   {label}
@@ -136,9 +138,9 @@ export function SearchForm({ className }: { className?: string }) {
   }, []);
 
   return (
-    // The iOS search field: a grey filled capsule-rect, magnifier, no border.
-    <form method="get" action="/search" role="search" className={cn("relative flex items-center rounded-[10px]", className)}>
-      <Search className="pointer-events-none absolute left-2.5 size-[15px] text-muted-foreground" strokeWidth={2.25} aria-hidden />
+    // The iOS / macOS Spotlight search field: a frosted capsule, magnifier, subtle inner ring.
+    <form method="get" action="/search" role="search" className={cn("relative flex items-center rounded-full", className)}>
+      <Search className="pointer-events-none absolute left-3 size-[14px] text-muted-foreground" strokeWidth={2.25} aria-hidden />
       <input
         ref={input}
         type="search"
@@ -149,16 +151,16 @@ export function SearchForm({ className }: { className?: string }) {
         title="Search members, tickers and insider issuers"
         aria-keyshortcuts={hint ? "Meta+K Control+K /" : undefined}
         className={cn(
-          "peer h-8 w-full rounded-[10px] border-0 bg-fill pl-8 pr-12 text-[13px] text-foreground outline-none",
-          "transition-[background-color] duration-(--dur) ease-(--ease-out) [&::-webkit-search-cancel-button]:hidden",
-          "placeholder:text-muted-foreground hover:bg-foreground/[0.09] focus:bg-foreground/[0.09]"
+          "peer h-8 w-full rounded-full border border-black/[0.05] dark:border-white/[0.08] bg-fill/85 pl-8 pr-12 text-[13px] text-foreground outline-none shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)]",
+          "transition-all duration-(--dur) ease-(--ease-out) [&::-webkit-search-cancel-button]:hidden",
+          "placeholder:text-muted-foreground hover:bg-foreground/[0.09] hover:border-black/[0.09] dark:hover:border-white/[0.15] focus:bg-card focus:border-black/[0.18] dark:focus:border-white/[0.24] focus:shadow-segment"
         )}
       />
       {hint ? (
         <kbd
           aria-hidden
           className={cn(
-            "pointer-events-none absolute right-2 hidden h-5 items-center rounded-md bg-card/70 px-1.5 shadow-[0_0_0_0.5px_var(--border)]",
+            "pointer-events-none absolute right-2 hidden h-5 items-center rounded-full bg-card/85 px-1.5 shadow-[0_0_0_0.5px_var(--border)]",
             "font-sans text-[10.5px] font-medium text-muted-foreground sm:inline-flex",
             "peer-focus:opacity-0 peer-[:not(:placeholder-shown)]:opacity-0"
           )}

@@ -140,14 +140,14 @@ export async function TickerDetail({ stat }: { stat: TickerRow }) {
       <PriceOverlay ticker={ticker} focus="congress" congress={timeline} />
 
       <section>
-        <SectionTitle right={<span className="text-muted-foreground">By trade date</span>}>
+        <SectionTitle kicker="Chronology" right={<span className="text-muted-foreground">By trade date</span>}>
           Trades over time
         </SectionTitle>
         <TradeTimeline trades={timeline} mode="ticker" />
       </section>
 
       <section>
-        <SectionTitle>Disclosed volume range</SectionTitle>
+        <SectionTitle kicker="Bracket Interval">Disclosed volume range</SectionTitle>
         <Card>
           <VolumeRange
             min={stat.volume_min}
@@ -162,7 +162,7 @@ export async function TickerDetail({ stat }: { stat: TickerRow }) {
       <TickerMembers ticker={stat.ticker} members={members} />
 
       <section>
-        <SectionTitle right={<ExportLink filters={{ ticker }} />}>Every disclosed trade</SectionTitle>
+        <SectionTitle kicker="Complete Ledger" right={<ExportLink filters={{ ticker }} />}>Every disclosed trade</SectionTitle>
         <TradeList>
           {trades.map((r) => (
             <TradeRow key={r.id} r={r} subject="member" />
@@ -175,6 +175,7 @@ export async function TickerDetail({ stat }: { stat: TickerRow }) {
       {optionTrades.length ? (
         <section>
           <SectionTitle
+            kicker="Derivatives"
             right={
               <span>
                 {calls} call{calls === 1 ? "" : "s"} · {puts} put{puts === 1 ? "" : "s"}
@@ -290,6 +291,7 @@ async function InsidersInIssuer({ ticker }: { ticker: string }) {
   return (
     <section>
       <SectionTitle
+        kicker="Corporate Filings"
         right={
           <span>last {CROSS_WINDOW_DAYS} days · SEC Form 4</span>
         }

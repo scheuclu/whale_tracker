@@ -116,14 +116,18 @@ function DaySection({ day, today, index }: { day: DayGroup<TransactionRow>; toda
           grey. Opaque (the canvas), so rows passing under it never show. */}
       <h3
         id={id}
-        className="feed-day-head sticky z-20 -mx-1 flex h-12 items-end gap-2 px-1 pb-2 text-[13px] sm:-mx-2 sm:px-2"
+        className="feed-day-head sticky z-20 -mx-1 flex h-12 items-center gap-2 px-1 pt-2 text-[13px] sm:-mx-2 sm:px-2"
       >
-        <span className="whitespace-nowrap font-display text-[17px] font-semibold leading-tight tracking-[-0.018em] text-foreground">{day.label}</span>
-        {day.date ? <span className="tabular leading-tight text-muted-foreground">{day.date}</span> : null}
+        <span className="whitespace-nowrap font-display text-[18px] font-bold leading-tight tracking-[-0.02em] text-foreground">{day.label}</span>
+        {day.date ? (
+          <span className="tabular rounded-full bg-fill/75 px-2.5 py-0.5 text-[11.5px] font-medium leading-tight text-ink-2 ring-1 ring-black/[0.03] dark:ring-white/[0.06]">
+            {day.date}
+          </span>
+        ) : null}
         {day.future ? (
           <StatusNote
             tone="attention"
-            className="whitespace-nowrap rounded-full bg-fill px-2 py-px text-[12px] font-medium leading-tight text-ink-2"
+            className="whitespace-nowrap rounded-full bg-fill px-2.5 py-0.5 text-[12px] font-medium leading-tight text-ink-2"
             title="This trade date is later than today: the filing's own date, reproduced as filed rather than corrected"
           >
             {/* A phone keeps the header on one line: the flag shortens, its title keeps the whole reason. */}
@@ -131,10 +135,10 @@ function DaySection({ day, today, index }: { day: DayGroup<TransactionRow>; toda
           </StatusNote>
         ) : null}
         {day.key === null ? null : (
-          <span className="hidden leading-tight text-muted-foreground sm:inline">traded</span>
+          <span className="hidden text-[12px] leading-tight text-muted-foreground sm:inline">traded</span>
         )}
         <span className="flex-1" />
-        <span className="tabular whitespace-nowrap leading-tight text-muted-foreground">
+        <span className="tabular whitespace-nowrap rounded-full bg-card/85 px-2.5 py-0.5 text-[11.5px] font-medium leading-tight text-muted-foreground ring-1 ring-border/70">
           {day.trades} {day.trades === 1 ? "trade" : "trades"}
           <span className={day.future ? "max-[379px]:hidden" : undefined}>
             <span aria-hidden> · </span>
@@ -144,7 +148,7 @@ function DaySection({ day, today, index }: { day: DayGroup<TransactionRow>; toda
       </h3>
       {/* One grouped tile per day; filings separated by hairlines that start
           at the member's name, not the tile's edge (.inset-rows). */}
-      <ol className="tile inset-rows mb-2 [--sep-inset:3.25rem] sm:[--sep-inset:3.25rem]">
+      <ol className="tile apple-card-reveal inset-rows mb-3 [--sep-inset:3.25rem] sm:[--sep-inset:3.25rem]">
         {day.blocks.map((b, i) => (
           <FilingBlockView key={`${b.key}-${i}`} block={b} today={today} />
         ))}

@@ -168,7 +168,7 @@ export default async function TickersPage({
 
       <section className="grid gap-6 lg:grid-cols-2">
         <div>
-          <SectionTitle>Most traded by volume</SectionTitle>
+          <SectionTitle kicker="Volume Leaders">Most traded by volume</SectionTitle>
           <Card>
             <MagnitudeBars
               data={rows.slice(0, 12).map((r) => ({
@@ -190,7 +190,7 @@ export default async function TickersPage({
         </div>
 
         <div>
-          <SectionTitle>Most members trading</SectionTitle>
+          <SectionTitle kicker="Broadest Interest">Most members trading</SectionTitle>
           <Card>
             <DivergingSplit
               unit="distinct members"
@@ -208,7 +208,7 @@ export default async function TickersPage({
       </section>
 
       <section id="all-tickers" className="table-anchor">
-        <SectionTitle>All tickers</SectionTitle>
+        <SectionTitle kicker="Complete Directory">All tickers</SectionTitle>
         <ResponsiveTable>
           <table className={DATA_TABLE}>
             <StickyThead>
@@ -287,13 +287,16 @@ function SectorLeaderboard({ sectors }: { sectors: SectorRow[] }) {
   const tickersKnown = classified.reduce((n, s) => n + s.tickers, 0);
   return (
     <section>
-      <SectionTitle right={<span className="text-[11px] text-muted-foreground">same window as above</span>}>
+      <SectionTitle
+        kicker="Industry Breakdown"
+        right={<span className="text-[11px] text-muted-foreground">same window as above</span>}
+      >
         By sector
       </SectionTitle>
       {classified.length ? (
         <div className="grid gap-6 lg:grid-cols-2">
           <Card>
-            <h3 className="mb-3 text-[13px] font-semibold text-muted-foreground">
+            <h3 className="apple-section-kicker mb-3">
               Most members trading
             </h3>
             <MagnitudeBars
@@ -308,7 +311,7 @@ function SectorLeaderboard({ sectors }: { sectors: SectorRow[] }) {
             />
           </Card>
           <Card>
-            <h3 className="mb-3 text-[13px] font-semibold text-muted-foreground">
+            <h3 className="apple-section-kicker mb-3">
               Estimated volume
             </h3>
             <MagnitudeBars

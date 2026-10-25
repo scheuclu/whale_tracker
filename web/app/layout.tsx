@@ -5,6 +5,7 @@ import { ThemeProvider } from "next-themes";
 import { Analytics } from "@vercel/analytics/next";
 import { BrandMark, Wordmark } from "./brand";
 import { HeaderShell } from "./header-shell";
+import { AppleScrollObserver } from "./apple-scroll";
 import { SiteFooter } from "./site-footer";
 import { NoScriptStyles } from "./no-script";
 import { AgentAlternates } from "./agent-alternates";
@@ -83,29 +84,34 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 on a phone that row is the only part that stays pinned
                 (globals.css, .site-header). */}
             <div className="mx-auto flex max-w-[1080px] flex-wrap items-stretch px-4 sm:px-6 lg:flex-nowrap lg:gap-x-8">
-              <div className="flex h-12 min-w-0 flex-1 items-center lg:h-[52px] lg:flex-none">
+              <div className="flex h-12 min-w-0 flex-1 items-center lg:h-[54px] lg:flex-none">
                 <Link
                   href="/"
-                  className="group -m-1 flex min-w-0 items-center gap-2 rounded-[10px] p-1 outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring"
+                  className="group -m-1 flex min-w-0 items-center gap-2.5 rounded-[12px] p-1 outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring"
                   aria-label="FatCat Watch — feed"
                 >
-                  <BrandMark className="size-[26px] transition-transform duration-200 ease-out motion-safe:group-hover:-rotate-6" />
+                  <span className="flex size-8 items-center justify-center rounded-[9px] bg-fill/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_1px_2px_rgba(0,0,0,0.05)] ring-1 ring-black/[0.05] transition-transform duration-200 ease-out motion-safe:group-hover:scale-105 dark:ring-white/[0.08]">
+                    <BrandMark className="size-[22px] transition-transform duration-200 ease-out motion-safe:group-hover:-rotate-6" />
+                  </span>
                   <Wordmark className="text-[18px]" />
                 </Link>
               </div>
               {/* In the DOM between the brand and the tools, so the tab order
                   reads brand → sections → search → theme at every width; below
                   1024px the tools are moved up into the brand row visually. */}
-              <Tabs className="order-3 basis-full lg:order-none lg:basis-auto" />
-              <div className="order-2 flex h-12 items-center justify-end gap-1.5 sm:gap-2 lg:order-none lg:h-[52px] lg:flex-1">
-                <SearchForm className="hidden w-56 sm:flex md:w-64 lg:w-52 xl:w-60" />
+              <Tabs className="order-3 basis-full pb-1 sm:pb-1.5 lg:order-none lg:basis-auto lg:pb-0" />
+              <div className="order-2 flex h-12 items-center justify-end gap-1.5 sm:gap-2 lg:order-none lg:h-[54px] lg:flex-1">
+                <SearchForm className="hidden w-56 sm:flex md:w-64 lg:w-56 xl:w-64" />
                 <SearchLink className="sm:hidden" />
                 <ThemeToggle />
               </div>
             </div>
           </HeaderShell>
-          {/* page-flow sets the section rhythm (globals.css): 28px apart on a phone, 40px from sm. */}
-          <main className="page-flow mx-auto w-full max-w-[1080px] px-4 pb-20 pt-6 sm:px-6 sm:pb-28 sm:pt-12">{children}</main>
+          <AppleScrollObserver />
+          {/* page-flow sets the section rhythm (globals.css): 32px apart on a phone, 48px from sm. */}
+          <main className="page-flow mx-auto w-full max-w-[1080px] px-4 pb-20 pt-7 sm:px-6 sm:pb-28 sm:pt-12">
+            {children}
+          </main>
           <SiteFooter
             transactions={transactions}
             insiderTrades={insiderTrades}

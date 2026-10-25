@@ -242,23 +242,26 @@ export default async function PoliticiansPage({
       </section>
       <a
         href={TRACK_PATH}
-        className="flex items-center justify-between gap-4 rounded-tile bg-card px-4 py-3.5 shadow-card transition-shadow duration-(--dur) hover:shadow-[var(--elev-card-hover)] sm:px-5"
+        className="apple-hero-surface apple-card-reveal group flex items-center justify-between gap-4 rounded-tile px-5 py-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-elevated sm:px-6 sm:py-5"
         data-track-link
       >
         <span className="min-w-0">
-          <span className="block text-[15px] font-semibold text-foreground">Track record</span>
-          <span className="block text-[13px] leading-snug text-muted-foreground">
+          <span className="apple-section-kicker mb-1">Post-trade performance</span>
+          <span className="block font-display text-[18px] font-bold tracking-[-0.02em] text-foreground sm:text-[20px]">Track record</span>
+          <span className="mt-0.5 block text-[13.5px] leading-snug text-muted-foreground">
             Whose trades were followed by the biggest market-beating moves: the stock&rsquo;s move against the S&amp;P
             500, not anyone&rsquo;s profit.
           </span>
         </span>
-        <span aria-hidden className="shrink-0 text-[20px] leading-none text-muted-foreground">›</span>
+        <span aria-hidden className="inline-flex shrink-0 items-center gap-1 rounded-full bg-fill/85 px-3.5 py-1.5 text-[13px] font-semibold text-foreground ring-1 ring-black/[0.05] transition-transform duration-200 group-hover:translate-x-0.5 dark:ring-white/[0.08]">
+          Explore <span className="text-[16px] leading-none">›</span>
+        </span>
       </a>
       </PageHeader>
 
       <section className="grid gap-6 lg:grid-cols-2">
         <div>
-          <SectionTitle>By estimated volume</SectionTitle>
+          <SectionTitle kicker="Volume Ranking">By estimated volume</SectionTitle>
           <Card>
             <MemberBars
               data={rows.slice(0, 12).map((r) => ({
@@ -279,7 +282,7 @@ export default async function PoliticiansPage({
           </Card>
         </div>
         <div>
-          <SectionTitle>By number of trades</SectionTitle>
+          <SectionTitle kicker="Activity Ranking">By number of trades</SectionTitle>
           <Card>
             <MemberBars
               data={byTrades.slice(0, 12).map((r) => ({
@@ -302,6 +305,7 @@ export default async function PoliticiansPage({
 
       <section id="all-members" className="table-anchor">
         <SectionTitle
+          kicker="Complete Roster"
           right={
             <span className="text-[11px] text-muted-foreground">
               {table.length} members · sort by any column

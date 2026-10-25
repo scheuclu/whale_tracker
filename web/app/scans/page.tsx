@@ -68,6 +68,7 @@ export default async function ScansPage({
 
       <section>
         <SectionTitle
+          kicker="Audit Trail"
           right={
             <span className="text-[12px] text-muted-foreground">
               {filings.length.toLocaleString()} filing{filings.length === 1 ? "" : "s"} · newest first
