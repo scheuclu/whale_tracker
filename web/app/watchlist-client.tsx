@@ -1,10 +1,10 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Bell, Bookmark, Check, ExternalLink, Sparkles, Star, X } from "lucide-react";
+import { Bell, Bookmark, Check, ExternalLink, Mail, Sparkles, Star, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
-import { BUTTON, BUTTON_PRIMARY, FOCUS_RING } from "./ui";
+import { BUTTON, BUTTON_PRIMARY, FIELD, FOCUS_RING } from "./ui";
 import {
   EMPTY_WATCHLIST,
   WATCHLIST_STORAGE_KEY,
@@ -143,6 +143,10 @@ export function GetAlertsPopover({
 }) {
   const { state, mounted, toggle } = useWatchlist();
   const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [clusters, setClusters] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
   const normId = subject?.id.trim().toUpperCase();
@@ -172,6 +176,49 @@ export function GetAlertsPopover({
   const totalWatched = state.members.length + state.tickers.length;
   const feedUrl = watchlistFeedHref(state);
 
+  const handleEmailSubscribe = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setSubmitting(true);
+    setNotice(null);
+    const members = [...state.members];
+    const tickers = [...state.tickers];
+    if (subject && normId) {
+      if (subject.kind === "member" && !members.includes(normId)) members.push(normId);
+      if (subject.kind === "ticker" && !tickers.includes(normId)) tickers.push(normId);
+      if (!isFollowed) toggle({ kind: subject.kind, id: normId, label: subject.label });
+    }
+    try {
+      const res = await fetch("/api/alerts/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          members,
+          tickers,
+          clusters,
+        }),
+      });
+      const data = (await res.json()) as { message?: string; error?: string };
+      if (res.ok) {
+        trackEvent("alert_email_subscribed", {
+          from: normId ?? "global",
+          members: members.length,
+          tickers: tickers.length,
+          clusters,
+        });
+        setNotice(data.message ?? "Check your inbox to confirm your daily alert subscription.");
+        setEmail("");
+      } else {
+        setNotice(data.error ?? "Saved to your device watchlist.");
+      }
+    } catch {
+      setNotice("Saved to your device watchlist.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div ref={wrapRef} className={cn("relative inline-flex", className)}>
       <button
@@ -197,7 +244,7 @@ export function GetAlertsPopover({
         <div
           role="dialog"
           aria-label="Alert and watchlist options"
-          className="absolute right-0 top-full z-40 mt-2 w-[min(21rem,calc(100vw-2rem))] rounded-[20px] border border-black/[0.08] bg-popover/95 p-4 text-left text-popover-foreground shadow-popover backdrop-blur-2xl dark:border-white/[0.12]"
+          className="absolute right-0 top-full z-40 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-[20px] border border-black/[0.08] bg-popover/95 p-4 text-left text-popover-foreground shadow-popover backdrop-blur-2xl dark:border-white/[0.12]"
         >
           <div className="flex items-start justify-between gap-2">
             <div>
@@ -239,37 +286,66 @@ export function GetAlertsPopover({
               </div>
             ) : null}
 
-            <div className="rounded-[14px] bg-fill/65 p-3 ring-1 ring-black/[0.04] dark:ring-white/[0.07]">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-medium text-foreground">Dispatched Alert Log</span>
-                <a
-                  href="/alerts"
-                  onClick={() => trackEvent("alerts_log_click", { from: normId ?? "global" })}
-                  className="inline-flex items-center gap-1 rounded-full bg-card px-2.5 py-1 text-[12px] font-medium text-foreground shadow-segment ring-1 ring-black/[0.05] dark:ring-white/[0.08]"
-                >
-                  View log
-                  <ExternalLink className="size-3" aria-hidden />
-                </a>
-              </div>
-              <p className="mt-1 text-[12px] leading-snug text-muted-foreground">
-                Every congressional cluster, watched-member filing, late disclosure, and Form 4 C-suite buy as sent.
+            <form
+              onSubmit={handleEmailSubscribe}
+              className="rounded-[14px] bg-fill/65 p-3 ring-1 ring-black/[0.04] dark:ring-white/[0.07]"
+            >
+              <p className="font-medium text-foreground">Daily Email Digest</p>
+              <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground">
+                At most 1 email/day when{" "}
+                {subject ? `${subject.label} or your watchlist` : "your watchlist"} files new trades.
               </p>
-            </div>
-
-            {totalWatched > 0 ? (
-              <div className="flex items-center justify-between border-t border-border/60 pt-2.5 text-[12px]">
-                <span className="text-muted-foreground">
-                  Watching {totalWatched} {totalWatched === 1 ? "item" : "items"}
-                </span>
-                <a
-                  href={feedUrl}
-                  onClick={() => setOpen(false)}
-                  className="font-semibold text-foreground underline decoration-border-strong underline-offset-[3px]"
+              <div className="mt-2 flex items-center gap-1.5">
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  aria-label="Email address for daily digest alerts"
+                  className={cn(FIELD, "h-8 text-[12.5px]")}
+                />
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className={cn(BUTTON_PRIMARY, "h-8 px-3 text-[12px]")}
                 >
-                  Open Following feed →
-                </a>
+                  <Mail className="size-3" aria-hidden />
+                  <span>{submitting ? "…" : "Subscribe"}</span>
+                </button>
               </div>
-            ) : null}
+              <label className="mt-2 flex cursor-pointer items-center gap-1.5 text-[11.5px] text-ink-2">
+                <input
+                  type="checkbox"
+                  checked={clusters}
+                  onChange={(e) => setClusters(e.target.checked)}
+                  className="size-3.5 accent-foreground"
+                />
+                <span>Also include high-signal cluster alerts</span>
+              </label>
+              {notice ? <p className="mt-2 text-[12px] font-medium text-foreground">{notice}</p> : null}
+            </form>
+
+            <div className="flex items-center justify-between border-t border-border/60 pt-2.5 text-[12px]">
+              <a
+                href="/watchlist"
+                onClick={() => setOpen(false)}
+                className="font-semibold text-foreground underline decoration-border-strong underline-offset-[3px]"
+              >
+                Manage watchlist {totalWatched > 0 ? `(${totalWatched})` : ""}
+              </a>
+              <a
+                href={totalWatched > 0 ? feedUrl : "/alerts"}
+                onClick={() => {
+                  trackEvent("alerts_log_click", { from: normId ?? "global" });
+                  setOpen(false);
+                }}
+                className="inline-flex items-center gap-1 font-medium text-ink-2 hover:text-foreground"
+              >
+                {totalWatched > 0 ? "Following feed →" : "Alert log"}
+                {totalWatched === 0 ? <ExternalLink className="size-3" aria-hidden /> : null}
+              </a>
+            </div>
           </div>
         </div>
       ) : null}
