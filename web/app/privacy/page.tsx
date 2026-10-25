@@ -62,9 +62,9 @@ const SECTIONS: LegalSection[] = [
         </li>
         <li>
           Members&apos; official portraits come from the public{" "}
-          <TextLink href="https://github.com/unitedstates/images">unitedstates/images</TextLink> project. Our
-          server fetches and resizes them and serves them from this domain, so your browser never contacts
-          GitHub.
+          <TextLink href="https://github.com/unitedstates/images">unitedstates/images</TextLink> project, and
+          company logos on ticker pages come from Financial Modeling Prep. Our server fetches and resizes them
+          and serves them from this domain, so your browser never contacts those hosts.
         </li>
         <li>
           Share links are ordinary links. Nothing is sent to a social network unless you follow one and post

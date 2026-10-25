@@ -24,7 +24,10 @@ const nextConfig: NextConfig = {
   // optimized copy is kept for 31 days to hold transformations near one per
   // member and width.
   images: {
-    remotePatterns: [new URL("https://unitedstates.github.io/images/congress/**")],
+    remotePatterns: [
+      new URL("https://unitedstates.github.io/images/congress/**"),
+      new URL("https://financialmodelingprep.com/image-stock/**"),
+    ],
     minimumCacheTTL: 2678400,
     qualities: [75],
   },
