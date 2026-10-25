@@ -69,6 +69,7 @@ export default async function WatchlistPage({
       <WatchlistManager
         token={validToken}
         initialSub={initialSub}
+        statusCode={params.status ?? null}
         statusNotice={statusNotice}
         emailEnabled={emailEnabled}
       />
