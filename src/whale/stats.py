@@ -1140,9 +1140,38 @@ def track_row_exclusion(row, today: date) -> str | None:
     return None
 
 
+def insider_track_row_exclusion(row, today: date) -> str | None:
+    """`track_row_exclusion` for a stored Form 4 row (insider_track).
+
+    Every stored row is an open-market purchase or sale of the issuer's own
+    equity (form4 keeps only P/S codes from the non-derivative table), so the
+    asset-type and option tests have nothing to catch and nothing is ever
+    transcribed. What remains: a direction, a ticker to price (the issuer's
+    listed symbol; NULL for NONE / N/A), and dates as filed — a trade date
+    that is missing, in the future or after the filing is counted, never
+    corrected.
+    """
+    if trade_direction(row["action"]) is None:
+        return "exchange"
+    if not (row["ticker"] or "").strip():
+        return "no_ticker"
+    try:
+        traded = date.fromisoformat(row["tx_date"] or "")
+        filed = date.fromisoformat((row["filing_date"] or "")[:10])
+    except ValueError:
+        return "date_as_filed"
+    if traded > today or filed < traded:
+        return "date_as_filed"
+    return None
+
+
 @dataclass
 class TrackDecision:
-    """One (member, ticker, direction, filing) group of counted rows."""
+    """One (member, ticker, direction, filing) group of counted rows.
+
+    For insiders (insider_track) `member_name` carries the primary owner's
+    CIK — the key a decision is grouped and scored by — and `politician_id`
+    is None."""
 
     filing_id: int
     member_name: str
@@ -1157,10 +1186,12 @@ class TrackDecision:
     exclusion: str | None = None
 
 
-def group_track_decisions(rows, today: date) -> tuple[list[TrackDecision], dict[str, int]]:
+def group_track_decisions(rows, today: date,
+                          exclusion=None) -> tuple[list[TrackDecision], dict[str, int]]:
     """Fold counted rows into decisions; returns them and rows per outcome.
 
-    Rows that pass `track_row_exclusion` group into one decision per
+    `exclusion` is the row test (`track_row_exclusion` by default, or
+    `insider_track_row_exclusion`). Rows that pass it group into one decision per
     (filing, ticker, direction), dated by the group's earliest trade. A
     group with no eligible row but a ticker and a direction is kept as an
     excluded decision (reason: its rows' first in `TRACK_EXCLUSIONS` order)
@@ -1168,11 +1199,12 @@ def group_track_decisions(rows, today: date) -> tuple[list[TrackDecision], dict[
     also has eligible rows, the excluded rows are counted but form nothing.
     The row tally is keyed by reason, plus "included".
     """
+    exclusion = exclusion or track_row_exclusion
     tally: dict[str, int] = {}
     eligible: dict[tuple, TrackDecision] = {}
     excluded: dict[tuple, TrackDecision] = {}
     for r in rows:
-        reason = track_row_exclusion(r, today)
+        reason = exclusion(r, today)
         tally[reason or "included"] = tally.get(reason or "included", 0) + 1
         direction = trade_direction(r["action"])
         ticker = (r["ticker"] or "").strip().upper()

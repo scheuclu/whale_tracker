@@ -243,7 +243,9 @@ export function DashboardSync({ follows }: { follows: string }) {
   const account = useAccount();
   const router = useRouter();
   const current =
-    account.status === "signed_in" ? [...account.account.members, ...account.account.tickers].join(",") : null;
+    account.status === "signed_in"
+      ? [...account.account.members, ...account.account.tickers, ...(account.account.insiders ?? [])].join(",")
+      : null;
   useEffect(() => {
     if (current !== null && current !== follows) router.refresh();
   }, [current, follows, router]);
@@ -251,7 +253,7 @@ export function DashboardSync({ follows }: { follows: string }) {
 }
 
 /** An unfollow control on a dashboard card. */
-export function UnfollowButton({ kind, id, label }: { kind: "member" | "ticker"; id: string; label: string }) {
+export function UnfollowButton({ kind, id, label }: { kind: "member" | "ticker" | "insider"; id: string; label: string }) {
   const [busy, setBusy] = useState(false);
   return (
     <button
@@ -259,7 +261,9 @@ export function UnfollowButton({ kind, id, label }: { kind: "member" | "ticker";
       disabled={busy}
       onClick={async () => {
         setBusy(true);
-        const ok = await changeFollows({ remove: kind === "member" ? { members: [id] } : { tickers: [id] } });
+        const ok = await changeFollows({
+          remove: kind === "member" ? { members: [id] } : kind === "ticker" ? { tickers: [id] } : { insiders: [id] },
+        });
         trackEvent("watchlist_toggle", { kind, id, followed: false, from: "dashboard", ok });
         setBusy(false);
       }}
@@ -348,7 +352,7 @@ function SignedInPanel({ account }: { account: Account }) {
     else setNotice("Could not delete the account. Please try again.");
   };
 
-  const followed = account.members.length + account.tickers.length;
+  const followed = account.members.length + account.tickers.length + (account.insiders?.length ?? 0);
 
   return (
     <Card className="space-y-5">

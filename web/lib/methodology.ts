@@ -195,7 +195,11 @@ export const QUOTING_RULES: QuotingRule[] = [
       "an interval that crosses zero cannot tell the record from no edge. Options, non-equity assets, exchanges, " +
       "transcribed rows, rows with contradictory dates and tickers without a price series are excluded and counted. " +
       "Say \"the stocks X traded beat the S&P 500 by N points on average over 90 trading days after the trade\", never " +
-      "\"X earned\", \"X's returns\", \"alpha\" or \"the best trader\". It is not evidence of wrongdoing.",
+      "\"X earned\", \"X's returns\", \"alpha\" or \"the best trader\". It is not evidence of wrongdoing. " +
+      "Corporate insiders get the same measurement in a ranking of their own (`/rankings?view=insiders`): one decision is " +
+      "one Form 4's buys or sells of one stock by its primary reporting owner, measured from the trade and from the " +
+      "first close after the filing. It is never combined with the members' ranking; an insider trades their own " +
+      "company under plans and windows it sets.",
   },
   {
     id: "not-advice",

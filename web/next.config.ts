@@ -68,6 +68,7 @@ const nextConfig: NextConfig = {
         { source: "/", has: [{ type: "query", key: "member" }], destination: "/api/legacy-redirect/feed-member" },
         { source: "/tickers", has: [{ type: "query", key: "t" }], destination: "/api/legacy-redirect/ticker" },
         { source: "/insiders", has: [{ type: "query", key: "t" }], destination: "/api/legacy-redirect/issuer" },
+        { source: "/insiders", has: [{ type: "query", key: "cik" }], destination: "/api/legacy-redirect/insider" },
       ],
       afterFiles: [],
       fallback: [],

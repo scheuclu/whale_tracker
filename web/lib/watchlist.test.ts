@@ -65,3 +65,13 @@ test("toggleWatchItem adds and removes items while preserving labels", () => {
   assert.deepEqual(sanitized.members, ["P000197"]);
   assert.deepEqual(sanitized.tickers, ["NVDA"]);
 });
+
+test("insiders are followed by CIK and stay out of the ?watch= feed filter", () => {
+  const { next, followed } = toggleWatchItem(EMPTY_WATCHLIST, { kind: "insider", id: "0001234567", label: "Hood Amy" });
+  assert.equal(followed, true);
+  assert.deepEqual(next.insiders, ["0001234567"]);
+  assert.equal(serializeWatchParam(next), "");
+  const restored = sanitizeWatchlistState({ ...next, insiders: ["0001234567", "12", 5] });
+  assert.deepEqual(restored.insiders, ["0001234567"]);
+  assert.deepEqual(sanitizeWatchlistState({ members: [], tickers: [] }).insiders, []);
+});

@@ -7,6 +7,7 @@ import { TRACK_PATH, TrackView } from "./track-view";
 import { ACTIVE_PATH, ActiveView } from "./active-view";
 import { LATE_PATH, LateView } from "./late-view";
 import { TRENDS_PATH, TrendsView } from "./trends-view";
+import { INSIDER_TRACK_PATH, InsiderTrackView } from "./insider-track-view";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,7 @@ export const dynamic = "force-dynamic";
  * each canonical to itself with only the parameter that defines it:
  *
  *   /rankings                track record (the default; `?h=30|180` is a view of it)
+ *   /rankings?view=insiders  the corporate insiders' track record (its own ranking)
  *   /rankings?view=active    most active
  *   /rankings?view=late      late filers
  *   /rankings?view=trends    trends by month (`?w=`, `?t=` are views of it)
@@ -24,10 +26,11 @@ export const dynamic = "force-dynamic";
  */
 
 type Params = { view?: string; h?: string; w?: string; t?: string };
-type View = "track" | "active" | "late" | "trends";
+type View = "track" | "insiders" | "active" | "late" | "trends";
 
 const VIEWS: { key: View; label: string; href: string }[] = [
   { key: "track", label: "Track record", href: TRACK_PATH },
+  { key: "insiders", label: "Insiders", href: INSIDER_TRACK_PATH },
   { key: "active", label: "Most active", href: ACTIVE_PATH },
   { key: "late", label: "Late filers", href: LATE_PATH },
   { key: "trends", label: "Trends", href: TRENDS_PATH },
@@ -39,6 +42,14 @@ function parseView(raw: string | undefined): View {
 
 export async function generateMetadata({ searchParams }: { searchParams: Promise<Params> }): Promise<Metadata> {
   const view = parseView((await searchParams).view);
+  if (view === "insiders") {
+    return pageMetadata({
+      title: "Insider track record: whose insider trades beat the market",
+      description:
+        "Corporate insiders ranked by how their company's stock moved after they traded it on SEC Form 4, against the S&P 500, with intervals and a luck check. A stock's move, not anyone's profit; not advice.",
+      path: INSIDER_TRACK_PATH,
+    });
+  }
   if (view === "active") {
     return pageMetadata({
       title: "Most active members of Congress in the stock market",
@@ -89,8 +100,10 @@ export default async function RankingsPage({ searchParams }: { searchParams: Pro
   );
   // Keyed so switching views remounts instead of morphing one view's DOM into another's.
   return (
-    <Fragment key={view === "track" ? `track:${horizon}` : view}>
-      {view === "active" ? (
+    <Fragment key={view === "track" || view === "insiders" ? `${view}:${horizon}` : view}>
+      {view === "insiders" ? (
+        <InsiderTrackView horizon={horizon} nav={nav} />
+      ) : view === "active" ? (
         <ActiveView nav={nav} />
       ) : view === "late" ? (
         <LateView nav={nav} />

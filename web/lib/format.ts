@@ -188,6 +188,30 @@ export function memberHref(name: string, bioguideId?: string | null, action?: st
   return action ? `${path}?action=${encodeURIComponent(action)}` : path;
 }
 
+/** A Form 4 filer's CIK as stored: ten digits, zero-padded. */
+const CIK = /^\d{10}$/;
+const SLUG_CIK = /-(\d{10})$/;
+
+/**
+ * A corporate insider's URL slug: the name as last filed, then the CIK —
+ * `hood-amy-0001234567`. As for members, the CIK makes the URL stable and
+ * the name is cosmetic (a stale one redirects to the current spelling).
+ */
+export function insiderSlug(name: string, cik: string): string {
+  return `${slugify(name) || "insider"}-${cik}`;
+}
+
+/** The CIK a slug ends in, or null. */
+export function slugCik(slug: string): string | null {
+  const m = SLUG_CIK.exec(slug);
+  return m && CIK.test(m[1]) ? m[1] : null;
+}
+
+/** A corporate insider's page, `/insiders/<slug>`: their Form 4 trades, companies and track record. */
+export function insiderHref(name: string | null | undefined, cik: string): string {
+  return `/insiders/${insiderSlug(name ?? "", cik)}`;
+}
+
 /**
  * A ticker's page, `/tickers/<SYMBOL>`. Symbols are stored upper case and
  * may carry a class suffix (`BRK.B`, `MOG.A`); the segment is encoded so

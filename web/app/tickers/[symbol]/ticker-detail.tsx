@@ -1,6 +1,6 @@
 import { getTickerMembers, getTransactions, type TickerMemberRow, type TickerRow, type TransactionRow } from "@/lib/queries";
 import { getInsiderTrades, getIssuerInsiders, type InsiderTradeRow, type IssuerInsiderRow, type IssuerRow } from "@/lib/insider-queries";
-import { ASSET_TYPE_LABEL, memberHref, memberLabel, range, shortDate, tickerHref, usd } from "@/lib/format";
+import { ASSET_TYPE_LABEL, insiderHref, memberHref, memberLabel, range, shortDate, tickerHref, usd } from "@/lib/format";
 import { Card, SectionTitle, VolumeRange } from "../../charts";
 import { ExportLink } from "../../feed-controls";
 import { PLAIN_BODY_ROW, PLAIN_HEAD_ROW } from "../../sortable-table";
@@ -252,7 +252,7 @@ export async function StockDetail({
                 <ValueRow
                   key={p.cik}
                   name={
-                    <a href={`/insiders?cik=${encodeURIComponent(p.cik)}`} className={ROW_LINK}>
+                    <a href={insiderHref(p.name, p.cik)} className={ROW_LINK}>
                       {p.name}
                     </a>
                   }
@@ -411,7 +411,7 @@ function InsiderLane({ ticker, issuer, insiders }: { ticker: string; issuer: Iss
           {top.map((p) => (
             <a
               key={p.cik}
-              href={`/insiders?cik=${encodeURIComponent(p.cik)}`}
+              href={insiderHref(p.name, p.cik)}
               className={cn(BUTTON, "h-7 px-3 text-[12.5px]")}
               title={`${p.buys} buy / ${p.sells} sell · shares × reported price`}
             >

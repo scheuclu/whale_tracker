@@ -114,6 +114,9 @@ def main(argv: list[str] | None = None) -> int:
                               "(default 0 = until done)")
     p_track.add_argument("--rescore", action="store_true",
                          help="rebuild the scores even if no measurement changed")
+    p_track.add_argument("--insiders", action="store_true",
+                         help="the corporate insiders' track record (Form 4 filers) instead of "
+                              "the members'; own tables, never one ranking with them")
 
     p_ins = sub.add_parser("insiders", help="issuer leaderboard for insider trades")
     p_ins.add_argument("--since", type=_parse_since, default=None, metavar="30d")
@@ -281,11 +284,12 @@ def main(argv: list[str] | None = None) -> int:
 
         conn = db.connect(config.db_path)
         try:
+            population = track.INSIDERS if args.insiders else track.CONGRESS
             result = track.sync(conn, config, budget_seconds=args.budget_seconds,
-                                rescore=args.rescore)
+                                rescore=args.rescore, population=population)
         finally:
             conn.close()
-        print(f"track record: {result.summary()}")
+        print(f"track record ({population.name}): {result.summary()}")
         return 0 if not result.status.startswith(("error", "blocked", "throttled")) else 1
 
     from . import query

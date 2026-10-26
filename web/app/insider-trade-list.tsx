@@ -1,5 +1,5 @@
 import type { InsiderTradeRow } from "@/lib/insider-queries";
-import { insiderIssuerHref, price, shares, shortDate, usd } from "@/lib/format";
+import { insiderHref, insiderIssuerHref, price, shares, shortDate, usd } from "@/lib/format";
 import { ActionBadge, Amount, InsiderDelayTag, PlanTag, RoleTag, SectorTag, StatusNote, TickerChip } from "./ui";
 import { GroupedList, ROW_LINK } from "./grouped-list";
 
@@ -59,7 +59,7 @@ export function InsiderTradeList({ trades, showIssuer }: { trades: InsiderTradeR
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px]">
             {r.insider_cik ? (
-              <a href={`/insiders?cik=${encodeURIComponent(r.insider_cik)}`} className={ROW_LINK}>
+              <a href={insiderHref(r.insider_name, r.insider_cik)} className={ROW_LINK}>
                 {r.insider_name ?? r.insider_cik}
               </a>
             ) : (

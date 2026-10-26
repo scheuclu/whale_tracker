@@ -8,7 +8,7 @@ function ids(v: unknown): string[] {
 }
 
 /**
- * `POST /api/account/watch` `{ add?: { members, tickers }, remove?: { … } }` —
+ * `POST /api/account/watch` `{ add?: { members, tickers, insiders }, remove?: { … } }` —
  * follows and unfollows on the signed-in account, item by item, and returns
  * the account as stored.
  */
@@ -26,8 +26,12 @@ export async function POST(req: NextRequest) {
     return json({ error: "Invalid JSON body." }, 400);
   }
   const sub = await updateAccountWatch(auth.backend, auth.secret, email, {
-    add: { members: ids(body.add?.members), tickers: ids(body.add?.tickers) },
-    remove: { members: ids(body.remove?.members), tickers: ids(body.remove?.tickers) },
+    add: { members: ids(body.add?.members), tickers: ids(body.add?.tickers), insiders: ids(body.add?.insiders) },
+    remove: {
+      members: ids(body.remove?.members),
+      tickers: ids(body.remove?.tickers),
+      insiders: ids(body.remove?.insiders),
+    },
   });
   if (!sub) return clearSession(json({ error: "Signed out." }, 401), req);
   return json({ account: accountJson(sub) });

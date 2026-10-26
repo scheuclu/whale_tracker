@@ -410,10 +410,17 @@ parser stays faithful to the PDF and the UI flags the row rather than
 - Audit `check_track_record`: INFO coverage; WARN `track_record_stale` only
   when an eligible decision's 30-day horizon is a week overdue and its series
   was never read past it (an ended series is read once and left alone).
-- **Insiders later**: same pure functions, own tables (`insider_track_*`,
-  keyed on primary owner CIK, issuer, direction, accession), own ranking
-  page; `track_price_fetches` can be shared (a symbol's series is
-  population-free). Never rows in the congressional tables, never one ranking.
+- **Insiders** (schema 17): same pure functions, own tables
+  (`insider_track_decisions/_scores/_model/_coverage`, keyed on the primary
+  owner's CIK), own ranking (`/rankings?view=insiders`). `track.py` runs both
+  through `Population` objects (`CONGRESS`, the default, and `INSIDERS`);
+  the pipeline runs congress then insiders under the shared deadline, each
+  guarded separately. `track_price_fetches` is shared (a symbol's series is
+  population-free). Insider rows are excluded only for no ticker or dates as
+  filed (`stats.insider_track_row_exclusion`). Never rows in the
+  congressional tables, never one ranking. Manual fill:
+  `whale track-record --insiders`. The stored Form 4 history starts
+  2026-09-10, so ranks appear only once 90-trading-day horizons mature.
 
 ## Insider alerts
 
@@ -555,6 +562,12 @@ parser stays faithful to the PDF and the UI flags the row rather than
   (an in-memory account store, refused whenever `VERCEL` is set) and mints
   the login token itself (`e2e/account.spec.ts`); without them those tests
   skip.
+- Follows are members (bioguide), tickers and **insiders (CIK)**. Insider
+  follows live in the account and the watchlist but not in `?watch=` (the
+  congressional feed cannot filter by them); the digest includes Form 4
+  trades by followed insiders. Insider pages: `/insiders/<name>-<cik>`
+  (`insiderHref`); `/insiders?cik=` and `/insiders?t=` 308 to the profile and
+  to `/tickers/<SYM>#insiders`.
 - Env: `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` (redirect URI
   `<origin>/api/auth/google/callback`, registered per origin), plus the
   existing `ALERTS_SECRET`, Blob and `RESEND_API_KEY`. Missing pieces hide

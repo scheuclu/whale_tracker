@@ -15,7 +15,8 @@ import {
   type FollowedMember,
   type FollowedTicker,
 } from "@/lib/account-queries";
-import { insiderIssuerHref, memberHref, memberLabel, range, shortDate, tickerHref } from "@/lib/format";
+import { insiderHref, insiderIssuerHref, memberHref, memberLabel, range, shortDate, tickerHref } from "@/lib/format";
+import { getInsiderPerson, type InsiderPerson } from "@/lib/insider-people";
 import { plural } from "@/lib/site";
 import { Card, SectionTitle, StatTile } from "../charts";
 import { PartyBadge } from "../ui";
@@ -94,15 +95,19 @@ export default async function AccountPage({
   }
 
   const follows = { members: account.members, tickers: account.tickers };
-  const nothing = follows.members.length === 0 && follows.tickers.length === 0;
+  const nothing = follows.members.length === 0 && follows.tickers.length === 0 && account.insiders.length === 0;
 
   return (
     <div className={PAGE_STACK}>
-      <DashboardSync follows={[...follows.members, ...follows.tickers].join(",")} />
+      <DashboardSync follows={[...follows.members, ...follows.tickers, ...account.insiders].join(",")} />
       <PageHeader eyebrow={account.email} title="Your dashboard" subtitle="What you follow, what they filed, and what we email you.">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatTile label="Members followed" value={String(follows.members.length)} />
-          <StatTile label="Tickers followed" value={String(follows.tickers.length)} />
+          <StatTile
+            label="Tickers & insiders"
+            value={String(follows.tickers.length + account.insiders.length)}
+            hint={`${plural(follows.tickers.length, "ticker")} · ${plural(account.insiders.length, "insider")}`}
+          />
           <StatTile
             label="Daily digest"
             value={account.emailAlerts ? "On" : "Off"}
@@ -122,6 +127,7 @@ export default async function AccountPage({
         <div className="min-w-0 space-y-8">
           <MembersSection members={follows.members} />
           <TickersSection tickers={follows.tickers} />
+          <InsidersSection ciks={account.insiders} />
         </div>
         <div className="min-w-0 space-y-3">
           <SectionTitle kicker="Email & account">Settings</SectionTitle>
@@ -130,6 +136,7 @@ export default async function AccountPage({
               email: account.email,
               members: account.members,
               tickers: account.tickers,
+              insiders: account.insiders,
               clusters: account.clusters,
               weeklyDigest: account.weeklyDigest,
               emailAlerts: account.emailAlerts,
@@ -149,7 +156,7 @@ export default async function AccountPage({
       {nothing ? null : (
         <>
           <CongressActivity follows={follows} />
-          <InsiderActivity tickers={follows.tickers} />
+          <InsiderActivity tickers={follows.tickers} ciks={account.insiders} />
           <ClusterAlerts tickers={follows.tickers} clustersOn={account.clusters} />
         </>
       )}
@@ -290,6 +297,49 @@ function TickerItem({ t }: { t: FollowedTicker }) {
   );
 }
 
+async function InsidersSection({ ciks }: { ciks: string[] }) {
+  if (ciks.length === 0) return null;
+  let people: (InsiderPerson | null)[];
+  try {
+    people = await Promise.all(ciks.map((c) => getInsiderPerson(c).catch(() => null)));
+  } catch (e) {
+    return <DataError error={e} context="Followed insiders" />;
+  }
+  return (
+    <div>
+      <SectionTitle kicker="Following">Corporate insiders</SectionTitle>
+      <Card className="p-0 sm:p-0">
+        <ul className="inset-rows px-2 py-1.5 [--sep-inset:0.5rem] sm:px-3">
+          {ciks.map((cik, i) => {
+            const p = people[i];
+            const name = p?.name ?? `CIK ${cik}`;
+            return (
+              <li key={cik} data-followed-insider={cik} className="flex items-center gap-3 rounded-[10px] px-2 py-3">
+                <div className="min-w-0 flex-1">
+                  <a href={insiderHref(p?.name, cik)} className="truncate text-[15px] font-semibold hover:underline">
+                    {name}
+                  </a>
+                  <p className="tabular mt-0.5 text-[13px] text-muted-foreground">
+                    {p ? (
+                      <>
+                        {p.latest_ticker ? `${p.latest_ticker} · ` : ""}
+                        {plural(p.trades, "trade")} ({p.buys} bought, {p.sells} sold) · last {shortDate(p.last_tx_date)}
+                      </>
+                    ) : (
+                      "No stored Form 4 as primary reporting owner."
+                    )}
+                  </p>
+                </div>
+                <UnfollowButton kind="insider" id={cik} label={name} />
+              </li>
+            );
+          })}
+        </ul>
+      </Card>
+    </div>
+  );
+}
+
 async function CongressActivity({ follows }: { follows: { members: string[]; tickers: string[] } }) {
   try {
     const rows = await getFollowedTrades(follows, 20);
@@ -306,21 +356,21 @@ async function CongressActivity({ follows }: { follows: { members: string[]; tic
   }
 }
 
-async function InsiderActivity({ tickers }: { tickers: string[] }) {
-  if (tickers.length === 0) return null;
+async function InsiderActivity({ tickers, ciks }: { tickers: string[]; ciks: string[] }) {
+  if (tickers.length === 0 && ciks.length === 0) return null;
   try {
-    const rows = await getFollowedInsiderTrades(tickers, 15);
+    const rows = await getFollowedInsiderTrades(tickers, 15, ciks);
     return (
       <section>
         <SectionTitle kicker="Latest filings">Corporate insider trades</SectionTitle>
         <p className="mb-3 max-w-[68ch] text-[13px] text-muted-foreground">
-          SEC Form 4 open-market trades in the tickers you follow. Values are shares × reported price, kept apart from
-          congressional amounts.
+          SEC Form 4 open-market trades by the insiders you follow and in the tickers you follow. Values are shares ×
+          reported price, kept apart from congressional amounts.
         </p>
         {rows.length ? (
           <InsiderTradeList trades={rows} showIssuer />
         ) : (
-          <Quiet>No open-market Form 4 trades in the tickers you follow.</Quiet>
+          <Quiet>No open-market Form 4 trades by the insiders or in the tickers you follow.</Quiet>
         )}
       </section>
     );

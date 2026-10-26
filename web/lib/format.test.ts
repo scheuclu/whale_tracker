@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { range, tickerLogoUrl, usd } from "./format.ts";
+import { insiderHref, insiderIssuerHref, insiderSlug, range, slugCik, tickerLogoUrl, usd } from "./format.ts";
 
 // `usd` takes cents. The insiders page sums Form 4 values past a billion
 // dollars, which used to render as "$2883M"; every unit boundary is pinned
@@ -71,4 +71,14 @@ test("tickerLogoUrl builds FMP logo URLs for valid stock symbols only", () => {
   assert.equal(tickerLogoUrl("0001045810"), null);
   assert.equal(tickerLogoUrl(""), null);
   assert.equal(tickerLogoUrl(null), null);
+});
+
+test("insider URLs: the CIK keys the page, the name is cosmetic", () => {
+  assert.equal(insiderSlug("Saba Capital Management, L.P.", "0001510281"), "saba-capital-management-l-p-0001510281");
+  assert.equal(insiderHref("ROTHBLATT MARTINE A", "0001106578"), "/insiders/rothblatt-martine-a-0001106578");
+  assert.equal(insiderHref(null, "0001106578"), "/insiders/insider-0001106578");
+  assert.equal(slugCik("rothblatt-martine-a-0001106578"), "0001106578");
+  assert.equal(slugCik("rothblatt-martine-a"), null);
+  assert.equal(slugCik("x-123"), null);
+  assert.equal(insiderIssuerHref("brk.b"), "/tickers/BRK.B#insiders");
 });

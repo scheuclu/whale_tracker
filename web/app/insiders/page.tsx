@@ -7,11 +7,13 @@ import {
   getInsiderTrades,
   type InsiderSectorRow,
 } from "@/lib/insider-queries";
-import { insiderIssuerHref, shortDate, usd } from "@/lib/format";
+import { insiderHref, insiderIssuerHref, shortDate, usd } from "@/lib/format";
+import { getInsiderPeople } from "@/lib/insider-people";
+import { GroupedList, ROW_LINK, ValueRow } from "../grouped-list";
 import { Card, DivergingSplit, Empty, MagnitudeBars, SectionTitle, StatTile } from "../charts";
-import { ResponsiveTable } from "../ui";
+import { MoneyText, ResponsiveTable, RoleTag, TickerChip } from "../ui";
 import { Disclosure } from "../disclosure";
-import { BackLink, DataError, PAGE_STACK, PageHeader, PillLinks, Quiet } from "../page-header";
+import { DataError, PAGE_STACK, PageHeader, PillLinks, Quiet } from "../page-header";
 import { SymbolMark } from "../symbol-hero";
 import {
   ISSUER_SORT,
@@ -103,7 +105,8 @@ function ValueNote({ className }: { className?: string }) {
 export default async function InsidersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ t?: string; w?: string; action?: string; cik?: string; sort?: string; dir?: string; n?: string }>;
+  // `?t=` and `?cik=` are answered with a 308 (the stock page, the insider's page) before they get here.
+  searchParams: Promise<{ w?: string; action?: string; sort?: string; dir?: string; n?: string }>;
 }) {
   const params = await searchParams;
 
@@ -118,25 +121,25 @@ export default async function InsidersPage({
     const action = "action" in overrides ? overrides.action : params.action;
     if (w) q.set("w", w);
     if (action) q.set("action", action);
-    if (params.cik) q.set("cik", params.cik);
     // The issuers table's order travels with every other link on the page.
     for (const [k, v] of Object.entries(sortParams(ISSUER_SORT, sort))) if (v) q.set(k, v);
     const s = q.toString();
     return s ? `/insiders?${s}` : "/insiders";
   };
-  const tableKeep = { w: params.w, action: params.action, cik: params.cik, n: rowsParam };
+  const tableKeep = { w: params.w, action: params.action, n: rowsParam };
 
-  let totals, issuers, clusters, trades, sectors, table;
+  let totals, issuers, clusters, trades, sectors, table, people;
   try {
-    [totals, issuers, clusters, trades, sectors, table] = await Promise.all([
+    [totals, issuers, clusters, trades, sectors, table, people] = await Promise.all([
       getInsiderTotals(),
       getInsiderIssuers(days, 40),
       getInsiderClusters(30, 3, 12),
-      getInsiderTrades({ action: params.action, cik: params.cik, days, limit: 120 }),
+      getInsiderTrades({ action: params.action, days, limit: 120 }),
       getInsiderSectors(days),
       // The charts rank by value; the table follows the URL's sort, applied
       // in SQL to every issuer in the window before the limit.
       !n && isDefaultSort(ISSUER_SORT, sort) ? null : getInsiderIssuers(days, limit, sort),
+      getInsiderPeople(12, days).catch(() => []),
     ]);
   } catch (err) {
     return <DataError error={err} />;
@@ -174,7 +177,6 @@ export default async function InsidersPage({
 
   const mostBought = [...issuers].filter((r) => r.buy_value > 0).sort((a, b) => b.buy_value - a.buy_value);
   const mostSold = [...issuers].filter((r) => r.sell_value > 0).sort((a, b) => b.sell_value - a.sell_value);
-  const filteredInsider = params.cik ? trades[0]?.insider_name : null;
 
   return (
     <div className={PAGE_STACK}>
@@ -258,6 +260,46 @@ export default async function InsidersPage({
           return { href: query({ w: key }), label: w.label, active: windowKey === key };
         })}
       />
+
+      {people.length ? (
+        <section>
+          <SectionTitle
+            kicker="People"
+            right={<span>{windowKey === "all" ? "all time" : `last ${days} days`} · shares × reported price</span>}
+          >
+            Insiders by value traded
+          </SectionTitle>
+          <GroupedList>
+            {people.map((p) => (
+              <ValueRow
+                key={p.cik}
+                name={
+                  <a href={insiderHref(p.name, p.cik)} className={ROW_LINK}>
+                    {p.name}
+                  </a>
+                }
+                tags={
+                  <span className="inline-flex min-w-0 items-center gap-1.5">
+                    {p.latest_ticker ? <TickerChip ticker={p.latest_ticker} href={insiderIssuerHref(p.latest_ticker)} /> : null}
+                    <RoleTag
+                      isDirector={p.is_director}
+                      isOfficer={p.is_officer}
+                      isTenPercentOwner={p.is_ten_percent_owner}
+                      officerTitle={p.officer_title}
+                    />
+                  </span>
+                }
+                value={
+                  <MoneyText
+                    value={[p.bought ? `+${usd(p.bought)}` : "", p.sold ? `−${usd(p.sold)}` : ""].filter(Boolean).join(" ") || "—"}
+                  />
+                }
+                meta={`${p.buys} buy / ${p.sells} sell`}
+              />
+            ))}
+          </GroupedList>
+        </section>
+      ) : null}
 
       <section className="grid gap-x-6 gap-y-7 lg:grid-cols-2">
         <div>
@@ -393,13 +435,8 @@ export default async function InsidersPage({
             />
           }
         >
-          {filteredInsider ? `Trades — ${filteredInsider}` : "Recent trades"}
+          Recent trades
         </SectionTitle>
-        {params.cik ? (
-          <div className="mb-3">
-            <BackLink href={query({})} label="All insiders" />
-          </div>
-        ) : null}
         {trades.length ? (
           <>
             <p className="mb-1 pl-1 text-[13px] text-muted-foreground">{trades.length} trades shown, newest first</p>

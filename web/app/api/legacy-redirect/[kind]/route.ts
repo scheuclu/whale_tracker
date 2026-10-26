@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { resolveMemberName } from "@/lib/entities";
-import { memberHref, tickerHref } from "@/lib/format";
+import { insiderHref, memberHref, tickerHref } from "@/lib/format";
+import { getInsiderName } from "@/lib/insider-people";
 
 /**
  * Permanent redirects for the query-string entity URLs the site used before
@@ -9,6 +10,8 @@ import { memberHref, tickerHref } from "@/lib/format";
  *   /politicians?m=<name>[&action=buy]  → /members/<slug>[?action=buy]
  *   /?member=<name>[&action=buy]        → the same (the feed's older form)
  *   /tickers?t=<symbol>                 → /tickers/<SYMBOL>
+ *   /insiders?t=<symbol>                → /tickers/<SYMBOL>#insiders
+ *   /insiders?cik=<cik>                 → /insiders/<name>-<cik>
  *
  * Telegram alerts, bookmarks and other sites carry these, so they must keep
  * working, and a crawler must learn the move: a 308, not a page that
@@ -49,6 +52,19 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ kind: strin
   if (kind === "ticker") {
     const symbol = q.get("t")?.trim();
     return redirect(req, symbol ? tickerHref(symbol) : "/tickers");
+  }
+
+  // The insider filter (`/insiders?cik=`) became the insider's own page.
+  if (kind === "insider") {
+    const cik = q.get("cik")?.trim() ?? "";
+    if (!/^\d{10}$/.test(cik)) return redirect(req, "/insiders");
+    let name: string | null = null;
+    try {
+      name = await getInsiderName(cik);
+    } catch {
+      /* database unavailable: the slug's name part is cosmetic */
+    }
+    return redirect(req, insiderHref(name, cik));
   }
 
   // The insider issuer page became the stock page's insider section.

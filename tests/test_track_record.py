@@ -507,7 +507,7 @@ def test_a_version_15_database_gains_the_track_tables(tmp_path):
     conn.commit()
     conn.close()
     again = db.connect(path)
-    assert again.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION == 16
+    assert again.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
     names = {r[0] for r in again.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert {"track_decisions", "track_scores", "track_model", "track_coverage",
             "track_price_fetches"} <= names

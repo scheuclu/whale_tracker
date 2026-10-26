@@ -26,8 +26,13 @@ its decisions has a horizon that matured since the series was last read, or
 the decision is new; each ticker's work is committed as it finishes; a time
 budget (`track_record.budget_seconds`) leaves the rest for the next run; and
 nothing here raises into the pipeline (`pipeline._sync_track_record` guards
-the rest). Congressional data only — Form 4 insiders will get their own
-tables when they are added, never rows in these.
+the rest).
+
+Two populations run through the same step, each in tables of its own and
+never one ranking: members of Congress (`CONGRESS`, the default) and
+corporate insiders (`INSIDERS`: one decision per primary reporting owner,
+ticker, direction and Form 4, keyed on the owner's CIK). Only the per-ticker
+fetch record is shared — a symbol's series does not depend on who traded it.
 """
 
 from __future__ import annotations
@@ -35,6 +40,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 
@@ -103,6 +109,77 @@ def counted_rows(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     """, db.COUNTED_STATUSES).fetchall()
 
 
+def insider_counted_rows(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Every counted Form 4 row, keyed on the filing's primary reporting owner.
+
+    `member_name` carries the owner's CIK (the grouping and scoring key) and
+    `politician_id` is NULL, so the congressional grouping applies unchanged.
+    """
+    marks = ", ".join("?" for _ in db.COUNTED_STATUSES)
+    return conn.execute(f"""
+        SELECT t.filing_id, NULL AS politician_id, t.tx_date, t.action, f.ticker,
+               f.filing_date, o.insider_cik AS member_name
+        FROM insider_transactions t
+        JOIN insider_filings f ON f.id = t.filing_id
+        JOIN insider_filing_owners o ON o.filing_id = f.id AND o.owner_index = 0
+        WHERE f.status IN ({marks})
+        ORDER BY t.id
+    """, db.COUNTED_STATUSES).fetchall()
+
+
+@dataclass(frozen=True)
+class Population:
+    """Whose decisions a track-record run measures, and where they are kept."""
+
+    name: str
+    decisions: str              # tables
+    scores: str
+    model: str
+    coverage: str
+    filings: str                # the filings table the decisions reference
+    state_status: str           # sync_state keys
+    state_complete: str
+    rows: Callable[[sqlite3.Connection], list]
+    exclusion: Callable
+    # The decision's identity columns besides (filing, ticker, direction), and
+    # how a TrackDecision fills them.
+    who_columns: tuple[str, ...]
+    who: Callable[[stats.TrackDecision], tuple]
+    # SELECT expressions giving stats.track_scores its member_name / politician_id.
+    who_select: str
+    # The score row's identity columns and how a TrackScore fills them.
+    score_who_columns: tuple[str, ...]
+    score_who: Callable[[stats.TrackScore], tuple]
+
+
+CONGRESS = Population(
+    name="congress",
+    decisions="track_decisions", scores="track_scores", model="track_model",
+    coverage="track_coverage", filings="filings",
+    state_status=STATE_STATUS, state_complete=STATE_COMPLETE,
+    rows=counted_rows, exclusion=stats.track_row_exclusion,
+    who_columns=("politician_id", "member_name"),
+    who=lambda d: (d.politician_id, d.member_name),
+    who_select="d.member_name, d.politician_id",
+    score_who_columns=("member_name", "politician_id"),
+    score_who=lambda s: (s.member_name, s.politician_id),
+)
+
+INSIDERS = Population(
+    name="insiders",
+    decisions="insider_track_decisions", scores="insider_track_scores",
+    model="insider_track_model", coverage="insider_track_coverage", filings="insider_filings",
+    state_status="insider_track_record_status",
+    state_complete="insider_track_record_complete_through",
+    rows=insider_counted_rows, exclusion=stats.insider_track_row_exclusion,
+    who_columns=("owner_cik",),
+    who=lambda d: (d.member_name,),
+    who_select="d.owner_cik AS member_name, NULL AS politician_id",
+    score_who_columns=("owner_cik",),
+    score_who=lambda s: (s.member_name,),
+)
+
+
 def _fetches(conn: sqlite3.Connection) -> dict[str, sqlite3.Row]:
     return {r["ticker"]: r for r in conn.execute("SELECT * FROM track_price_fetches")}
 
@@ -120,7 +197,7 @@ def _record_fetch(conn, ticker: str, status: str, bars, stamp: str) -> None:
 
 
 def reconcile(conn: sqlite3.Connection, decisions: list[stats.TrackDecision],
-              fetches: dict[str, sqlite3.Row]) -> int:
+              fetches: dict[str, sqlite3.Row], pop: Population = CONGRESS) -> int:
     """Bring `track_decisions` in line with the current grouping.
 
     New decisions are inserted unmeasured; a decision whose earliest trade
@@ -129,7 +206,9 @@ def reconcile(conn: sqlite3.Connection, decisions: list[stats.TrackDecision],
     no longer exists is deleted. Returns how many rows changed.
     """
     stored = {(r["filing_id"], r["ticker"], r["direction"]): r
-              for r in conn.execute("SELECT * FROM track_decisions")}
+              for r in conn.execute(f"SELECT * FROM {pop.decisions}")}
+    who_cols = pop.who_columns
+    who_set = ", ".join(f"{c} = ?" for c in who_cols)
     reset = ", ".join(f"{c} = NULL" for c in SIGNED_COLUMNS)
     changed = 0
     seen = set()
@@ -141,35 +220,36 @@ def reconcile(conn: sqlite3.Connection, decisions: list[stats.TrackDecision],
         if exclusion is None and fetch is not None and fetch["status"] == "no_data":
             exclusion = "no_price_series"
         old = stored.get(key)
+        who = pop.who(d)
         if old is None:
             conn.execute(
-                "INSERT INTO track_decisions (filing_id, politician_id, member_name, ticker, "
-                "direction, tx_date, rows, exclusion) VALUES (?,?,?,?,?,?,?,?)",
-                (d.filing_id, d.politician_id, d.member_name, d.ticker, d.direction,
-                 d.tx_date, d.rows, exclusion))
+                f"INSERT INTO {pop.decisions} (filing_id, {', '.join(who_cols)}, ticker, "
+                f"direction, tx_date, rows, exclusion) VALUES "
+                f"({', '.join('?' for _ in range(len(who_cols) + 6))})",
+                (d.filing_id, *who, d.ticker, d.direction, d.tx_date, d.rows, exclusion))
             changed += 1
             continue
         if old["tx_date"] != d.tx_date or old["exclusion"] != exclusion:
             conn.execute(
-                f"UPDATE track_decisions SET politician_id = ?, member_name = ?, tx_date = ?, "
+                f"UPDATE {pop.decisions} SET {who_set}, tx_date = ?, "
                 f"rows = ?, exclusion = ?, t0_trade = NULL, t0_disclosure = NULL, "
                 f"checked_through = NULL, series_ended = NULL, {reset} WHERE id = ?",
-                (d.politician_id, d.member_name, d.tx_date, d.rows, exclusion, old["id"]))
+                (*who, d.tx_date, d.rows, exclusion, old["id"]))
             changed += 1
-        elif (old["politician_id"], old["member_name"], old["rows"]) != (
-                d.politician_id, d.member_name, d.rows):
+        elif (*(old[c] for c in who_cols), old["rows"]) != (*who, d.rows):
             conn.execute(
-                "UPDATE track_decisions SET politician_id = ?, member_name = ?, rows = ? "
-                "WHERE id = ?", (d.politician_id, d.member_name, d.rows, old["id"]))
+                f"UPDATE {pop.decisions} SET {who_set}, rows = ? WHERE id = ?",
+                (*who, d.rows, old["id"]))
             changed += 1
     for key, old in stored.items():
         if key not in seen:
-            conn.execute("DELETE FROM track_decisions WHERE id = ?", (old["id"],))
+            conn.execute(f"DELETE FROM {pop.decisions} WHERE id = ?", (old["id"],))
             changed += 1
     return changed
 
 
-def write_coverage(conn: sqlite3.Connection, tally: dict[str, int]) -> None:
+def write_coverage(conn: sqlite3.Connection, tally: dict[str, int],
+                   pop: Population = CONGRESS) -> None:
     """Rebuild `track_coverage`: rows and decisions per outcome.
 
     Row counts come from the grouping's tally; a decision excluded for want
@@ -181,7 +261,7 @@ def write_coverage(conn: sqlite3.Connection, tally: dict[str, int]) -> None:
     decisions: dict[str, int] = {}
     moved = 0
     ended_rows = 0
-    for r in conn.execute("SELECT exclusion, rows, series_ended FROM track_decisions"):
+    for r in conn.execute(f"SELECT exclusion, rows, series_ended FROM {pop.decisions}"):
         outcome = r["exclusion"] or "included"
         decisions[outcome] = decisions.get(outcome, 0) + 1
         if r["exclusion"] == "no_price_series":
@@ -195,10 +275,10 @@ def write_coverage(conn: sqlite3.Connection, tally: dict[str, int]) -> None:
         rows["no_price_series"] = rows.get("no_price_series", 0) + moved
     rows["series_ended"] = ended_rows
     stamp = db.now_iso()
-    conn.execute("DELETE FROM track_coverage")
+    conn.execute(f"DELETE FROM {pop.coverage}")
     for outcome in ("included", "series_ended") + stats.TRACK_EXCLUSIONS:
         if rows.get(outcome) or decisions.get(outcome):
-            conn.execute("INSERT INTO track_coverage (outcome, rows, decisions, computed_at) "
+            conn.execute(f"INSERT INTO {pop.coverage} (outcome, rows, decisions, computed_at) "
                          "VALUES (?,?,?,?)",
                          (outcome, rows.get(outcome, 0), decisions.get(outcome, 0), stamp))
 
@@ -206,12 +286,12 @@ def write_coverage(conn: sqlite3.Connection, tally: dict[str, int]) -> None:
 # --- measuring ------------------------------------------------------------------
 
 
-def _eligible(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+def _eligible(conn: sqlite3.Connection, pop: Population = CONGRESS) -> list[sqlite3.Row]:
     """Decisions that may be measured: not excluded, or excluded only for
     want of a series (re-asked after NO_DATA_RETRY_DAYS)."""
-    return conn.execute("""
+    return conn.execute(f"""
         SELECT d.*, f.filing_date
-        FROM track_decisions d JOIN filings f ON f.id = d.filing_id
+        FROM {pop.decisions} d JOIN {pop.filings} f ON f.id = d.filing_id
         WHERE d.exclusion IS NULL OR d.exclusion = 'no_price_series'
     """).fetchall()
 
@@ -239,7 +319,7 @@ def _measure(calendar, bench, closes, i_trade, i_disc) -> dict[str, float | None
 def sync(conn: sqlite3.Connection, config: Config, *, client: PriceClient | None = None,
          now: datetime | None = None, budget_seconds: float | None = None,
          deadline: float | None = None, clock=time.monotonic,
-         rescore: bool = False) -> TrackResult:
+         rescore: bool = False, population: Population = CONGRESS) -> TrackResult:
     """Group, fetch what has matured, measure, and re-score.
 
     `budget_seconds` overrides `track_record.budget_seconds` (0 = no limit);
@@ -249,12 +329,14 @@ def sync(conn: sqlite3.Connection, config: Config, *, client: PriceClient | None
     fetching (asking again only lengthens the penalty) and is recorded in
     `sync_state.track_record_status`; a ticker whose request fails is
     recorded against itself and retried next run. `rescore` rebuilds the
-    scores even when no measurement changed.
+    scores even when no measurement changed. `population` picks whose
+    decisions (CONGRESS or INSIDERS); each has its own tables and state.
     """
+    pop = population
     settings = config.track_record
     if not settings.enabled:
         result = TrackResult("skipped: track_record.enabled is false")
-        db.set_state(conn, STATE_STATUS, result.status)
+        db.set_state(conn, pop.state_status, result.status)
         conn.commit()
         return result
 
@@ -265,56 +347,58 @@ def sync(conn: sqlite3.Connection, config: Config, *, client: PriceClient | None
     ends = [d for d in ((clock() + budget) if budget else None, deadline) if d is not None]
     stop_at = min(ends) if ends else None
 
-    decisions, tally = stats.group_track_decisions(counted_rows(conn), today)
+    decisions, tally = stats.group_track_decisions(pop.rows(conn), today, pop.exclusion)
     fetches = _fetches(conn)
-    changed = reconcile(conn, decisions, fetches)
-    write_coverage(conn, tally)
+    changed = reconcile(conn, decisions, fetches, pop)
+    write_coverage(conn, tally, pop)
     conn.commit()
 
     result = TrackResult("", decisions=len(decisions), changed=changed)
     result.eligible = conn.execute(
-        "SELECT COUNT(*) FROM track_decisions WHERE exclusion IS NULL").fetchone()[0]
+        f"SELECT COUNT(*) FROM {pop.decisions} WHERE exclusion IS NULL").fetchone()[0]
     final = final_through(now)
-    have_scores = conn.execute("SELECT COUNT(*) FROM track_scores").fetchone()[0] > 0
-    if (not changed and not rescore and db.get_state(conn, STATE_COMPLETE) == final
+    have_scores = conn.execute(f"SELECT COUNT(*) FROM {pop.scores}").fetchone()[0] > 0
+    if (not changed and not rescore and db.get_state(conn, pop.state_complete) == final
             and (have_scores or not result.eligible)):
         result.status = "ok: up to date"
-        db.set_state(conn, STATE_STATUS, result.status)
+        db.set_state(conn, pop.state_status, result.status)
         conn.commit()
         return result
 
-    eligible = _eligible(conn)
+    eligible = _eligible(conn, pop)
     stopped: str | None = None
     if eligible:
         own_client = client is None
         client = client or PriceClient(config.prices.source)
         try:
             stopped = _fetch_and_measure(conn, client, eligible, fetches, today, final, stamp,
-                                         stop_at, clock, result)
+                                         stop_at, clock, result, pop)
         finally:
             if own_client:
                 client.close()
 
-    if result.measured or changed or rescore or not have_scores or _minimum_changed(conn, settings):
-        rescore_all(conn, settings.min_decisions, settings.min_filings)
+    if (result.measured or changed or rescore or not have_scores
+            or _minimum_changed(conn, settings, pop)):
+        rescore_all(conn, settings.min_decisions, settings.min_filings, pop)
         result.scored = True
-    write_coverage(conn, tally)
+    write_coverage(conn, tally, pop)
     if stopped:
         result.status = stopped
     else:
         result.status = (f"ok: {result.fetched} ticker(s) fetched, {result.measured} "
                          f"decision(s) measured, {result.left} left for the next run")
         if not result.left:
-            db.set_state(conn, STATE_COMPLETE, final)
+            db.set_state(conn, pop.state_complete, final)
     if result.left:
-        log.warning("track record: %d ticker(s) left for the next run", result.left)
-    db.set_state(conn, STATE_STATUS, result.status)
+        log.warning("track record (%s): %d ticker(s) left for the next run", pop.name, result.left)
+    db.set_state(conn, pop.state_status, result.status)
     conn.commit()
     return result
 
 
 def _fetch_and_measure(conn, client, eligible, fetches, today: date, final: str, stamp: str,
-                       stop_at: float | None, clock, result: TrackResult) -> str | None:
+                       stop_at: float | None, clock, result: TrackResult,
+                       pop: Population = CONGRESS) -> str | None:
     """The fetching half of `sync`; returns a stop status, or None."""
     start = min(date.fromisoformat(r["tx_date"]) for r in eligible) - timedelta(days=LOOKBACK_DAYS)
     try:
@@ -339,7 +423,7 @@ def _fetch_and_measure(conn, client, eligible, fetches, today: date, final: str,
         t0s = (calendar[i_trade] if i_trade is not None else None,
                calendar[i_disc] if i_disc is not None else None)
         if (r["t0_trade"], r["t0_disclosure"]) != t0s:
-            conn.execute("UPDATE track_decisions SET t0_trade = ?, t0_disclosure = ? WHERE id = ?",
+            conn.execute(f"UPDATE {pop.decisions} SET t0_trade = ?, t0_disclosure = ? WHERE id = ?",
                          (*t0s, r["id"]))
         if r["exclusion"] == "no_price_series":
             fetch = fetches.get(r["ticker"])
@@ -385,7 +469,7 @@ def _fetch_and_measure(conn, client, eligible, fetches, today: date, final: str,
         if not series:
             result.no_data += 1
             reset = ", ".join(f"{c} = NULL" for c in SIGNED_COLUMNS)
-            conn.execute(f"UPDATE track_decisions SET exclusion = 'no_price_series', "
+            conn.execute(f"UPDATE {pop.decisions} SET exclusion = 'no_price_series', "
                          f"checked_through = NULL, series_ended = NULL, {reset} "
                          f"WHERE ticker = ? AND exclusion IS NULL", (ticker,))
             conn.commit()
@@ -398,7 +482,7 @@ def _fetch_and_measure(conn, client, eligible, fetches, today: date, final: str,
             signed = [None if v is None else sign * v for v in
                       (values[c] for c in SIGNED_COLUMNS)]
             conn.execute(
-                f"UPDATE track_decisions SET exclusion = NULL, checked_through = ?, "
+                f"UPDATE {pop.decisions} SET exclusion = NULL, checked_through = ?, "
                 f"series_ended = ?, {', '.join(f'{c} = ?' for c in SIGNED_COLUMNS)} WHERE id = ?",
                 (calendar[-1], ended, *signed, r["id"]))
             result.measured += 1
@@ -409,32 +493,33 @@ def _fetch_and_measure(conn, client, eligible, fetches, today: date, final: str,
 # --- scoring --------------------------------------------------------------------
 
 
-def _minimum_changed(conn: sqlite3.Connection, settings) -> bool:
+def _minimum_changed(conn: sqlite3.Connection, settings, pop: Population = CONGRESS) -> bool:
     rows = {(r["min_decisions"], r["min_filings"]) for r in conn.execute(
-        "SELECT DISTINCT min_decisions, min_filings FROM track_model")}
+        f"SELECT DISTINCT min_decisions, min_filings FROM {pop.model}")}
     return bool(rows) and rows != {(settings.min_decisions, settings.min_filings)}
 
 
 def rescore_all(conn: sqlite3.Connection, min_decisions: int = stats.TRACK_MIN_DECISIONS,
-                min_filings: int = stats.TRACK_MIN_FILINGS) -> int:
-    """Rebuild `track_scores` and `track_model` from the stored decisions;
+                min_filings: int = stats.TRACK_MIN_FILINGS, pop: Population = CONGRESS) -> int:
+    """Rebuild the population's scores and model from its stored decisions;
     returns the number of score rows."""
     decisions = conn.execute(
-        "SELECT * FROM track_decisions WHERE exclusion IS NULL AND t0_trade IS NOT NULL "
-        "AND t0_disclosure IS NOT NULL").fetchall()
+        f"SELECT d.*, {pop.who_select} FROM {pop.decisions} d WHERE d.exclusion IS NULL "
+        "AND d.t0_trade IS NOT NULL AND d.t0_disclosure IS NOT NULL").fetchall()
     scores, models = stats.track_scores(decisions, min_decisions=min_decisions,
                                         min_filings=min_filings)
     stamp = db.now_iso()
-    conn.execute("DELETE FROM track_scores")
-    conn.execute("DELETE FROM track_model")
+    conn.execute(f"DELETE FROM {pop.scores}")
+    conn.execute(f"DELETE FROM {pop.model}")
+    who_cols = ", ".join(pop.score_who_columns)
+    marks = ", ".join("?" for _ in range(len(pop.score_who_columns) + 20))
     for s in scores:
         conn.execute(
-            "INSERT INTO track_scores (member_name, politician_id, horizon, n, filings, "
+            f"INSERT INTO {pop.scores} ({who_cols}, horizon, n, filings, "
             "min_decisions, min_filings, qualifies, rank, trade_mean, trade_score, trade_lo, trade_hi, "
             "trade_hit_rate, trade_luck, disclosure_mean, disclosure_score, disclosure_lo, "
-            "disclosure_hi, disclosure_hit_rate, disclosure_luck, computed_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (s.member_name, s.politician_id, s.horizon, s.n, s.filings, s.min_decisions,
+            f"disclosure_hi, disclosure_hit_rate, disclosure_luck, computed_at) VALUES ({marks})",
+            (*pop.score_who(s), s.horizon, s.n, s.filings, s.min_decisions,
              s.min_filings,
              int(s.qualifies), s.rank,
              s.trade.mean, s.trade.score, s.trade.lo, s.trade.hi, s.trade.hit_rate, s.trade.luck,
@@ -442,7 +527,7 @@ def rescore_all(conn: sqlite3.Connection, min_decisions: int = stats.TRACK_MIN_D
              s.disclosure.hit_rate, s.disclosure.luck, stamp))
     for m in models:
         conn.execute(
-            "INSERT INTO track_model (clock, horizon, k, sigma2, tau2, mean, members_fit, decisions, "
+            f"INSERT INTO {pop.model} (clock, horizon, k, sigma2, tau2, mean, members_fit, decisions, "
             "members, ranked, min_decisions, min_filings, computed_at) "
             "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (m["clock"], m["horizon"], m["k"], m["sigma2"], m["tau2"], m["mean"], m["members_fit"],

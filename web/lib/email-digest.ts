@@ -44,38 +44,38 @@ export function hasDigestMatches(m: DigestMatches): boolean {
  * and never summed together (CLAUDE.md).
  */
 export async function matchSubscriberDigest(
-  sub: Pick<StoredSubscription, "members" | "tickers" | "clusters">,
+  sub: Pick<StoredSubscription, "members" | "tickers" | "clusters"> & { insiders?: string[] },
   sinceDate: string
 ): Promise<DigestMatches> {
-  const tickerSet = new Set(sub.tickers.map((t) => t.toUpperCase()));
+  const insiderCiks = sub.insiders ?? [];
   const hasWatch = sub.members.length > 0 || sub.tickers.length > 0;
+  const newer = (filed: string | null) => filed != null && filed.slice(0, 10) > sinceDate;
 
-  const [rawCongress, rawInsiders, rawAlerts] = await Promise.all([
+  // Newest filings first, per followed item: the digest is about what was
+  // disclosed since the last one, and a late filing carries an old trade date.
+  const [rawCongress, insiderLists, rawAlerts] = await Promise.all([
     hasWatch
       ? getTransactions({
           watch: { members: sub.members, tickers: sub.tickers },
+          order: "filed",
           limit: 60,
         }).catch(() => [] as TransactionRow[])
       : Promise.resolve([] as TransactionRow[]),
-    sub.tickers.length > 0
-      ? getInsiderTrades({ limit: 100 }).catch(() => [] as InsiderTradeRow[])
-      : Promise.resolve([] as InsiderTradeRow[]),
+    Promise.all([
+      ...sub.tickers.map((ticker) => getInsiderTrades({ ticker, order: "filed", limit: 40 })),
+      ...insiderCiks.map((cik) => getInsiderTrades({ cik, order: "filed", limit: 40 })),
+    ]).catch(() => [] as InsiderTradeRow[][]),
     sub.clusters
       ? getAlerts({ limit: 40 }).catch(() => [] as AlertRow[])
       : Promise.resolve([] as AlertRow[]),
   ]);
 
-  const congressTrades = rawCongress.filter(
-    (r) => r.filing_date != null && r.filing_date.slice(0, 10) > sinceDate
-  );
-  const insiderTrades = rawInsiders.filter(
-    (r) =>
-      r.ticker != null &&
-      tickerSet.has(r.ticker.toUpperCase()) &&
-      r.filing_date != null &&
-      r.filing_date.slice(0, 10) > sinceDate &&
-      r.implausible !== 1
-  );
+  const congressTrades = rawCongress.filter((r) => newer(r.filing_date));
+  const seen = new Set<number>();
+  const insiderTrades = insiderLists
+    .flat()
+    .filter((r) => newer(r.filing_date) && r.implausible !== 1 && !seen.has(r.id) && (seen.add(r.id), true))
+    .sort((a, b) => b.filing_date.localeCompare(a.filing_date) || b.id - a.id);
   const clusterAlerts = rawAlerts.filter(
     (a) =>
       (a.kind === "cluster" || a.kind === "insider_cluster") &&
