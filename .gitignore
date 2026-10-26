@@ -14,3 +14,6 @@ web/.next/
 .env
 .env.*
 !.env.example
+
+secrets.env
+.sops.yaml
