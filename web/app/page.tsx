@@ -2,7 +2,15 @@ import type { Metadata } from "next";
 import { assetLabel } from "@/lib/asset-label";
 import { redirect } from "next/navigation";
 import { getFilingSpan } from "@/lib/entities";
-import { getInsiderTotals } from "@/lib/insider-queries";
+import {
+  getInsiderFilers,
+  getInsiderTotals,
+  getInsiderTrackLeaderboard,
+  getInsiderTrades,
+  type InsiderFilerRow,
+  type InsiderTrackScoreRow,
+  type InsiderTradeRow,
+} from "@/lib/insider-queries";
 import { pageMetadata } from "@/lib/seo";
 import { datasetLd, organizationLd, websiteLd } from "@/lib/structured-data";
 import { JsonLd } from "./json-ld";
@@ -27,17 +35,54 @@ import {
   type AlertKind,
   type AlertRow,
 } from "@/lib/alert-queries";
+import {
+  TRACK_BENCHMARK,
+  getTrackLeaderboard,
+  percent,
+  points,
+  type TrackScoreRow,
+} from "@/lib/track-queries";
 import { FILTER_KEYS, feedHref, parseOffset, parseTransactionFilters } from "@/lib/feed-filters";
-import { memberHref, range, relativeTime, tickerHref, usd } from "@/lib/format";
+import {
+  insiderIssuerHref,
+  memberHref,
+  price,
+  range,
+  relativeTime,
+  shares,
+  shortDate,
+  tickerHref,
+  usd,
+} from "@/lib/format";
 import { Card, DivergingSplit, SectionTitle, StatTile, type StatDelta } from "./charts";
 import { ExportLink, FilterBar, Pagination, ShownLine } from "./feed-controls";
 import { DirectionFilter, FeedList } from "./feed-list";
-import { ActionBadge, MoneyText, PartyBadge, Tag, TickerChip } from "./ui";
+import {
+  ActionBadge,
+  Amount,
+  InsiderDelayTag,
+  MoneyText,
+  PartyBadge,
+  PlanTag,
+  RoleTag,
+  Segmented,
+  StatusNote,
+  Tag,
+  TickerChip,
+} from "./ui";
+import { MemberAvatar } from "./avatar";
 import { Disclosure } from "./disclosure";
 import { DataError, PAGE_STACK, PageHeader, Quiet } from "./page-header";
 import { AgentAlternates } from "./agent-alternates";
 import { GroupedList, LIST_FOOT_LINK, ROW_LINK } from "./grouped-list";
-import { ActiveWatchlistBanner, FeedWatchlistToggle, GetAlertsPopover } from "./watchlist-client";
+import {
+  ActiveWatchlistBanner,
+  FeedWatchlistToggle,
+  FollowButton,
+  GetAlertsPopover,
+  LandingAlertBuilder,
+  type StarterFollowItem,
+} from "./watchlist-client";
 import { ChevronRight } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -47,6 +92,12 @@ const PAGE = 120;
 
 /** The stat tiles' trend window: rolling 7-day buckets back from today. */
 const WEEKS = 12;
+
+/** Trade-date window for the overlap. 30 days, not 90: this card wants both
+ *  sides moving at once, and Form 4's two-business-day deadline fills the
+ *  insider side immediately. */
+const BOTH_SIDES_DAYS = 30;
+const SIGNALS_LIMIT = 5;
 
 /** "filed Oct 12–18" for each rolling week, oldest first — the sparkline's hover names. */
 function rollingWeekLabels(weeks: number): string[] {
@@ -88,7 +139,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return pageMetadata({
     title: "FatCat Watch: congressional and insider stock trades",
     absoluteTitle: true,
-    description: `${lead}, newest first, plus SEC Form 4 insider trades. Amounts are shown as the ranges filed, never as invented exact figures.`,
+    description: `${lead}, newest first, plus SEC Form 4 insider trades, politician & insider ratings vs S&P 500, and daily trade alerts. Amounts are shown as the ranges filed, never as invented exact figures.`,
     path: "/",
   });
 }
@@ -115,6 +166,14 @@ async function SiteStructuredData() {
   return <JsonLd data={dataset ? [organizationLd(), websiteLd(), dataset] : [organizationLd(), websiteLd()]} />;
 }
 
+type StreamMode = "congress" | "insiders" | "all";
+
+function parseStreamMode(raw: string | string[] | undefined): StreamMode {
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  if (v === "insiders" || v === "all") return v;
+  return "congress";
+}
+
 export default async function FeedPage({
   searchParams,
 }: {
@@ -127,19 +186,68 @@ export default async function FeedPage({
 
   const { filters, ignored } = parseTransactionFilters(params);
   const offset = parseOffset(params.offset);
+  const stream = parseStreamMode(params.stream);
   // The filter form submits every field, blank ones included; send the
   // reader to the canonical URL so a copied link carries only the filters.
   // Not when something was ignored: the notice about it must still render.
   if (!ignored.length && FILTER_KEYS.some((k) => params[k] === "")) redirect(feedHref(filters, offset));
 
-  let rows, totals, consensus, pipeline, weekly;
+  const watchHasInsiderScope = Boolean(
+    filters.watch && ((filters.watch.insiders?.length ?? 0) > 0 || filters.watch.tickers.length > 0)
+  );
+  const loadInsiderFeed = stream === "insiders" || stream === "all" || watchHasInsiderScope;
+
+  let rows,
+    totals,
+    consensus,
+    pipeline,
+    weekly,
+    insiderTotals,
+    trackBoard,
+    insiderTrack,
+    topInsiderBuyers,
+    alerts,
+    bothSides,
+    shared,
+    insiderFeedRows;
   try {
-    [rows, totals, consensus, pipeline, weekly] = await Promise.all([
+    [
+      rows,
+      totals,
+      consensus,
+      pipeline,
+      weekly,
+      insiderTotals,
+      trackBoard,
+      insiderTrack,
+      topInsiderBuyers,
+      alerts,
+      bothSides,
+      shared,
+      insiderFeedRows,
+    ] = await Promise.all([
       getTransactions({ ...filters, limit: PAGE, offset }),
       getTransactionTotals(filters),
       getConsensusTickers(90, 6),
       getPipeline(),
       getWeeklyActivity(WEEKS),
+      getInsiderTotals(),
+      getTrackLeaderboard(90),
+      getInsiderTrackLeaderboard(20),
+      getInsiderFilers({ direction: "buy", limit: 6 }),
+      getAlerts({ limit: SIGNALS_LIMIT }).catch(() => [] as AlertRow[]),
+      getBothSides(BOTH_SIDES_DAYS, 6).catch(() => [] as BothSidesRow[]),
+      getSharedTickers(BOTH_SIDES_DAYS).catch(() => ({ tickers: 0, same_direction: 0 })),
+      loadInsiderFeed
+        ? getInsiderTrades({
+            action: filters.action === "buy" || filters.action === "sell" ? filters.action : undefined,
+            ticker: filters.ticker,
+            watch: filters.watch
+              ? { tickers: filters.watch.tickers, insiders: filters.watch.insiders }
+              : undefined,
+            limit: 40,
+          }).catch(() => [] as InsiderTradeRow[])
+        : Promise.resolve([] as InsiderTradeRow[]),
     ]);
   } catch (err) {
     return <DataError error={err} />;
@@ -147,26 +255,81 @@ export default async function FeedPage({
 
   const weekLabels = rollingWeekLabels(WEEKS);
 
+  // Curated starter chips for the Interactive Alert Builder in the hero:
+  const starterPoliticians: StarterFollowItem[] = trackBoard.ranked
+    .filter((m) => m.bioguide_id)
+    .slice(0, 4)
+    .map((m) => ({
+      kind: "member",
+      id: m.bioguide_id!,
+      label: m.member_name,
+      sub: `${m.party ?? ""}-${m.state ?? ""} · #${m.rank} on 90d track record`,
+      badge: `${points(m.trade.score)} pts`,
+      href: memberHref(m.member_name, m.bioguide_id),
+    }));
+
+  const insiderScoreByCik = new Map(insiderTrack.rows.map((r) => [r.cik, r]));
+  const starterInsiders: StarterFollowItem[] = topInsiderBuyers.slice(0, 4).map((f) => {
+    const tr = insiderScoreByCik.get(f.cik);
+    return {
+      kind: "insider",
+      id: f.cik,
+      label: f.name,
+      sub: `${f.primary_ticker ?? "Form 4"} · ${usd(f.buy_value)} bought`,
+      badge: tr ? `${points(tr.trade_score)} pts` : f.primary_ticker ?? undefined,
+      href: `/insiders?cik=${encodeURIComponent(f.cik)}`,
+    };
+  });
+
+  const starterTickers: StarterFollowItem[] = (
+    bothSides.length > 0
+      ? bothSides.slice(0, 5).map((r) => ({
+          kind: "ticker" as const,
+          id: r.ticker,
+          label: r.ticker,
+          sub: `${r.members} member${r.members === 1 ? "" : "s"} & ${r.insiders} insider${r.insiders === 1 ? "" : "s"} (${r.direction})`,
+          badge: `${r.members}M · ${r.insiders}I`,
+          href: tickerHref(r.ticker),
+        }))
+      : consensus.slice(0, 5).map((c) => ({
+          kind: "ticker" as const,
+          id: c.ticker,
+          label: c.ticker,
+          sub: `${c.politicians} members trading`,
+          badge: `${c.buy_politicians}B/${c.sell_politicians}S`,
+          href: tickerHref(c.ticker),
+        }))
+  );
+
+  const streamHref = (nextStream: StreamMode) => {
+    const base = feedHref(filters, offset);
+    if (nextStream === "congress") return `${base}#trades`;
+    const sep = base.includes("?") ? "&" : "?";
+    return `${base}${sep}stream=${nextStream}#trades`;
+  };
+
+  const totalRated = trackBoard.ranked.length + insiderTrack.insiders_scored;
+
   return (
     <div className={PAGE_STACK}>
       <SiteStructuredData />
       <AgentAlternates markdown="/api/v1/feed.md" json="/api/v1/trades" />
-      <section id="overview" className="apple-snap-section">
+      <section id="overview" className="apple-snap-section space-y-6">
         <PageHeader
           eyebrow={
             <>
               <span className="size-1.5 rounded-full bg-ok motion-safe:animate-pulse" aria-hidden />
-              House &amp; Senate · STOCK Act Disclosures
+              Congress (STOCK Act) &amp; Corporate Insiders (SEC Form 4)
             </>
           }
-          title="Congressional trades"
-          subtitle="Stock trades members of the House and Senate disclose under the STOCK Act, reproduced as filed. Amounts are the disclosed bracket, never one exact figure."
+          title="Follow the trades that move against the market"
+          subtitle="Track every stock trade disclosed by members of Congress and corporate C-suite insiders in one place. See who beats the S&P 500, spot same-direction convergence, and get daily email alerts."
         >
           <section aria-label="All disclosed trades" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
             <StatTile
-              label="Trades"
+              label="Congress trades"
               value={pipeline.totals.transactions.toLocaleString()}
-              hint={`disclosed · ${weekly.window.trades.toLocaleString()} in last ${WEEKS} wk`}
+              hint={`STOCK Act · ${weekly.window.trades.toLocaleString()} in last ${WEEKS} wk`}
               trend={weekly.trades}
               trendLabels={weekLabels}
               trendCaption="per week"
@@ -174,29 +337,38 @@ export default async function FeedPage({
               delta={tradesDelta(weekly.window.trades, weekly.priorTrades)}
             />
             <StatTile
-              label="Tickers"
-              value={pipeline.totals.tickers.toLocaleString()}
-              hint={`distinct symbols · ${weekly.window.tickers.toLocaleString()} in last ${WEEKS} wk`}
+              label="Insider trades"
+              value={insiderTotals.trades.toLocaleString()}
+              hint={`SEC Form 4 · ${insiderTotals.insiders.toLocaleString()} primary filers`}
             />
             <StatTile
-              label="Members"
-              value={pipeline.totals.members.toLocaleString()}
-              hint={`filing trades · ${weekly.window.members.toLocaleString()} in last ${WEEKS} wk`}
+              label="Politicians & insiders rated"
+              value={totalRated.toLocaleString()}
+              hint={`${trackBoard.ranked.length} members · ${insiderTrack.insiders_scored} insiders vs ${TRACK_BENCHMARK}`}
             />
             <StatTile
-              label="Filings"
-              value={pipeline.coverage.parsed.toLocaleString()}
-              hint={`parsed · ${weekly.window.filings.toLocaleString()} in last ${WEEKS} wk`}
-              trend={weekly.filings}
-              trendLabels={weekLabels}
-              trendCaption="per week"
-              trendLabel={`Filings parsed per week, last ${WEEKS} weeks, by filing date`}
+              label="30d convergence"
+              value={shared.same_direction.toLocaleString()}
+              hint={`same-way tickers · ${shared.tickers} shared overall`}
             />
           </section>
         </PageHeader>
+
+        <LandingAlertBuilder
+          politicians={starterPoliticians}
+          insiders={starterInsiders}
+          tickers={starterTickers}
+        />
       </section>
 
-      <SignalsAndConvergence />
+      <RatingsShowcase
+        politicians={trackBoard.ranked.slice(0, 5)}
+        totalRankedPoliticians={trackBoard.ranked.length}
+        insiderScores={insiderTrack.rows.slice(0, 5)}
+        topInsiderBuyers={topInsiderBuyers.slice(0, 5)}
+      />
+
+      <SignalsAndConvergence alerts={alerts} rows={bothSides} shared={shared} />
 
       {consensus.length ? (
         <section id="consensus" className="apple-snap-section">
@@ -222,75 +394,361 @@ export default async function FeedPage({
         </section>
       ) : null}
 
-      <section id="trades" className="apple-snap-section">
-        <SectionTitle
-          kicker="Live Disclosures"
-          right={<span className="text-muted-foreground">By trade date, newest first</span>}
-        >
-          Recent trades
-        </SectionTitle>
+      <section id="trades" className="apple-snap-section space-y-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <SectionTitle
+            kicker="Live Disclosures"
+            className="mb-0"
+          >
+            Recent trades
+          </SectionTitle>
+          <Segmented
+            label="Disclosure stream"
+            items={[
+              { key: "congress", href: streamHref("congress"), label: "Congress", active: stream === "congress" },
+              { key: "insiders", href: streamHref("insiders"), label: "Insiders", active: stream === "insiders" },
+              { key: "all", href: streamHref("all"), label: "Both", active: stream === "all" },
+            ]}
+          />
+        </div>
 
         <ActiveWatchlistBanner
           activeWatch={filters.watch}
           clearHref={feedHref({ ...filters, watch: undefined })}
         />
 
-        <FeedList
-          rows={rows}
-          toolbar={
-            <>
-              <DirectionFilter current={filters.action} hrefFor={(k) => feedHref({ ...filters, action: k })} />
-              <FeedWatchlistToggle
-                activeWatch={filters.watch}
-                allHref={feedHref({ ...filters, watch: undefined })}
-              />
-              <FilterBar filters={filters} ignored={ignored} />
-            </>
-          }
-          actions={<ExportLink filters={filters} />}
-          summary={<ShownLine offset={offset} shown={rows.length} totals={totals} />}
-          empty={
-            offset > 0 && totals.trades ? (
-              <>
-                Nothing past trade {totals.trades.toLocaleString()}.{" "}
-                <a href={feedHref(filters)} className="ink-link text-foreground">
-                  Back to the newest
-                </a>
-              </>
-            ) : undefined
-          }
-        />
-        <Pagination filters={filters} offset={offset} shown={rows.length} total={totals.trades} page={PAGE} />
+        {(stream === "insiders" || stream === "all" || (watchHasInsiderScope && insiderFeedRows.length > 0)) ? (
+          <InsiderFeedPreview
+            trades={insiderFeedRows}
+            isWatchFiltered={Boolean(filters.watch)}
+          />
+        ) : null}
+
+        {stream !== "insiders" ? (
+          <>
+            <FeedList
+              rows={rows}
+              toolbar={
+                <>
+                  <DirectionFilter current={filters.action} hrefFor={(k) => feedHref({ ...filters, action: k })} />
+                  <FeedWatchlistToggle
+                    activeWatch={filters.watch}
+                    allHref={feedHref({ ...filters, watch: undefined })}
+                  />
+                  <FilterBar filters={filters} ignored={ignored} />
+                </>
+              }
+              actions={<ExportLink filters={filters} />}
+              summary={<ShownLine offset={offset} shown={rows.length} totals={totals} />}
+              empty={
+                offset > 0 && totals.trades ? (
+                  <>
+                    Nothing past trade {totals.trades.toLocaleString()}.{" "}
+                    <a href={feedHref(filters)} className="ink-link text-foreground">
+                      Back to the newest
+                    </a>
+                  </>
+                ) : undefined
+              }
+            />
+            <Pagination filters={filters} offset={offset} shown={rows.length} total={totals.trades} page={PAGE} />
+          </>
+        ) : (
+          <div className="hidden" aria-hidden>
+            <DirectionFilter current={filters.action} hrefFor={(k) => feedHref({ ...filters, action: k })} />
+          </div>
+        )}
       </section>
     </div>
   );
 }
 
-/** Trade-date window for the overlap. 30 days, not 90: this card wants both
- *  sides moving at once, and Form 4's two-business-day deadline fills the
- *  insider side immediately. */
-const BOTH_SIDES_DAYS = 30;
-const SIGNALS_LIMIT = 5;
+/**
+ * Side-by-side Track Record & Ratings showcase comparing Top-Rated Politicians
+ * (90d vs SPY) and Top-Rated Corporate Insiders (SEC Form 4 conviction & 20d vs SPY).
+ */
+function RatingsShowcase({
+  politicians,
+  totalRankedPoliticians,
+  insiderScores,
+  topInsiderBuyers,
+}: {
+  politicians: TrackScoreRow[];
+  totalRankedPoliticians: number;
+  insiderScores: InsiderTrackScoreRow[];
+  topInsiderBuyers: InsiderFilerRow[];
+}) {
+  if (!politicians.length && !topInsiderBuyers.length) return null;
+
+  const scoreByCik = new Map(insiderScores.map((s) => [s.cik, s]));
+
+  return (
+    <section id="ratings" className="apple-snap-section grid gap-8 lg:grid-cols-2 lg:gap-5">
+      <div className="flex min-w-0 flex-col [&>:last-child]:flex-1">
+        <SectionTitle
+          kicker="Congressional Ratings · 90d vs S&P 500"
+          right={
+            <a href="/politicians?view=track" className="ink-link text-[13px]">
+              All {totalRankedPoliticians} ranked →
+            </a>
+          }
+        >
+          Top-rated politicians
+        </SectionTitle>
+        <GroupedList
+          inset="3.25rem"
+          header={
+            <p className="text-[13px] text-ink-2">
+              Ranked by shrunk 90-day stock move against {TRACK_BENCHMARK} after each member’s trade. No dollar amount enters the score.
+            </p>
+          }
+          footer={
+            <a href="/politicians?view=track" className={LIST_FOOT_LINK}>
+              Full congressional track-record leaderboard (30d &amp; 90d)
+              <ChevronRight aria-hidden className="size-3.5" strokeWidth={2.25} />
+            </a>
+          }
+        >
+          {politicians.map((m) => (
+            <li
+              key={m.member_name}
+              className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-3 transition-colors duration-(--dur-fast) hover:bg-[var(--feed-hover)] sm:px-5"
+            >
+              <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                <span className="tabular w-5 text-right text-[12.5px] font-semibold text-muted-foreground">
+                  #{m.rank}
+                </span>
+                <MemberAvatar name={m.member_name} bioguideId={m.bioguide_id} size="sm" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <a href={memberHref(m.member_name, m.bioguide_id)} className={ROW_LINK}>
+                      {m.member_name}
+                    </a>
+                    <PartyBadge party={m.party} />
+                    <span className="text-[12px] text-muted-foreground">
+                      {m.state}
+                      {m.district && m.district !== "0" ? m.district : ""}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-[12px] text-muted-foreground">
+                    {m.n} decisions · {percent(m.trade.hit_rate)} hit rate · after filing {points(m.disclosure.score)} pts
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <div className="text-right">
+                  <p className="tabular text-[13.5px] font-semibold text-foreground">
+                    {points(m.trade.score)} pts
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">vs {TRACK_BENCHMARK}</p>
+                </div>
+                {m.bioguide_id ? (
+                  <FollowButton kind="member" id={m.bioguide_id} label={m.member_name} />
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </GroupedList>
+      </div>
+
+      <div className="flex min-w-0 flex-col [&>:last-child]:flex-1">
+        <SectionTitle
+          kicker="Corporate Insider Ratings · SEC Form 4"
+          right={
+            <a href="/insiders?view=track" className="ink-link text-[13px]">
+              Insider leaderboard →
+            </a>
+          }
+        >
+          Top corporate insiders
+        </SectionTitle>
+        <GroupedList
+          inset="3.25rem"
+          header={
+            <p className="text-[13px] text-ink-2">
+              C-suite officers, directors &amp; 10% owners buying their own stock on the open market (shares × reported price, kept separate from Congress).
+            </p>
+          }
+          footer={
+            <a href="/insiders?view=track" className={LIST_FOOT_LINK}>
+              Full corporate insider track record (5d &amp; 20d vs {TRACK_BENCHMARK})
+              <ChevronRight aria-hidden className="size-3.5" strokeWidth={2.25} />
+            </a>
+          }
+        >
+          {topInsiderBuyers.map((f) => {
+            const tr = scoreByCik.get(f.cik);
+            const discPct =
+              f.trades > 0 ? Math.round(((f.trades - f.plan_trades) / f.trades) * 100) : 100;
+            return (
+              <li
+                key={f.cik}
+                className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-3 transition-colors duration-(--dur-fast) hover:bg-[var(--feed-hover)] sm:px-5"
+              >
+                <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                  <MemberAvatar name={f.name} size="sm" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <a href={`/insiders?cik=${encodeURIComponent(f.cik)}`} className={ROW_LINK}>
+                        {f.name}
+                      </a>
+                      <RoleTag
+                        isDirector={f.is_director}
+                        isOfficer={f.is_officer}
+                        isTenPercentOwner={f.is_ten_percent_owner}
+                        officerTitle={f.officer_title}
+                      />
+                      {f.primary_ticker ? (
+                        <TickerChip ticker={f.primary_ticker} href={insiderIssuerHref(f.primary_ticker)} />
+                      ) : null}
+                    </div>
+                    <p className="mt-0.5 text-[12px] text-muted-foreground">
+                      {f.buys} open-market buy{f.buys === 1 ? "" : "s"} · {discPct}% discretionary
+                      {tr ? ` · ${points(tr.trade_score)} pts vs ${TRACK_BENCHMARK} (20d)` : ""}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <div className="text-right">
+                    <p className="tabular text-[13.5px] font-semibold text-foreground">
+                      +{usd(f.buy_value)}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">shares × price</p>
+                  </div>
+                  <FollowButton kind="insider" id={f.cik} label={f.name} />
+                </div>
+              </li>
+            );
+          })}
+        </GroupedList>
+      </div>
+    </section>
+  );
+}
 
 /**
- * Two-column Bento showcase right above the main feed:
+ * Corporate Insider (SEC Form 4) feed card rendered inside `#trades` when the
+ * visitor selects the `Insiders` or `Both Streams` view, or when their active
+ * `?watch=` filter matches Form 4 filings.
+ */
+function InsiderFeedPreview({
+  trades,
+  isWatchFiltered,
+}: {
+  trades: InsiderTradeRow[];
+  isWatchFiltered: boolean;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+        <p className="text-[13px] font-semibold text-foreground">
+          SEC Form 4 Corporate Insider Disclosures{" "}
+          <span className="font-normal text-muted-foreground">
+            ({trades.length} shown · values are shares × reported price, kept separate from Congress)
+          </span>
+        </p>
+        <a href="/insiders" className="ink-link text-[13px]">
+          All corporate insider filings →
+        </a>
+      </div>
+      {trades.length ? (
+        <GroupedList>
+          {trades.map((r) => (
+            <li
+              key={`ins:${r.id}`}
+              className="px-4 py-3 transition-colors duration-(--dur-fast) hover:bg-[var(--feed-hover)] sm:px-5"
+            >
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <Tag variant="outline" className="text-[11px] font-medium text-ink-2">
+                  Form 4
+                </Tag>
+                <ActionBadge action={r.action} />
+                {r.ticker ? (
+                  <TickerChip ticker={r.ticker} href={insiderIssuerHref(r.ticker)} />
+                ) : null}
+                {r.implausible === 1 ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="tabular text-[13px] text-muted-foreground line-through">
+                      {usd(r.amount_exact_cents)}
+                    </span>
+                    <StatusNote tone="attention" className="text-[12px] text-ink-2">
+                      as filed, implausible
+                    </StatusNote>
+                  </span>
+                ) : (
+                  <span className="font-semibold">
+                    <Amount
+                      min={r.amount_min_cents}
+                      max={r.amount_max_cents}
+                      exact={r.amount_exact_cents}
+                    />
+                  </span>
+                )}
+                <span className="tabular text-[13px] text-muted-foreground">
+                  {shares(r.shares)} sh @ {price(r.price_per_share)}
+                </span>
+                <PlanTag value={r.aff_10b5_one} />
+                <span className="ml-auto inline-flex items-center gap-2 whitespace-nowrap">
+                  <span className="tabular text-[13px] text-muted-foreground">
+                    {shortDate(r.tx_date)}
+                  </span>
+                  <InsiderDelayTag
+                    days={r.delay_days}
+                    late={r.late}
+                    timeliness={r.timeliness}
+                  />
+                </span>
+              </div>
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13.5px]">
+                {r.insider_cik ? (
+                  <a href={`/insiders?cik=${encodeURIComponent(r.insider_cik)}`} className={ROW_LINK}>
+                    {r.insider_name ?? r.insider_cik}
+                  </a>
+                ) : (
+                  <span className="font-semibold text-muted-foreground">unknown filer</span>
+                )}
+                <RoleTag
+                  isDirector={r.is_director}
+                  isOfficer={r.is_officer}
+                  isTenPercentOwner={r.is_ten_percent_owner}
+                  officerTitle={r.officer_title}
+                  ownerCount={r.owner_count}
+                />
+                <span className="min-w-0 truncate text-[13px] text-muted-foreground">
+                  {r.issuer_name ?? r.security_title ?? "common stock"}
+                </span>
+              </div>
+            </li>
+          ))}
+        </GroupedList>
+      ) : (
+        <Card>
+          <Quiet>
+            {isWatchFiltered
+              ? "No SEC Form 4 corporate insider trades match your current watchlist filter."
+              : "No SEC Form 4 corporate insider trades match this filter."}
+          </Quiet>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Two-column Bento showcase:
  * Left: Latest triggered high-signal alerts from the alert log (`getAlerts`).
  * Right: Convergence radar (`BothSides`) showing tickers traded the same way
  * by both Congress and corporate insiders in the last 30 days.
  */
-async function SignalsAndConvergence() {
-  let alerts: AlertRow[] = [];
-  let rows: BothSidesRow[] = [];
-  let shared: SharedTickers = { tickers: 0, same_direction: 0 };
-  try {
-    [alerts, rows, shared] = await Promise.all([
-      getAlerts({ limit: SIGNALS_LIMIT }).catch(() => []),
-      getBothSides(BOTH_SIDES_DAYS, 6).catch(() => []),
-      getSharedTickers(BOTH_SIDES_DAYS).catch(() => ({ tickers: 0, same_direction: 0 })),
-    ]);
-  } catch {
-    return null;
-  }
+function SignalsAndConvergence({
+  alerts,
+  rows,
+  shared,
+}: {
+  alerts: AlertRow[];
+  rows: BothSidesRow[];
+  shared: SharedTickers;
+}) {
   if (!alerts.length && !rows.length) return null;
 
   return (
@@ -471,37 +929,40 @@ function BothSidesCard({ rows, shared }: { rows: BothSidesRow[]; shared: SharedT
           {rows.map((r) => (
             <li
               key={`${r.ticker}-${r.direction}`}
-              className="px-4 py-3 transition-colors duration-(--dur-fast) hover:bg-[var(--feed-hover)] sm:px-5"
+              className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 transition-colors duration-(--dur-fast) hover:bg-[var(--feed-hover)] sm:px-5"
             >
-              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                <TickerChip ticker={r.ticker} />
-                <ActionBadge action={r.direction === "buy" ? "purchase" : "sale"} />
-                <span
-                  className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground"
-                  title={r.issuer_name ?? r.asset_name ?? undefined}
-                >
-                  {assetLabel(r.issuer_name ?? r.asset_name, { ticker: r.ticker })}
-                </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                  <TickerChip ticker={r.ticker} />
+                  <ActionBadge action={r.direction === "buy" ? "purchase" : "sale"} />
+                  <span
+                    className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground"
+                    title={r.issuer_name ?? r.asset_name ?? undefined}
+                  >
+                    {assetLabel(r.issuer_name ?? r.asset_name, { ticker: r.ticker })}
+                  </span>
+                </div>
+                <div className="tabular mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px]">
+                  <a
+                    href={tickerHref(r.ticker)}
+                    className="font-medium text-foreground decoration-border-strong underline-offset-[3px] hover:underline"
+                  >
+                    {plural(r.members, "member")}
+                  </a>
+                  <span className="text-muted-foreground">({plural(r.member_trades, "trade")})</span>
+                  <span aria-hidden className="text-muted-foreground">
+                    ·
+                  </span>
+                  <a
+                    href={`/insiders?t=${encodeURIComponent(r.ticker)}`}
+                    className="font-medium text-foreground decoration-border-strong underline-offset-[3px] hover:underline"
+                  >
+                    {plural(r.insiders, "insider")}
+                  </a>
+                  <span className="text-muted-foreground">({plural(r.insider_filings, "filing")})</span>
+                </div>
               </div>
-              <div className="tabular mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px]">
-                <a
-                  href={tickerHref(r.ticker)}
-                  className="font-medium text-foreground decoration-border-strong underline-offset-[3px] hover:underline"
-                >
-                  {plural(r.members, "member")}
-                </a>
-                <span className="text-muted-foreground">({plural(r.member_trades, "trade")})</span>
-                <span aria-hidden className="text-muted-foreground">
-                  ·
-                </span>
-                <a
-                  href={`/insiders?t=${encodeURIComponent(r.ticker)}`}
-                  className="font-medium text-foreground decoration-border-strong underline-offset-[3px] hover:underline"
-                >
-                  {plural(r.insiders, "insider")}
-                </a>
-                <span className="text-muted-foreground">({plural(r.insider_filings, "filing")})</span>
-              </div>
+              <FollowButton kind="ticker" id={r.ticker} label={r.ticker} />
             </li>
           ))}
         </GroupedList>

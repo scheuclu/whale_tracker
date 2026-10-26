@@ -3,27 +3,35 @@ import { test } from "node:test";
 import {
   EMPTY_WATCHLIST,
   isBioguideId,
+  isInsiderCik,
   isWatchTicker,
   parseWatchParam,
   sanitizeWatchlistState,
   serializeWatchParam,
   toggleWatchItem,
+  watchCount,
   watchlistFeedHref,
 } from "./watchlist.ts";
 
-test("isBioguideId and isWatchTicker partition member IDs and stock symbols", () => {
+test("isBioguideId, isInsiderCik, and isWatchTicker partition member IDs, insider CIKs, and stock symbols", () => {
   assert.equal(isBioguideId("P000197"), true);
   assert.equal(isBioguideId("c001123"), true);
   assert.equal(isBioguideId("NVDA"), false);
   assert.equal(isBioguideId("BRK.B"), false);
+  assert.equal(isBioguideId("0001767470"), false);
+
+  assert.equal(isInsiderCik("0001767470"), true);
+  assert.equal(isInsiderCik("P000197"), false);
+  assert.equal(isInsiderCik("NVDA"), false);
 
   assert.equal(isWatchTicker("NVDA"), true);
   assert.equal(isWatchTicker("brk.b"), true);
   assert.equal(isWatchTicker("P000197"), false);
+  assert.equal(isWatchTicker("0001767470"), false);
   assert.equal(isWatchTicker("NOT_A_TICKER_123"), false);
 });
 
-test("parseWatchParam and serializeWatchParam round-trip members and tickers", () => {
+test("parseWatchParam and serializeWatchParam round-trip members, insiders, and tickers", () => {
   const parsed = parseWatchParam("p000197, nvda, brk.b, C001123, nvda, invalid$$$");
   assert.deepEqual(parsed, {
     members: ["P000197", "C001123"],
@@ -33,6 +41,15 @@ test("parseWatchParam and serializeWatchParam round-trip members and tickers", (
   assert.equal(watchlistFeedHref(parsed!), "/?watch=P000197%2CC001123%2CNVDA%2CBRK.B#trades");
   assert.equal(parseWatchParam(""), null);
   assert.equal(parseWatchParam(undefined), null);
+
+  const withInsider = parseWatchParam("P000197,0001767470,GME");
+  assert.deepEqual(withInsider, {
+    members: ["P000197"],
+    tickers: ["GME"],
+    insiders: ["0001767470"],
+  });
+  assert.equal(serializeWatchParam(withInsider!), "P000197,0001767470,GME");
+  assert.equal(watchCount(withInsider), 3);
 });
 
 test("toggleWatchItem adds and removes items while preserving labels", () => {

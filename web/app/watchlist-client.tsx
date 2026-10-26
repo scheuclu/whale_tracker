@@ -11,6 +11,7 @@ import {
   sanitizeWatchlistState,
   serializeWatchParam,
   toggleWatchItem,
+  watchCount,
   watchlistFeedHref,
   type WatchlistState,
 } from "@/lib/watchlist";
@@ -54,16 +55,16 @@ export function useWatchlist() {
     };
   }, []);
 
-  const toggle = useCallback((item: { kind: "member" | "ticker"; id: string; label?: string }) => {
+  const toggle = useCallback((item: { kind: "member" | "ticker" | "insider"; id: string; label?: string }) => {
     const current = readWatchlist();
     const { next, followed } = toggleWatchItem(current, item);
     writeWatchlist(next);
     setState(next);
     trackEvent("watchlist_toggle", {
       kind: item.kind,
-      id: item.id.toUpperCase(),
+      id: item.kind === "insider" ? item.id.trim() : item.id.toUpperCase(),
       followed,
-      total: next.members.length + next.tickers.length,
+      total: watchCount(next),
     });
     return followed;
   }, []);
@@ -79,7 +80,7 @@ export function useWatchlist() {
 
 /**
  * Tactile Apple capsule button (`★ Follow` / `✓ Following`) mounted on
- * MemberHero, SymbolHero, and Insider issuer headers.
+ * MemberHero, SymbolHero, and Insider issuer/filer headers.
  */
 export function FollowButton({
   kind,
@@ -87,15 +88,20 @@ export function FollowButton({
   label,
   className,
 }: {
-  kind: "member" | "ticker";
+  kind: "member" | "ticker" | "insider";
   id: string;
   label?: string;
   className?: string;
 }) {
   const { state, mounted, toggle } = useWatchlist();
-  const normId = id.trim().toUpperCase();
+  const normId = kind === "insider" ? id.trim() : id.trim().toUpperCase();
   const isFollowed =
-    mounted && (kind === "member" ? state.members.includes(normId) : state.tickers.includes(normId));
+    mounted &&
+    (kind === "member"
+      ? state.members.includes(normId)
+      : kind === "insider"
+        ? (state.insiders ?? []).includes(normId)
+        : state.tickers.includes(normId));
 
   return (
     <button
@@ -132,13 +138,13 @@ export function FollowButton({
 
 /**
  * Apple popover button (`Get Alerts`) for subscribing to a politician,
- * ticker, or high-signal cluster alerts via Watchlist, Telegram, or Markdown/Atom feed.
+ * insider, ticker, or high-signal cluster alerts via Watchlist, Email, or Atom feed.
  */
 export function GetAlertsPopover({
   subject,
   className,
 }: {
-  subject?: { kind: "member" | "ticker"; id: string; label: string };
+  subject?: { kind: "member" | "ticker" | "insider"; id: string; label: string };
   className?: string;
 }) {
   const { state, mounted, toggle } = useWatchlist();
@@ -149,11 +155,19 @@ export function GetAlertsPopover({
   const [notice, setNotice] = useState<string | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
-  const normId = subject?.id.trim().toUpperCase();
+  const normId = subject
+    ? subject.kind === "insider"
+      ? subject.id.trim()
+      : subject.id.trim().toUpperCase()
+    : undefined;
   const isFollowed =
     mounted &&
     normId != null &&
-    (subject?.kind === "member" ? state.members.includes(normId) : state.tickers.includes(normId));
+    (subject?.kind === "member"
+      ? state.members.includes(normId)
+      : subject?.kind === "insider"
+        ? (state.insiders ?? []).includes(normId)
+        : state.tickers.includes(normId));
 
   useEffect(() => {
     if (!open) return;
@@ -173,7 +187,7 @@ export function GetAlertsPopover({
     };
   }, [open]);
 
-  const totalWatched = state.members.length + state.tickers.length;
+  const totalWatched = watchCount(state);
   const feedUrl = watchlistFeedHref(state);
 
   const handleEmailSubscribe = async (e: React.FormEvent) => {
@@ -183,9 +197,11 @@ export function GetAlertsPopover({
     setNotice(null);
     const members = [...state.members];
     const tickers = [...state.tickers];
+    const insiders = [...(state.insiders ?? [])];
     if (subject && normId) {
       if (subject.kind === "member" && !members.includes(normId)) members.push(normId);
       if (subject.kind === "ticker" && !tickers.includes(normId)) tickers.push(normId);
+      if (subject.kind === "insider" && !insiders.includes(normId)) insiders.push(normId);
       if (!isFollowed) toggle({ kind: subject.kind, id: normId, label: subject.label });
     }
     try {
@@ -196,6 +212,7 @@ export function GetAlertsPopover({
           email,
           members,
           tickers,
+          insiders,
           clusters,
         }),
       });
@@ -210,6 +227,7 @@ export function GetAlertsPopover({
         status: res.ok ? (data.status ?? "ok") : (data.code ?? "error"),
         members: members.length,
         tickers: tickers.length,
+        insiders: insiders.length,
         clusters,
       });
       if (res.ok) {
@@ -224,6 +242,7 @@ export function GetAlertsPopover({
         status: "network_error",
         members: members.length,
         tickers: tickers.length,
+        insiders: insiders.length,
         clusters,
       });
       setNotice("Saved to your device watchlist.");
@@ -265,7 +284,7 @@ export function GetAlertsPopover({
                 Watchlist &amp; Alerts
               </p>
               <p className="mt-0.5 text-[14px] font-semibold tracking-[-0.015em] text-foreground">
-                {subject ? `Track ${subject.label}` : "Track politicians & stocks"}
+                {subject ? `Track ${subject.label}` : "Track politicians, insiders & stocks"}
               </p>
             </div>
             <button
@@ -368,12 +387,12 @@ export function GetAlertsPopover({
 
 /**
  * Header Watchlist badge (`★ N`) shown in the masthead toolbar once the
- * visitor follows at least one politician or stock.
+ * visitor follows at least one politician, insider, or stock.
  */
 export function HeaderWatchlistPill() {
   const { state, mounted } = useWatchlist();
   if (!mounted) return null;
-  const count = state.members.length + state.tickers.length;
+  const count = watchCount(state);
   if (count === 0) return null;
 
   const href = watchlistFeedHref(state);
@@ -402,21 +421,19 @@ export function FeedWatchlistToggle({
   activeWatch,
   allHref,
 }: {
-  activeWatch?: { members: string[]; tickers: string[] };
+  activeWatch?: { members: string[]; tickers: string[]; insiders?: string[] };
   allHref: string;
 }) {
   const { state, mounted } = useWatchlist();
-  const isFiltered = Boolean(activeWatch && (activeWatch.members.length > 0 || activeWatch.tickers.length > 0));
-  const localCount = mounted ? state.members.length + state.tickers.length : 0;
+  const isFiltered = Boolean(activeWatch && watchCount(activeWatch) > 0);
+  const localCount = mounted ? watchCount(state) : 0;
 
   if (!isFiltered && localCount === 0) {
     return null;
   }
 
   const targetHref = isFiltered ? allHref : watchlistFeedHref(state);
-  const count = isFiltered
-    ? (activeWatch?.members.length ?? 0) + (activeWatch?.tickers.length ?? 0)
-    : localCount;
+  const count = isFiltered && activeWatch ? watchCount(activeWatch) : localCount;
 
   return (
     <a
@@ -432,7 +449,7 @@ export function FeedWatchlistToggle({
         isFiltered ? BUTTON_PRIMARY : BUTTON,
         "h-8 px-3.5 text-[13px]"
       )}
-      title={isFiltered ? "Showing only your watchlist — click to show all trades" : "Filter feed to your followed politicians and tickers"}
+      title={isFiltered ? "Showing only your watchlist — click to show all trades" : "Filter feed to your followed politicians, insiders, and tickers"}
     >
       <Star className={cn("size-3.5 shrink-0", isFiltered && "fill-current")} strokeWidth={2.2} aria-hidden />
       <span>Following</span>
@@ -449,15 +466,16 @@ export function ActiveWatchlistBanner({
   activeWatch,
   clearHref,
 }: {
-  activeWatch?: { members: string[]; tickers: string[] };
+  activeWatch?: { members: string[]; tickers: string[]; insiders?: string[] };
   clearHref: string;
 }) {
   const { state, mounted, toggle } = useWatchlist();
-  if (!activeWatch || (activeWatch.members.length === 0 && activeWatch.tickers.length === 0)) {
+  if (!activeWatch || watchCount(activeWatch) === 0) {
     return null;
   }
 
-  const tokens = [...activeWatch.members, ...activeWatch.tickers];
+  const insiders = activeWatch.insiders ?? [];
+  const tokens = [...activeWatch.members, ...insiders, ...activeWatch.tickers];
   const localParam = mounted ? serializeWatchParam(state) : "";
   const urlParam = serializeWatchParam(activeWatch);
   const isUnsavedShared = mounted && urlParam !== localParam;
@@ -465,9 +483,11 @@ export function ActiveWatchlistBanner({
   const saveSharedToLocal = () => {
     const mergedMembers = Array.from(new Set([...state.members, ...activeWatch.members]));
     const mergedTickers = Array.from(new Set([...state.tickers, ...activeWatch.tickers]));
+    const mergedInsiders = Array.from(new Set([...(state.insiders ?? []), ...insiders]));
     writeWatchlist({
       members: mergedMembers,
       tickers: mergedTickers,
+      ...(mergedInsiders.length ? { insiders: mergedInsiders } : {}),
       labels: state.labels,
     });
     trackEvent("watchlist_import_shared", { count: tokens.length });
@@ -499,6 +519,22 @@ export function ActiveWatchlistBanner({
             <span>{mounted && state.labels[m] ? state.labels[m] : m}</span>
           </a>
         ))}
+        {insiders.map((c) => (
+          <a
+            key={c}
+            href={`/insiders?cik=${encodeURIComponent(c)}`}
+            onClick={(e) => {
+              if (mounted && (state.insiders ?? []).includes(c)) {
+                e.preventDefault();
+                toggle({ kind: "insider", id: c });
+              }
+            }}
+            className="inline-flex items-center gap-1 rounded-full bg-card px-2.5 py-0.5 text-[12px] font-medium text-foreground shadow-segment ring-1 ring-black/[0.05] dark:ring-white/[0.08]"
+            title={mounted && state.labels[c] ? `${state.labels[c]} (CIK ${c})` : `Insider CIK ${c}`}
+          >
+            <span>{mounted && state.labels[c] ? state.labels[c] : `CIK ${c}`}</span>
+          </a>
+        ))}
         {activeWatch.tickers.map((t) => (
           <a
             key={t}
@@ -526,6 +562,287 @@ export function ActiveWatchlistBanner({
         >
           Show all trades
         </a>
+      </div>
+    </div>
+  );
+}
+
+export type StarterFollowItem = {
+  kind: "member" | "ticker" | "insider";
+  id: string;
+  label: string;
+  sub: string;
+  badge?: string;
+  href: string;
+};
+
+/**
+ * Interactive Alert & Watchlist Builder mounted on the `/` command-center
+ * landing page. Visitors can one-click follow suggested top-rated politicians,
+ * high-conviction C-suite corporate insiders, and convergence stocks, then
+ * subscribe to the Daily Email Digest & Cluster Alerts in one step.
+ */
+export function LandingAlertBuilder({
+  politicians,
+  insiders,
+  tickers,
+}: {
+  politicians: StarterFollowItem[];
+  insiders: StarterFollowItem[];
+  tickers: StarterFollowItem[];
+}) {
+  const { state, mounted, toggle } = useWatchlist();
+  const [email, setEmail] = useState("");
+  const [clusters, setClusters] = useState(true);
+  const [weeklyDigest, setWeeklyDigest] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const totalCount = mounted ? watchCount(state) : 0;
+  const feedHref = watchlistFeedHref(state);
+
+  const isFollowed = (item: StarterFollowItem) => {
+    if (!mounted) return false;
+    const norm = item.kind === "insider" ? item.id.trim() : item.id.trim().toUpperCase();
+    if (item.kind === "member") return state.members.includes(norm);
+    if (item.kind === "insider") return (state.insiders ?? []).includes(norm);
+    return state.tickers.includes(norm);
+  };
+
+  const handleSubscribe = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setSubmitting(true);
+    setNotice(null);
+    const members = [...state.members];
+    const watchedTickers = [...state.tickers];
+    const watchedInsiders = [...(state.insiders ?? [])];
+
+    try {
+      const res = await fetch("/api/alerts/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          members,
+          tickers: watchedTickers,
+          insiders: watchedInsiders,
+          clusters,
+          weeklyDigest,
+        }),
+      });
+      const data = (await res.json()) as {
+        message?: string;
+        error?: string;
+        status?: string;
+        code?: string;
+      };
+      trackEvent("landing_alert_builder_subscribe", {
+        status: res.ok ? (data.status ?? "ok") : (data.code ?? "error"),
+        members: members.length,
+        insiders: watchedInsiders.length,
+        tickers: watchedTickers.length,
+        clusters,
+        weeklyDigest,
+      });
+      if (res.ok) {
+        setNotice(data.message ?? "Check your inbox to confirm your daily alert subscription.");
+        setEmail("");
+      } else {
+        setNotice(data.error ?? "Your selections are saved to your watchlist on this device.");
+      }
+    } catch {
+      trackEvent("landing_alert_builder_subscribe", {
+        status: "network_error",
+        members: members.length,
+        insiders: watchedInsiders.length,
+        tickers: watchedTickers.length,
+      });
+      setNotice("Your selections are saved to your watchlist on this device.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const renderGroup = (title: string, subtitle: string, items: StarterFollowItem[]) => (
+    <div className="min-w-0 rounded-[16px] bg-fill/55 p-3.5 ring-1 ring-black/[0.04] dark:ring-white/[0.07]">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+          {title}
+        </p>
+        <span className="text-[11px] text-muted-foreground">{subtitle}</span>
+      </div>
+      <div className="mt-2.5 flex flex-wrap gap-1.5">
+        {items.map((item) => {
+          const active = isFollowed(item);
+          return (
+            <button
+              key={`${item.kind}:${item.id}`}
+              type="button"
+              aria-pressed={active}
+              onClick={() =>
+                toggle({
+                  kind: item.kind,
+                  id: item.id,
+                  label: item.label,
+                })
+              }
+              className={cn(
+                "group inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full px-3 py-1.5 text-left text-[12.5px] transition-all",
+                active
+                  ? "bg-foreground text-background shadow-segment font-semibold"
+                  : "bg-card text-foreground ring-1 ring-black/[0.06] hover:bg-foreground/[0.06] dark:ring-white/[0.1]",
+                FOCUS_RING
+              )}
+              title={`${active ? "Following" : "Follow"} ${item.label} (${item.sub})`}
+            >
+              {active ? (
+                <Check className="size-3.5 shrink-0" strokeWidth={2.5} aria-hidden />
+              ) : (
+                <Star className="size-3.5 shrink-0 text-muted-foreground group-hover:text-foreground" strokeWidth={2.2} aria-hidden />
+              )}
+              <span className={cn("min-w-0 truncate", item.kind === "ticker" && "font-mono font-semibold")}>{item.label}</span>
+              {item.badge ? (
+                <span
+                  className={cn(
+                    "shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[10.5px] font-semibold tabular",
+                    active
+                      ? "bg-background/20 text-background"
+                      : "bg-fill text-ink-2"
+                  )}
+                >
+                  {item.badge}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  return (
+    <div
+      data-landing-alert-builder
+      className="rounded-[24px] bg-card p-5 shadow-card ring-1 ring-black/[0.04] dark:ring-white/[0.07] sm:p-6"
+    >
+      <div className="grid gap-5 lg:grid-cols-[1.35fr_1fr] lg:items-start">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+                1. Build your radar
+              </p>
+              <h2 className="mt-0.5 text-[18px] font-semibold tracking-[-0.02em] text-foreground">
+                Follow rated politicians, C-suite insiders &amp; convergence stocks
+              </h2>
+            </div>
+            {totalCount > 0 ? (
+              <a
+                href={feedHref}
+                className={cn(BUTTON_PRIMARY, "h-8 px-3.5 text-[12.5px]")}
+              >
+                <Star className="size-3.5 fill-current" aria-hidden />
+                <span>Following feed ({totalCount}) →</span>
+              </a>
+            ) : null}
+          </div>
+          <p className="mt-1 text-[13px] leading-relaxed text-ink-2">
+            Tap any name or ticker below to pin them to your personal watchlist. We track both Congressional STOCK Act disclosures and SEC Form 4 corporate insider filings.
+          </p>
+
+          <div className="mt-3.5 grid gap-2.5">
+            {renderGroup("Top-Rated Congress", "90d vs SPY", politicians)}
+            {renderGroup("High-Conviction Insiders", "Form 4 buyers", insiders)}
+            {renderGroup("Convergence Tickers", "Both books", tickers)}
+          </div>
+        </div>
+
+        <form
+          onSubmit={handleSubscribe}
+          className="flex min-w-0 flex-col justify-between rounded-[18px] bg-fill/65 p-4 ring-1 ring-black/[0.05] dark:ring-white/[0.08] sm:p-5"
+        >
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+              2. Get trade alerts
+            </p>
+            <h3 className="mt-0.5 text-[16px] font-semibold tracking-[-0.015em] text-foreground">
+              Daily Email Digest &amp; Cluster Signals
+            </h3>
+            <p className="mt-1 text-[12.5px] leading-relaxed text-ink-2">
+              Get at most one combined daily email when your followed politicians, corporate insiders, or stocks file new disclosures—plus multi-filer cluster alerts.
+            </p>
+
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                aria-label="Email address for trade alerts"
+                className={cn(FIELD, "h-9 flex-1 bg-card text-[13px]")}
+              />
+              <button
+                type="submit"
+                disabled={submitting}
+                className={cn(BUTTON_PRIMARY, "h-9 px-4 text-[13px]")}
+              >
+                <Mail className="size-3.5 shrink-0" aria-hidden />
+                <span>{submitting ? "Subscribing…" : "Get Alerts"}</span>
+              </button>
+            </div>
+
+            <div className="mt-3 space-y-1.5 text-[12px] text-ink-2">
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={clusters}
+                  onChange={(e) => setClusters(e.target.checked)}
+                  className="size-3.5 accent-foreground"
+                />
+                <span>Include multi-member &amp; C-suite cluster buy alerts</span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={weeklyDigest}
+                  onChange={(e) => setWeeklyDigest(e.target.checked)}
+                  className="size-3.5 accent-foreground"
+                />
+                <span>Include weekly convergence &amp; rating digest</span>
+              </label>
+            </div>
+
+            {notice ? (
+              <p className="mt-2.5 rounded-[10px] bg-card px-3 py-2 text-[12px] font-medium text-foreground ring-1 ring-black/[0.05] dark:ring-white/[0.08]">
+                {notice}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3 text-[12px]">
+            <span className="text-muted-foreground">
+              {totalCount > 0
+                ? `${totalCount} item${totalCount === 1 ? "" : "s"} selected on this device`
+                : "No account required · 1-click unsubscribe"}
+            </span>
+            <div className="flex items-center gap-3">
+              <a
+                href="/watchlist"
+                className="font-semibold text-foreground underline decoration-border-strong underline-offset-[3px]"
+              >
+                Watchlist
+              </a>
+              <a
+                href="/alerts"
+                className="font-semibold text-foreground underline decoration-border-strong underline-offset-[3px]"
+              >
+                Alert log &amp; RSS →
+              </a>
+            </div>
+          </div>
+        </form>
       </div>
     </div>
   );

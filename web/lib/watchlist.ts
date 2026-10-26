@@ -13,6 +13,7 @@ export const WATCHLIST_STORAGE_KEY = "fatcat_watchlist_v1";
 export const MAX_WATCH_ITEMS = 40;
 
 const BIOGUIDE_RE = /^[A-Z]\d{6}$/;
+const CIK_RE = /^\d{10}$/;
 const TICKER_RE = /^[A-Z]{1,6}(?:\.[A-Z]{1,2})?$/;
 
 export type WatchlistState = {
@@ -20,6 +21,8 @@ export type WatchlistState = {
   members: string[];
   /** Uppercase ticker symbols, e.g. ["NVDA", "MSFT"]. */
   tickers: string[];
+  /** 10-digit SEC Form 4 primary reporting owner CIKs, e.g. ["0001767470"]. */
+  insiders?: string[];
   /** Optional display labels remembered from the page where the user clicked Follow. */
   labels: Record<string, string>;
 };
@@ -27,6 +30,7 @@ export type WatchlistState = {
 export const EMPTY_WATCHLIST: WatchlistState = {
   members: [],
   tickers: [],
+  insiders: [],
   labels: {},
 };
 
@@ -34,49 +38,67 @@ export function isBioguideId(token: string): boolean {
   return BIOGUIDE_RE.test(token.trim().toUpperCase());
 }
 
+export function isInsiderCik(token: string): boolean {
+  return CIK_RE.test(token.trim());
+}
+
 export function isWatchTicker(token: string): boolean {
   const upper = token.trim().toUpperCase();
-  return !BIOGUIDE_RE.test(upper) && TICKER_RE.test(upper);
+  return !BIOGUIDE_RE.test(upper) && !CIK_RE.test(upper) && TICKER_RE.test(upper);
+}
+
+export function watchCount(w?: { members?: readonly string[]; tickers?: readonly string[]; insiders?: readonly string[] } | null): number {
+  if (!w) return 0;
+  return (w.members?.length ?? 0) + (w.tickers?.length ?? 0) + (w.insiders?.length ?? 0);
 }
 
 /**
- * Parses a `?watch=P000197,NVDA,MSFT` query parameter into deduplicated
- * `members` (bioguide IDs) and `tickers` (stock symbols). Invalid tokens
- * are ignored so a hand-edited URL degrades gracefully.
+ * Parses a `?watch=P000197,NVDA,0001767470` query parameter into deduplicated
+ * `members` (bioguide IDs), `tickers` (stock symbols), and optional `insiders`
+ * (10-digit SEC CIKs). Invalid tokens are ignored so a hand-edited URL
+ * degrades gracefully.
  */
 export function parseWatchParam(
   raw: string | string[] | undefined
-): { members: string[]; tickers: string[] } | null {
+): { members: string[]; tickers: string[]; insiders?: string[] } | null {
   const str = Array.isArray(raw) ? raw[0] : raw;
   if (!str || typeof str !== "string") return null;
 
   const members: string[] = [];
   const tickers: string[] = [];
+  const insiders: string[] = [];
   const seen = new Set<string>();
 
   for (const part of str.split(",")) {
     const token = part.trim().toUpperCase();
     if (!token || seen.has(token)) continue;
-    if (members.length + tickers.length >= MAX_WATCH_ITEMS) break;
+    if (members.length + tickers.length + insiders.length >= MAX_WATCH_ITEMS) break;
 
     if (BIOGUIDE_RE.test(token)) {
       seen.add(token);
       members.push(token);
+    } else if (CIK_RE.test(token)) {
+      seen.add(token);
+      insiders.push(token);
     } else if (TICKER_RE.test(token)) {
       seen.add(token);
       tickers.push(token);
     }
   }
 
-  if (members.length === 0 && tickers.length === 0) return null;
-  return { members, tickers };
+  if (members.length === 0 && tickers.length === 0 && insiders.length === 0) return null;
+  return insiders.length > 0 ? { members, tickers, insiders } : { members, tickers };
 }
 
 /**
- * Serializes followed members and tickers into a canonical comma-separated
+ * Serializes followed members, insiders, and tickers into a canonical comma-separated
  * query parameter (`P000197,NVDA`), or `""` when empty.
  */
-export function serializeWatchParam(w: { members: readonly string[]; tickers: readonly string[] }): string {
+export function serializeWatchParam(w: {
+  members: readonly string[];
+  tickers: readonly string[];
+  insiders?: readonly string[];
+}): string {
   const tokens: string[] = [];
   const seen = new Set<string>();
 
@@ -87,9 +109,16 @@ export function serializeWatchParam(w: { members: readonly string[]; tickers: re
       tokens.push(t);
     }
   }
+  for (const cik of w.insiders ?? []) {
+    const t = cik.trim();
+    if (CIK_RE.test(t) && !seen.has(t) && tokens.length < MAX_WATCH_ITEMS) {
+      seen.add(t);
+      tokens.push(t);
+    }
+  }
   for (const sym of w.tickers) {
     const t = sym.trim().toUpperCase();
-    if ( isWatchTicker(t) && !seen.has(t) && tokens.length < MAX_WATCH_ITEMS) {
+    if (isWatchTicker(t) && !seen.has(t) && tokens.length < MAX_WATCH_ITEMS) {
       seen.add(t);
       tokens.push(t);
     }
@@ -98,7 +127,11 @@ export function serializeWatchParam(w: { members: readonly string[]; tickers: re
 }
 
 /** Builds the homepage feed URL filtered to the visitor's watchlist. */
-export function watchlistFeedHref(w: { members: readonly string[]; tickers: readonly string[] }): string {
+export function watchlistFeedHref(w: {
+  members: readonly string[];
+  tickers: readonly string[];
+  insiders?: readonly string[];
+}): string {
   const param = serializeWatchParam(w);
   return param ? `/?watch=${encodeURIComponent(param)}#trades` : "/";
 }
@@ -109,7 +142,11 @@ export function sanitizeWatchlistState(raw: unknown): WatchlistState {
   const obj = raw as Record<string, unknown>;
   const rawMembers = Array.isArray(obj.members) ? obj.members.filter((x): x is string => typeof x === "string") : [];
   const rawTickers = Array.isArray(obj.tickers) ? obj.tickers.filter((x): x is string => typeof x === "string") : [];
-  const parsed = parseWatchParam([...rawMembers, ...rawTickers].join(",")) ?? { members: [], tickers: [] };
+  const rawInsiders = Array.isArray(obj.insiders) ? obj.insiders.filter((x): x is string => typeof x === "string") : [];
+  const parsed = parseWatchParam([...rawMembers, ...rawInsiders, ...rawTickers].join(",")) ?? {
+    members: [],
+    tickers: [],
+  };
 
   const labels: Record<string, string> = {};
   if (obj.labels && typeof obj.labels === "object") {
@@ -123,17 +160,20 @@ export function sanitizeWatchlistState(raw: unknown): WatchlistState {
   return {
     members: parsed.members,
     tickers: parsed.tickers,
+    insiders: parsed.insiders ?? [],
     labels,
   };
 }
 
-/** Toggles a member or ticker in a `WatchlistState` and returns the next state + whether it is now followed. */
+/** Toggles a member, insider, or ticker in a `WatchlistState` and returns the next state + whether it is now followed. */
 export function toggleWatchItem(
   state: WatchlistState,
-  item: { kind: "member" | "ticker"; id: string; label?: string }
+  item: { kind: "member" | "ticker" | "insider"; id: string; label?: string }
 ): { next: WatchlistState; followed: boolean } {
   const id = item.id.trim().toUpperCase();
-  const list = item.kind === "member" ? state.members : state.tickers;
+  const curInsiders = state.insiders ?? [];
+  const list =
+    item.kind === "member" ? state.members : item.kind === "insider" ? curInsiders : state.tickers;
   const exists = list.includes(id);
   const nextList = exists ? list.filter((x) => x !== id) : [...list, id].slice(-MAX_WATCH_ITEMS);
   const nextLabels = { ...state.labels };
@@ -145,6 +185,7 @@ export function toggleWatchItem(
     next: {
       members: item.kind === "member" ? nextList : state.members,
       tickers: item.kind === "ticker" ? nextList : state.tickers,
+      insiders: item.kind === "insider" ? nextList : curInsiders,
       labels: nextLabels,
     },
   };

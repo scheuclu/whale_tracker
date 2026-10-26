@@ -31,6 +31,8 @@ export const PAGES: PageCase[] = [
   { path: "/tickers/MSFT" },
   { path: "/tickers/BRK.B" },
   { path: "/insiders" },
+  { path: "/insiders?view=track" },
+  { path: "/insiders?cik=0001767470", canonical: "/insiders" },
   { path: "/insiders?t=BBD" },
   { path: "/trends" },
   { path: "/alerts" },

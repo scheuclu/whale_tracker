@@ -44,21 +44,26 @@ export function hasDigestMatches(m: DigestMatches): boolean {
  * and never summed together (CLAUDE.md).
  */
 export async function matchSubscriberDigest(
-  sub: Pick<StoredSubscription, "members" | "tickers" | "clusters">,
+  sub: Pick<StoredSubscription, "members" | "tickers" | "insiders" | "clusters">,
   sinceDate: string
 ): Promise<DigestMatches> {
   const tickerSet = new Set(sub.tickers.map((t) => t.toUpperCase()));
-  const hasWatch = sub.members.length > 0 || sub.tickers.length > 0;
+  const insiderSet = new Set(sub.insiders ?? []);
+  const hasCongressWatch = sub.members.length > 0 || sub.tickers.length > 0;
+  const hasInsiderWatch = sub.tickers.length > 0 || insiderSet.size > 0;
 
   const [rawCongress, rawInsiders, rawAlerts] = await Promise.all([
-    hasWatch
+    hasCongressWatch
       ? getTransactions({
           watch: { members: sub.members, tickers: sub.tickers },
           limit: 60,
         }).catch(() => [] as TransactionRow[])
       : Promise.resolve([] as TransactionRow[]),
-    sub.tickers.length > 0
-      ? getInsiderTrades({ limit: 100 }).catch(() => [] as InsiderTradeRow[])
+    hasInsiderWatch
+      ? getInsiderTrades({
+          watch: { tickers: sub.tickers, insiders: sub.insiders },
+          limit: 100,
+        }).catch(() => [] as InsiderTradeRow[])
       : Promise.resolve([] as InsiderTradeRow[]),
     sub.clusters
       ? getAlerts({ limit: 40 }).catch(() => [] as AlertRow[])
@@ -70,8 +75,8 @@ export async function matchSubscriberDigest(
   );
   const insiderTrades = rawInsiders.filter(
     (r) =>
-      r.ticker != null &&
-      tickerSet.has(r.ticker.toUpperCase()) &&
+      ((r.ticker != null && tickerSet.has(r.ticker.toUpperCase())) ||
+        (r.insider_cik != null && insiderSet.has(r.insider_cik))) &&
       r.filing_date != null &&
       r.filing_date.slice(0, 10) > sinceDate &&
       r.implausible !== 1
@@ -114,12 +119,13 @@ export function subscriptionActionUrls(email: string, secret: string, nowSeconds
 }
 
 export function renderVerificationEmail(
-  sub: Pick<StoredSubscription, "email" | "members" | "tickers" | "clusters" | "weeklyDigest">,
+  sub: Pick<StoredSubscription, "email" | "members" | "tickers" | "insiders" | "clusters" | "weeklyDigest">,
   urls: { verifyUrl: string; manageUrl: string; unsubscribeUrl: string }
 ): { subject: string; html: string; text: string } {
   const items = [
     ...sub.members.map((m) => `Member ${m}`),
     ...sub.tickers.map((t) => `Ticker ${t}`),
+    ...(sub.insiders ?? []).map((c) => `Insider CIK ${c}`),
     ...(sub.clusters ? ["High-signal cluster alerts"] : []),
     ...(sub.weeklyDigest ? ["Weekly digest"] : []),
   ];

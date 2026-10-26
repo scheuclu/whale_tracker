@@ -1,5 +1,5 @@
 import { emailSubscriberKey, normalizeEmail } from "./subscription-token";
-import { isBioguideId, isWatchTicker, MAX_WATCH_ITEMS } from "./watchlist";
+import { isBioguideId, isInsiderCik, isWatchTicker, MAX_WATCH_ITEMS } from "./watchlist";
 
 /**
  * Email alert subscriptions stored in a private Vercel Blob store. Server-only.
@@ -17,6 +17,7 @@ export interface StoredSubscription {
   updatedAt: string;
   members: string[];
   tickers: string[];
+  insiders?: string[];
   clusters: boolean;
   weeklyDigest: boolean;
   /** YYYY-MM-DD of the last daily digest sent to this subscriber. */
@@ -78,6 +79,22 @@ function cleanTickers(raw: unknown): string[] {
   return out;
 }
 
+function cleanInsiders(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const v of raw) {
+    if (typeof v !== "string") continue;
+    const t = v.trim();
+    if (isInsiderCik(t) && !seen.has(t)) {
+      seen.add(t);
+      out.push(t);
+      if (out.length >= MAX_WATCH_ITEMS) break;
+    }
+  }
+  return out;
+}
+
 export function parseStoredSubscription(body: string): StoredSubscription | null {
   let raw: unknown;
   try {
@@ -106,6 +123,7 @@ export function parseStoredSubscription(body: string): StoredSubscription | null
     updatedAt: r.updatedAt,
     members: cleanMembers(r.members),
     tickers: cleanTickers(r.tickers),
+    insiders: cleanInsiders(r.insiders),
     clusters: Boolean(r.clusters),
     weeklyDigest: Boolean(r.weeklyDigest),
     lastSentDate,
@@ -116,6 +134,7 @@ export interface UpsertSubscriptionInput {
   email: string;
   members?: string[];
   tickers?: string[];
+  insiders?: string[];
   clusters?: boolean;
   weeklyDigest?: boolean;
   /** When true (default), merges new members/tickers into any existing subscription. */
@@ -147,6 +166,7 @@ export async function upsertSubscription(
   const merge = input.merge ?? true;
   const inMembers = cleanMembers(input.members ?? []);
   const inTickers = cleanTickers(input.tickers ?? []);
+  const inInsiders = cleanInsiders(input.insiders ?? []);
 
   for (let attempt = 0; attempt < 3; attempt++) {
     const existingRes = await backend.readByPath(pathname);
@@ -159,6 +179,9 @@ export async function upsertSubscription(
     const tickers = merge && existing
       ? cleanTickers([...existing.tickers, ...inTickers])
       : inTickers;
+    const insiders = merge && existing
+      ? cleanInsiders([...(existing.insiders ?? []), ...inInsiders])
+      : inInsiders;
     const clusters =
       input.clusters !== undefined
         ? Boolean(input.clusters)
@@ -181,6 +204,7 @@ export async function upsertSubscription(
       updatedAt: nowIso,
       members,
       tickers,
+      insiders,
       clusters,
       weeklyDigest,
       lastSentDate: existing ? existing.lastSentDate : null,
@@ -269,7 +293,7 @@ export async function listVerifiedSubscriptions(
     if (
       sub &&
       sub.verified &&
-      (sub.members.length > 0 || sub.tickers.length > 0 || sub.clusters || sub.weeklyDigest)
+      (sub.members.length > 0 || sub.tickers.length > 0 || (sub.insiders?.length ?? 0) > 0 || sub.clusters || sub.weeklyDigest)
     ) {
       out.push(sub);
     }

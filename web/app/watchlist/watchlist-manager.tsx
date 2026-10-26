@@ -7,13 +7,14 @@ import { trackEvent } from "@/lib/analytics";
 import { BUTTON, BUTTON_PRIMARY, FIELD } from "../ui";
 import { Card, SectionTitle } from "../charts";
 import { useWatchlist } from "../watchlist-client";
-import { isBioguideId, isWatchTicker, watchlistFeedHref } from "@/lib/watchlist";
+import { isBioguideId, isInsiderCik, isWatchTicker, watchCount, watchlistFeedHref } from "@/lib/watchlist";
 
 export interface ManagedSubscriptionProps {
   email: string;
   verified: boolean;
   members: string[];
   tickers: string[];
+  insiders?: string[];
   clusters: boolean;
   weeklyDigest: boolean;
 }
@@ -47,6 +48,7 @@ export function WatchlistManager({
   const [email, setEmail] = useState(initialSub?.email ?? "");
   const [subMembers, setSubMembers] = useState<string[]>(initialSub?.members ?? []);
   const [subTickers, setSubTickers] = useState<string[]>(initialSub?.tickers ?? []);
+  const [subInsiders, setSubInsiders] = useState<string[]>(initialSub?.insiders ?? []);
   const [clusters, setClusters] = useState(initialSub?.clusters ?? true);
   const [weeklyDigest, setWeeklyDigest] = useState(initialSub?.weeklyDigest ?? false);
   const [submitting, setSubmitting] = useState(false);
@@ -57,8 +59,14 @@ export function WatchlistManager({
   const handleAddLocal = (e: React.FormEvent) => {
     e.preventDefault();
     setAddError(null);
-    const raw = addInput.trim().toUpperCase();
-    if (!raw) return;
+    const trimmed = addInput.trim();
+    if (!trimmed) return;
+    if (isInsiderCik(trimmed)) {
+      if (!(state.insiders ?? []).includes(trimmed)) toggle({ kind: "insider", id: trimmed });
+      setAddInput("");
+      return;
+    }
+    const raw = trimmed.toUpperCase();
     if (isBioguideId(raw)) {
       if (!state.members.includes(raw)) toggle({ kind: "member", id: raw });
       setAddInput("");
@@ -69,13 +77,14 @@ export function WatchlistManager({
       setAddInput("");
       return;
     }
-    setAddError("Enter a stock ticker (e.g. NVDA, BRK.B) or a Bioguide ID (e.g. P000197).");
+    setAddError("Enter a stock ticker (e.g. NVDA), Bioguide ID (e.g. P000197), or 10-digit SEC CIK (e.g. 0001767470).");
   };
 
   const handleSubscribeNew = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     setFeedback(null);
+    const insiders = state.insiders ?? [];
     try {
       const res = await fetch("/api/alerts/subscribe", {
         method: "POST",
@@ -84,6 +93,7 @@ export function WatchlistManager({
           email,
           members: state.members,
           tickers: state.tickers,
+          insiders,
           clusters,
           weeklyDigest,
         }),
@@ -99,6 +109,7 @@ export function WatchlistManager({
         status: res.ok ? (data.status ?? "ok") : (data.code ?? "error"),
         members: state.members.length,
         tickers: state.tickers.length,
+        insiders: insiders.length,
         clusters,
         weeklyDigest,
       });
@@ -116,6 +127,7 @@ export function WatchlistManager({
         status: "network_error",
         members: state.members.length,
         tickers: state.tickers.length,
+        insiders: insiders.length,
         clusters,
         weeklyDigest,
       });
@@ -138,6 +150,7 @@ export function WatchlistManager({
           token,
           members: subMembers,
           tickers: subTickers,
+          insiders: subInsiders,
           clusters,
           weeklyDigest,
         }),
@@ -149,6 +162,7 @@ export function WatchlistManager({
         trackEvent("alert_preferences_saved", {
           members: subMembers.length,
           tickers: subTickers.length,
+          insiders: subInsiders.length,
           clusters,
           weeklyDigest,
         });
@@ -175,6 +189,7 @@ export function WatchlistManager({
         trackEvent("alert_unsubscribed");
         setSubMembers([]);
         setSubTickers([]);
+        setSubInsiders([]);
         setClusters(false);
         setWeeklyDigest(false);
         setFeedback({ tone: "ok", text: "You have been unsubscribed from all email alerts." });
@@ -188,7 +203,7 @@ export function WatchlistManager({
     }
   };
 
-  const totalLocal = mounted ? state.members.length + state.tickers.length : 0;
+  const totalLocal = mounted ? watchCount(state) : 0;
   const feedHref = watchlistFeedHref(state);
 
   return (
@@ -372,6 +387,34 @@ export function WatchlistManager({
                             type="button"
                             onClick={() => toggle({ kind: "member", id: m })}
                             aria-label={`Unfollow ${m}`}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            <X className="size-3.5" aria-hidden />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {(state.insiders ?? []).length > 0 ? (
+                  <div>
+                    <p className="text-[12px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+                      Corporate Insiders ({(state.insiders ?? []).length})
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {(state.insiders ?? []).map((c) => (
+                        <span
+                          key={c}
+                          className="inline-flex items-center gap-1.5 rounded-full bg-fill px-3 py-1 text-[13px] font-medium text-foreground"
+                        >
+                          <a href={`/insiders?cik=${encodeURIComponent(c)}`} className="hover:underline">
+                            {state.labels[c] ? `${state.labels[c]} (${c})` : `CIK ${c}`}
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => toggle({ kind: "insider", id: c })}
+                            aria-label={`Unfollow ${c}`}
                             className="text-muted-foreground hover:text-foreground"
                           >
                             <X className="size-3.5" aria-hidden />

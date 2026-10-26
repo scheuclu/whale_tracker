@@ -34,6 +34,9 @@ export async function POST(req: Request) {
   const tickers = Array.isArray(body.tickers)
     ? body.tickers.filter((x): x is string => typeof x === "string")
     : [];
+  const insiders = Array.isArray(body.insiders)
+    ? body.insiders.filter((x): x is string => typeof x === "string")
+    : [];
   const clusters = Boolean(body.clusters);
   const weeklyDigest = Boolean(body.weeklyDigest);
 
@@ -41,6 +44,7 @@ export async function POST(req: Request) {
     email: payload.email,
     members,
     tickers,
+    insiders,
     clusters,
     weeklyDigest,
     merge: false,
@@ -53,6 +57,7 @@ export async function POST(req: Request) {
       verified: updated.verified,
       members: updated.members,
       tickers: updated.tickers,
+      insiders: updated.insiders ?? [],
       clusters: updated.clusters,
       weeklyDigest: updated.weeklyDigest,
     },

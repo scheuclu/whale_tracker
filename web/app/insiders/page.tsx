@@ -3,19 +3,23 @@ import { MoneyText } from "../money";
 import { assetLabel } from "@/lib/asset-label";
 import {
   getInsiderClusters,
+  getInsiderFilers,
   getInsiderIssuer,
   getInsiderIssuers,
   getInsiderSectors,
   getInsiderTotals,
+  getInsiderTrackLeaderboard,
   getInsiderTrades,
   getIssuerInsiders,
+  parseInsiderTrackHorizon,
   type InsiderSectorRow,
   type InsiderTradeRow,
 } from "@/lib/insider-queries";
 import { getTickerDetail, getTickerMembers, type TickerMemberRow, type TickerRow } from "@/lib/queries";
 import { insiderIssuerHref, memberHref, memberLabel, price, range, shares, shortDate, tickerHref, usd } from "@/lib/format";
 import { Card, DivergingSplit, Empty, MagnitudeBars, SectionTitle, StatTile } from "../charts";
-import { ActionBadge, Amount, BUTTON, InsiderDelayTag, PartyBadge, PlanTag, ResponsiveTable, RoleTag, SectorTag, StatusNote, Tag, TickerChip } from "../ui";
+import { ActionBadge, Amount, BUTTON, InsiderDelayTag, PartyBadge, PlanTag, ResponsiveTable, RoleTag, SectorTag, Segmented, StatusNote, Tag, TickerChip } from "../ui";
+import { InsiderFilerDetail, InsiderTrackView, TopInsiderBuyersSection } from "./insider-views";
 import { MemberAvatar } from "../avatar";
 import { Disclosure } from "../disclosure";
 import { PriceOverlay } from "../price-overlay";
@@ -64,9 +68,9 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({
   searchParams,
 }: {
-  searchParams: Promise<{ t?: string }>;
+  searchParams: Promise<{ t?: string; view?: string }>;
 }): Promise<Metadata> {
-  const { t } = await searchParams;
+  const { t, view } = await searchParams;
   if (t) {
     const ticker = t.toUpperCase();
     const path = `/insiders?t=${encodeURIComponent(ticker)}`;
@@ -92,6 +96,15 @@ export async function generateMetadata({
         `/cards/issuer/${encodeURIComponent(ticker)}`,
         `${issuer.ticker ?? ticker}${name} insider trades on SEC Form 4: ${plural(issuer.insiders, "insider")}, ${plural(issuer.filings, "filing")}, ${issuer.buys} buys and ${issuer.sells} sells`
       ),
+    });
+  }
+  if (view === "track") {
+    return pageMetadata({
+      title: "Corporate insider track record & ratings: SEC Form 4 vs S&P 500",
+      description:
+        "Post-trade stock moves against the S&P 500 (SPY) after corporate insiders' SEC Form 4 decisions over 5 and 20 trading days, alongside C-suite and 10% owner conviction rankings. Values are shares × reported price.",
+      path: "/insiders?view=track",
+      card: pageCard("/insiders", "Corporate insider track record & ratings from SEC Form 4"),
     });
   }
   return pageMetadata({
@@ -154,7 +167,18 @@ function issuerHref(ticker: string) {
 export default async function InsidersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ t?: string; w?: string; action?: string; cik?: string; sort?: string; dir?: string; n?: string }>;
+  searchParams: Promise<{
+    t?: string;
+    view?: string;
+    h?: string;
+    role?: string;
+    w?: string;
+    action?: string;
+    cik?: string;
+    sort?: string;
+    dir?: string;
+    n?: string;
+  }>;
 }) {
   const params = await searchParams;
   // Keyed so list -> detail remounts rather than morphing the list DOM.
@@ -163,6 +187,20 @@ export default async function InsidersPage({
     return (
       <Fragment key={`t:${t}`}>
         <IssuerDetail ticker={t} />
+      </Fragment>
+    );
+  }
+  if (params.view === "track") {
+    return (
+      <Fragment key={`view:track:${params.h ?? "20"}:${params.role ?? "all"}`}>
+        <InsiderTrackView horizon={parseInsiderTrackHorizon(params.h)} role={params.role} />
+      </Fragment>
+    );
+  }
+  if (params.cik) {
+    return (
+      <Fragment key={`cik:${params.cik}`}>
+        <InsiderFilerDetail cik={params.cik} action={params.action} />
       </Fragment>
     );
   }
@@ -186,9 +224,9 @@ export default async function InsidersPage({
   };
   const tableKeep = { w: params.w, action: params.action, cik: params.cik, n: rowsParam };
 
-  let totals, issuers, clusters, trades, sectors, table;
+  let totals, issuers, clusters, trades, sectors, table, topBuyers, trackBoard;
   try {
-    [totals, issuers, clusters, trades, sectors, table] = await Promise.all([
+    [totals, issuers, clusters, trades, sectors, table, topBuyers, trackBoard] = await Promise.all([
       getInsiderTotals(),
       getInsiderIssuers(days, 40),
       getInsiderClusters(30, 3, 12),
@@ -197,6 +235,8 @@ export default async function InsidersPage({
       // The charts rank by value; the table follows the URL's sort, applied
       // in SQL to every issuer in the window before the limit.
       !n && isDefaultSort(ISSUER_SORT, sort) ? null : getInsiderIssuers(days, limit, sort),
+      getInsiderFilers({ direction: "buy", limit: 8 }),
+      getInsiderTrackLeaderboard(20),
     ]);
   } catch (err) {
     return <DataError error={err} />;
@@ -242,6 +282,15 @@ export default async function InsidersPage({
         eyebrow="SEC Form 4"
         title="Corporate insiders"
         subtitle="Officers, directors and 10% owners trading their own company’s stock on the open market, from SEC Form 4. Only filings of $50k or more in one direction are kept."
+        aside={
+          <Segmented
+            label="Insiders view"
+            items={[
+              { key: "overview", href: "/insiders", label: "Overview & Issuers", active: true },
+              { key: "track", href: "/insiders?view=track", label: "Ratings & Track Record", active: false },
+            ]}
+          />
+        }
       >
       <section aria-label="All stored insider filings" className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
         <StatTile label="Filings kept" value={totals.filings.toLocaleString()} hint="open-market ≥ $50k" />
@@ -256,6 +305,28 @@ export default async function InsidersPage({
         <StatTile label="Late filings" value={totals.late_trades.toLocaleString()} hint="past 2 business days" />
       </section>
       </PageHeader>
+
+      <Card className="p-4 sm:px-6 sm:py-5">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+          <div className="min-w-0">
+            <p className="text-[15px] font-semibold tracking-[-0.015em] text-foreground">
+              Insider ratings &amp; post-trade track record vs S&amp;P 500
+            </p>
+            <p className="mt-0.5 text-[13px] leading-[1.45] text-muted-foreground">
+              See which C-suite officers, directors, and 10% owners beat SPY over 5 and 20 trading days after their Form 4 filings, and follow individual corporate insiders.
+            </p>
+          </div>
+          <a
+            href="/insiders?view=track"
+            className="inline-flex shrink-0 items-center gap-1 rounded-sm text-[13px] font-semibold text-foreground underline decoration-border-strong underline-offset-[3px] transition-colors duration-(--dur-fast) hover:decoration-current"
+          >
+            Open ratings &amp; track record
+            <ChevronRight aria-hidden className="size-3.5" strokeWidth={2.25} />
+          </a>
+        </div>
+      </Card>
+
+      <TopInsiderBuyersSection buyers={topBuyers} scoredTop={trackBoard.rows} />
 
       <section>
         <SectionTitle kicker="Cluster Activity" right={<span>last 30 days · 3+ insiders</span>}>

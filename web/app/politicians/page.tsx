@@ -58,9 +58,11 @@ import {
   sortHref,
 } from "../sortable-table";
 import { RowLinkBody, StickyThead } from "../table-client";
-import { ROW_LINK } from "../grouped-list";
+import { GroupedList, LIST_FOOT_LINK, ROW_LINK } from "../grouped-list";
 import { TRACK_PATH, TrackView } from "./track-view";
-import { parseTrackHorizon } from "@/lib/track-queries";
+import { TRACK_BENCHMARK, getTrackLeaderboard, parseTrackHorizon, percent, points } from "@/lib/track-queries";
+import { FollowButton } from "../watchlist-client";
+import { ChevronRight } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -184,20 +186,22 @@ export default async function PoliticiansPage({
 
   const sort = parseSort(POLITICIAN_SORT, params);
   const standing = isDefaultSort(POLITICIAN_SORT, sort);
-  let rows, totals, table;
+  let rows, totals, table, trackBoard;
   try {
     // The charts always rank by their own measure; the table follows the
     // URL's sort, applied in SQL over every member.
-    [rows, totals, table] = await Promise.all([
+    [rows, totals, table, trackBoard] = await Promise.all([
       getPoliticians(undefined, MEMBER_LIMIT),
       getPoliticianTotals(),
       standing ? null : getPoliticians(undefined, MEMBER_LIMIT, sort),
+      getTrackLeaderboard(90),
     ]);
   } catch (err) {
     return <DataError error={err} />;
   }
   if (!rows.length) return <Empty>No transactions yet.</Empty>;
   table ??= rows;
+  const trackByMember = new Map(trackBoard.ranked.map((r) => [r.member_name, r]));
 
   const byTrades = [...rows].sort((a, b) => b.trades - a.trades);
   const maxVolume = Math.max(0, ...rows.map((r) => r.volume_mid));
@@ -221,6 +225,16 @@ export default async function PoliticiansPage({
         eyebrow="Congress · by member"
         title="Members of Congress"
         subtitle="Every member with a disclosed trade, by estimated volume and by number of trades. Amounts are disclosed brackets, so every volume here is an estimate."
+        aside={
+          <Segmented
+            label="Politicians view"
+            items={[
+              { key: "members", href: "/politicians", label: "Members", active: true },
+              { key: "track", href: TRACK_PATH, label: "Track Record", active: false },
+              { key: "late", href: "/politicians?view=late", label: "Late Filings", active: false },
+            ]}
+          />
+        }
       >
       <section aria-label="All members" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatTile label="Members" value={String(totals.members)} hint="with disclosed trades" />
@@ -258,6 +272,76 @@ export default async function PoliticiansPage({
         </span>
       </a>
       </PageHeader>
+
+      {trackBoard.ranked.length > 0 ? (
+        <section>
+          <SectionTitle
+            kicker="Track Record Leaderboard · 90 Trading Days"
+            right={
+              <a href={TRACK_PATH} className="ink-link text-[13px]">
+                All {trackBoard.ranked.length} ranked members →
+              </a>
+            }
+          >
+            Top-rated members vs {TRACK_BENCHMARK}
+          </SectionTitle>
+          <GroupedList
+            inset="3.25rem"
+            header={
+              <p className="text-[13.5px] text-ink-2">
+                Members meeting the minimum decision &amp; filing threshold, ranked by shrunk 90-day post-trade stock move against {TRACK_BENCHMARK}. No dollar amount enters the score.
+              </p>
+            }
+            footer={
+              <a href={TRACK_PATH} className={LIST_FOOT_LINK}>
+                Open full 30-day &amp; 90-day congressional track record
+                <ChevronRight aria-hidden className="size-3.5" strokeWidth={2.25} />
+              </a>
+            }
+          >
+            {trackBoard.ranked.slice(0, 6).map((m) => (
+              <li
+                key={m.member_name}
+                className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 transition-colors duration-(--dur-fast) hover:bg-[var(--feed-hover)] sm:px-5"
+              >
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <span className="tabular w-5 text-right text-[13px] font-semibold text-muted-foreground">
+                    #{m.rank}
+                  </span>
+                  <MemberAvatar name={m.member_name} bioguideId={m.bioguide_id} size="md" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <a href={memberHref(m.member_name, m.bioguide_id)} className={ROW_LINK}>
+                        {m.member_name}
+                      </a>
+                      <PartyBadge party={m.party} />
+                      <span className="text-[12px] text-muted-foreground">
+                        {m.state}
+                        {m.district && m.district !== "0" ? m.district : ""}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+                      {plural(m.n, "decision")} across {plural(m.filings, "filing")} ·{" "}
+                      {percent(m.trade.hit_rate)} hit rate · after disclosure {points(m.disclosure.score)} pts
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <p className="tabular text-[14px] font-semibold text-foreground">
+                      {points(m.trade.score)} pts
+                    </p>
+                    <p className="text-[11.5px] text-muted-foreground">90d vs {TRACK_BENCHMARK}</p>
+                  </div>
+                  {m.bioguide_id ? (
+                    <FollowButton kind="member" id={m.bioguide_id} label={m.member_name} />
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </GroupedList>
+        </section>
+      ) : null}
 
       <section className="grid gap-6 lg:grid-cols-2">
         <div>
@@ -329,7 +413,9 @@ export default async function PoliticiansPage({
               </tr>
             </StickyThead>
             <RowLinkBody>
-              {table.map((r) => (
+              {table.map((r) => {
+                const track = trackByMember.get(r.member_name);
+                return (
                 <tr key={r.member_name} className={BODY_ROW} data-href={memberHref(r.member_name, r.bioguide_id)}>
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2">
@@ -347,6 +433,14 @@ export default async function PoliticiansPage({
                         {r.state}
                         {r.district && r.district !== "0" ? r.district : ""}
                       </span>
+                      {track ? (
+                        <span
+                          className="hidden rounded-full bg-fill px-2 py-0.5 font-mono text-[11px] font-semibold text-foreground lg:inline-block"
+                          title={`Ranked #${track.rank} on 90d track record (${points(track.trade.score)} pts vs ${TRACK_BENCHMARK})`}
+                        >
+                          #{track.rank} · {points(track.trade.score)} pts
+                        </span>
+                      ) : null}
                     </div>
                   </td>
                   <BarCell value={r.trades} max={maxTrades}>
@@ -374,7 +468,8 @@ export default async function PoliticiansPage({
                     {r.avg_lag == null ? "—" : `${Math.round(r.avg_lag)}d`}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </RowLinkBody>
           </table>
         </ResponsiveTable>

@@ -65,6 +65,14 @@ const calls: Array<[string, () => Promise<unknown>]> = [
   ["getInsiderIssuer", () => iq.getInsiderIssuer("LEN")],
   ["getInsiderClusters", () => iq.getInsiderClusters(30, 3, 5)],
   ["getInsiderTrades", () => iq.getInsiderTrades({ limit: 5 })],
+  ["getInsiderTrades(watch)", () => iq.getInsiderTrades({ watch: { insiders: ["0001767470"], tickers: ["GME"] }, limit: 5 })],
+  ["getInsiderFilers", () => iq.getInsiderFilers({ limit: 5 })],
+  ["getInsiderFilers(officer buy)", () => iq.getInsiderFilers({ role: "officer", direction: "buy", limit: 5 })],
+  ["getInsiderFiler", () => iq.getInsiderFiler("0001767470")],
+  ["getInsiderFilerIssuers", () => iq.getInsiderFilerIssuers("0001767470")],
+  ["getInsiderTrackLeaderboard(20)", () => iq.getInsiderTrackLeaderboard(20)],
+  ["getInsiderTrackLeaderboard(5)", () => iq.getInsiderTrackLeaderboard(5)],
+  ["getInsiderFilerTrack", () => iq.getInsiderFilerTrack("0001767470")],
   ["getIssuerInsiders", () => iq.getIssuerInsiders("LEN")],
   ["getInsiderSectors", () => iq.getInsiderSectors(30)],
   ["getInsiderPipeline", () => iq.getInsiderPipeline()],
@@ -414,4 +422,30 @@ test("watch filter matches rows by bioguide_id or ticker", async () => {
     watch: { members: ["P000197"], tickers: ["MSFT"] },
   });
   assert.ok(totals.trades >= rows.length);
+});
+
+test("insider filers and track leaderboard return populated, well-formed rows", async () => {
+  const filers = await iq.getInsiderFilers({ direction: "buy", limit: 10 });
+  assert.ok(filers.length > 0, "insider filers leaderboard is populated");
+  for (const f of filers) {
+    assert.ok(f.cik.trim() !== "");
+    assert.equal(f.buys + f.sells, f.trades);
+    assert.ok(f.buy_value >= 0 && f.sell_value >= 0);
+  }
+
+  const cohen = await iq.getInsiderFiler("0001767470");
+  assert.ok(cohen, "Ryan Cohen CIK 0001767470 is in the committed DB");
+  assert.equal(cohen.cik, "0001767470");
+  assert.ok(cohen.buys > 0 && cohen.buy_value > 0);
+  const cohenIssuers = await iq.getInsiderFilerIssuers("0001767470");
+  assert.ok(cohenIssuers.some((i) => i.ticker === "GME"));
+
+  const track20 = await iq.getInsiderTrackLeaderboard(20);
+  assert.ok(track20.rows.length > 0, "20d insider track leaderboard has ranked rows");
+  assert.ok(track20.rows.some((r) => r.cik === "0001767470" && r.primary_ticker === "GME"));
+
+  const cohenTrack = await iq.getInsiderFilerTrack("0001767470");
+  assert.ok(cohenTrack.score5 && cohenTrack.score5.n === 5);
+  assert.ok(cohenTrack.score20 && cohenTrack.score20.n === 2);
+  assert.equal(cohenTrack.decisions.length, 5);
 });

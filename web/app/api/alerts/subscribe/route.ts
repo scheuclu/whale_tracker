@@ -28,12 +28,15 @@ export async function POST(req: Request) {
   const tickers = Array.isArray(body.tickers)
     ? body.tickers.filter((x): x is string => typeof x === "string")
     : [];
+  const insiders = Array.isArray(body.insiders)
+    ? body.insiders.filter((x): x is string => typeof x === "string")
+    : [];
   const clusters = Boolean(body.clusters);
   const weeklyDigest = Boolean(body.weeklyDigest);
 
-  if (members.length === 0 && tickers.length === 0 && !clusters && !weeklyDigest) {
+  if (members.length === 0 && tickers.length === 0 && insiders.length === 0 && !clusters && !weeklyDigest) {
     return NextResponse.json(
-      { error: "Select at least one member, ticker, cluster alert, or weekly digest to subscribe." },
+      { error: "Select at least one member, insider, ticker, cluster alert, or weekly digest to subscribe." },
       { status: 400 }
     );
   }
@@ -55,6 +58,7 @@ export async function POST(req: Request) {
     email,
     members,
     tickers,
+    insiders,
     clusters,
     weeklyDigest,
     merge: true,

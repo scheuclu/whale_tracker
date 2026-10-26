@@ -366,6 +366,8 @@ function transactionWhere(opts: TransactionFilters): { sql: string; params: unkn
       params.push(...opts.watch.tickers);
     }
     where.push(`(${clauses.join(" OR ")})`);
+  } else if (opts.watch?.insiders && opts.watch.insiders.length > 0) {
+    where.push("0");
   }
   return { sql: where.join(" AND "), params };
 }

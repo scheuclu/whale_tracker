@@ -30,8 +30,8 @@ export type TransactionFilters = {
   to?: string;
   /** Rows transcribed from scanned paper filings: only them, or none of them. */
   transcribed?: Transcribed;
-  /** Visitor's watchlist filter (`?watch=P000197,NVDA`). */
-  watch?: { members: string[]; tickers: string[] };
+  /** Visitor's watchlist filter (`?watch=P000197,NVDA,0001767470`). */
+  watch?: { members: string[]; tickers: string[]; insiders?: string[] };
 };
 
 export const CHAMBERS = ["house", "senate"] as const;
