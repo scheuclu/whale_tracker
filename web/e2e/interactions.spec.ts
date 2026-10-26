@@ -61,7 +61,7 @@ test.describe("without JavaScript", () => {
     await sortByTrades(page);
   });
   test("the Buys/Sells filter still works", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/feed");
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 3_000 });
     await page.getByRole("navigation", { name: "Trade direction" }).getByRole("link", { name: "Sells" }).click();
     await expect(page).toHaveURL(/[?&]action=sell\b/);
@@ -72,7 +72,7 @@ test.describe("without JavaScript", () => {
 });
 
 test("the feed's Buys/Sells filter", async ({ page }) => {
-  await visit(page, "/");
+  await visit(page, "/feed");
   const direction = page.getByRole("navigation", { name: "Trade direction" });
   for (const [name, param, label] of [
     ["Buys", "buy", /^Buy$/],
@@ -133,7 +133,7 @@ const KNOWN_OVERFLOW: Record<string, string> = {};
 
 test.describe("phone width (390px)", () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
-  for (const path of ["/", "/politicians", "/members/nancy-pelosi-p000197", "/tickers/MSFT", "/insiders", "/trends", "/methodology"]) {
+  for (const path of ["/", "/feed", "/politicians", "/members/nancy-pelosi-p000197", "/tickers/MSFT", "/insiders", "/trends", "/methodology"]) {
     test(`no horizontal overflow on ${path}`, async ({ page }) => {
       test.fail(path in KNOWN_OVERFLOW, KNOWN_OVERFLOW[path]);
       await visit(page, path);

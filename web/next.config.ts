@@ -2,6 +2,9 @@ import path from "node:path";
 import type { NextConfig } from "next";
 import { PAGE_CDN_CACHE_CONTROL, PAGE_SOURCE } from "./lib/cache-policy";
 import { SECURITY_SOURCE, securityHeaders } from "./lib/security-headers";
+import { FILTER_KEYS } from "./lib/feed-filters";
+
+const FEED_REDIRECT_KEYS = [...FILTER_KEYS.filter((k) => k !== "member"), "offset"];
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["better-sqlite3"],
@@ -38,8 +41,20 @@ const nextConfig: NextConfig = {
   // original query string travels with the rewrite.
   // The watchlist page became the signed-in dashboard; old links (email
   // footers, bookmarks) keep working, query string included.
+  // `/` became the landing page and the feed moved to `/feed`: a filtered or
+  // paged feed link from before (bookmarks, digest emails, shared watchlists)
+  // carries its query string over. `?member=` is not here — it still goes to
+  // the member's own page through the legacy rewrite below.
   async redirects() {
-    return [{ source: "/watchlist", destination: "/account", permanent: true }];
+    return [
+      { source: "/watchlist", destination: "/account", permanent: true },
+      ...FEED_REDIRECT_KEYS.map((key) => ({
+        source: "/",
+        has: [{ type: "query" as const, key }],
+        destination: "/feed",
+        permanent: true,
+      })),
+    ];
   },
   async rewrites() {
     return {

@@ -449,3 +449,38 @@ function SignedInPanel({ account }: { account: Account }) {
     </Card>
   );
 }
+
+/**
+ * The landing page's call to action: "Get free alerts" (to sign in, then the
+ * dashboard) for a visitor, "Your dashboard" once signed in. Rendered in the
+ * signed-out form on the server, like every account control (lib/auth.ts).
+ */
+export function AlertsCta({ from, className }: { from: string; className?: string }) {
+  const account = useAccount();
+  const signedIn = account.status === "signed_in";
+  return (
+    <a
+      href={signedIn ? "/account" : "/signin?next=%2Faccount"}
+      onClick={() => trackEvent(signedIn ? "dashboard_cta_click" : "sign_in_start", { from })}
+      className={cn(BUTTON_PRIMARY, "h-11 px-6 text-[15px]", className)}
+    >
+      {signedIn ? <UserRound className="size-4" aria-hidden /> : <Mail className="size-4" aria-hidden />}
+      {signedIn ? "Your dashboard" : "Get free alerts"}
+    </a>
+  );
+}
+
+/** The masthead's "Get alerts" capsule, beside the account icon, for a signed-out visitor on a wide screen. */
+export function HeaderAlertsButton() {
+  const account = useAccount();
+  if (account.status !== "signed_out") return null;
+  return (
+    <a
+      href="/signin?next=%2Faccount"
+      onClick={() => trackEvent("sign_in_start", { from: "header_cta" })}
+      className={cn(BUTTON_PRIMARY, "hidden h-8 px-3.5 text-[13px] lg:inline-flex")}
+    >
+      Get alerts
+    </a>
+  );
+}

@@ -295,7 +295,7 @@ async function CongressActivity({ follows }: { follows: { members: string[]; tic
     const rows = await getFollowedTrades(follows, 20);
     return (
       <section>
-        <SectionTitle kicker="Latest filings" right={<a href={`/?watch=${encodeURIComponent([...follows.members, ...follows.tickers].join(","))}#trades`} className="ink-link text-[13px]">Full Following feed →</a>}>
+        <SectionTitle kicker="Latest filings" right={<a href={`/feed?watch=${encodeURIComponent([...follows.members, ...follows.tickers].join(","))}#trades`} className="ink-link text-[13px]">Full Following feed →</a>}>
           Congressional trades
         </SectionTitle>
         <FeedList rows={rows} empty="Nothing you follow has a disclosed congressional trade yet." />

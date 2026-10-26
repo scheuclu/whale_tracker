@@ -374,6 +374,8 @@ export async function getTransactions(
   opts: TransactionFilters & {
     /** Only rows whose text named an option contract (the ticker page's Options section). */
     options?: boolean;
+    /** "filed": newest disclosure first (the landing page). Default: newest trade date first. */
+    order?: "trade" | "filed";
     limit?: number;
     offset?: number;
   } = {}
@@ -411,7 +413,7 @@ export async function getTransactions(
        LEFT JOIN politicians p ON p.id = t.politician_id
        ${sectors ? SECTOR_JOIN : ""}
        WHERE ${where.join(" AND ")}
-       ORDER BY t.tx_date DESC, t.id DESC
+       ORDER BY ${opts.order === "filed" ? "f.filing_date DESC, t.id DESC" : "t.tx_date DESC, t.id DESC"}
        LIMIT ? OFFSET ?`
     )
     .all(...params) as TransactionRow[];

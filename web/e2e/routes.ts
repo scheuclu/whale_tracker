@@ -20,6 +20,8 @@ export type PageCase = {
 
 export const PAGES: PageCase[] = [
   { path: "/" },
+  { path: "/feed" },
+  { path: "/feed?action=buy", canonical: "/feed" },
   { path: "/politicians" },
   { path: "/politicians?view=late" },
   { path: "/politicians?view=track" },

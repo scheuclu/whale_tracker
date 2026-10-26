@@ -40,6 +40,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   return [
     section("/", 1),
+    section("/feed", 0.9),
     section("/politicians", 0.9),
     section("/tickers", 0.9),
     section("/insiders", 0.8),

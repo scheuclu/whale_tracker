@@ -12,13 +12,14 @@ import { trackEvent } from "@/lib/analytics";
  * The five reader sections. Operator pages (Scans, Pipeline, Alerts) and
  * the reference pages (Methodology, Privacy, Terms) live in the footer's
  * "About the data". Words only — an icon per tab was decoration the label
- * already said. "Members" keeps the /politicians URL.
+ * already said. "Members" keeps the /politicians URL, "Stocks" /tickers.
+ * The landing page (`/`) has no tab: the brand is its link.
  */
 const TABS = [
-  { href: "/", label: "Feed" },
+  { href: "/feed", label: "Feed" },
   { href: "/politicians", label: "Members" },
-  { href: "/tickers", label: "Tickers" },
   { href: "/insiders", label: "Insiders" },
+  { href: "/tickers", label: "Stocks" },
   { href: "/trends", label: "Trends" },
 ];
 
@@ -38,10 +39,7 @@ export function Tabs({ className }: { className?: string }) {
       <ul className="-mx-1.5 flex w-full items-center justify-between sm:mx-0 sm:w-auto sm: justify-start sm:gap-1 sm:rounded-full sm:bg-fill/85 sm:p-1 sm:shadow-[inset_0_1px_2px_rgba(0,0,0,0.05)] dark:sm:shadow-[inset_0_1px_2px_rgba(0,0,0,0.35)]">
         {TABS.map(({ href, label }) => {
           // A member's page lives at /members/<slug> but belongs to Members.
-          const active =
-            href === "/"
-              ? pathname === "/"
-              : pathname.startsWith(href) || (href === "/politicians" && pathname.startsWith("/members/"));
+          const active = pathname.startsWith(href) || (href === "/politicians" && pathname.startsWith("/members/"));
           return (
             <li key={href} className="flex">
               <Link

@@ -30,7 +30,7 @@ test("parseWatchParam and serializeWatchParam round-trip members and tickers", (
     tickers: ["NVDA", "BRK.B"],
   });
   assert.equal(serializeWatchParam(parsed!), "P000197,C001123,NVDA,BRK.B");
-  assert.equal(watchlistFeedHref(parsed!), "/?watch=P000197%2CC001123%2CNVDA%2CBRK.B#trades");
+  assert.equal(watchlistFeedHref(parsed!), "/feed?watch=P000197%2CC001123%2CNVDA%2CBRK.B#trades");
   assert.equal(parseWatchParam(""), null);
   assert.equal(parseWatchParam(undefined), null);
 });

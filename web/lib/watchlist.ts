@@ -100,7 +100,7 @@ export function serializeWatchParam(w: { members: readonly string[]; tickers: re
 /** Builds the homepage feed URL filtered to the visitor's watchlist. */
 export function watchlistFeedHref(w: { members: readonly string[]; tickers: readonly string[] }): string {
   const param = serializeWatchParam(w);
-  return param ? `/?watch=${encodeURIComponent(param)}#trades` : "/";
+  return param ? `/feed?watch=${encodeURIComponent(param)}#trades` : "/feed";
 }
 
 /** Normalizes raw JSON read from localStorage into a valid `WatchlistState`. */

@@ -1,23 +1,21 @@
-import {
-  FeedSkeleton,
-  SectionTitleSkeleton,
-  SkeletonPage,
-  SplitSkeleton,
-  TilesSkeleton,
-} from "./skeletons";
+import { GroupedListSkeleton, SectionTitleSkeleton, SkeletonPage } from "./skeletons";
 
-/** Feed: four tiles, "where members agree", then the toolbar (Filter pill) and the day-grouped feed. */
+/**
+ * The landing page's placeholder, and the fallback for any route without one
+ * of its own: a heading, then two side-by-side lists.
+ */
 export default function Loading() {
   return (
-    <SkeletonPage label="the feed" head>
-      <TilesSkeleton tall trend cols="lg:grid-cols-4" />
-      <section>
-        <SectionTitleSkeleton width="w-40" right />
-        <SplitSkeleton rows={6} />
-      </section>
-      <section>
-        <SectionTitleSkeleton width="w-28" right />
-        <FeedSkeleton days={5} />
+    <SkeletonPage label="the page" head>
+      <section className="grid gap-8 lg:grid-cols-2 lg:gap-5">
+        <div>
+          <SectionTitleSkeleton width="w-36" right />
+          <GroupedListSkeleton rows={5} />
+        </div>
+        <div>
+          <SectionTitleSkeleton width="w-36" right />
+          <GroupedListSkeleton rows={5} />
+        </div>
       </section>
     </SkeletonPage>
   );
