@@ -5,7 +5,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
  *
  * Token purposes:
  * - `verify`: sent in double-opt-in emails, expires in 48 hours.
- * - `manage`: sent in every email footer to open `/watchlist?token=...` without a password.
+ * - `manage`: was in email footers to edit preferences without signing in. No
+ *   longer minted; still accepted by the unsubscribe link, which old emails carry.
  * - `unsubscribe`: used in RFC 8058 `List-Unsubscribe` headers and footer links.
  * - `login`: the emailed sign-in link, expires in 15 minutes (`lib/auth.ts`).
  * - `session`: the signed-in cookie, expires in 30 days (`lib/auth.ts`).

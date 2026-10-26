@@ -532,14 +532,29 @@ parser stays faithful to the PDF and the UI flags the row rather than
   An unsubscribe link sets `emailAlerts: false` and keeps the follows; only
   "Delete account" removes the blob. Pre-account records read `emailAlerts`
   as true.
-- **Never read the session in a page.** Pages are CDN-cached by URL, so a
-  page that read `fcw_session` would serve one reader's account to the next.
-  The browser fetches `/api/account` (`no-store`); the readable
-  `fcw_signed_in` hint cookie spares signed-out visitors that request.
-- The watchlist stays in localStorage; signed in it mirrors the account
-  (`app/account-store.ts`): follows go up item by item, a browser's
-  signed-out follows merge in once per account (`fatcat_watchlist_owner_v1`),
-  sign-out clears the mirror. State-changing routes check `isSameOrigin`.
+- **Following needs an account.** Signed out, the watchlist reads as empty
+  and a Follow click is stored as a pending follow
+  (`fatcat_pending_follow_v1`, 1 h) while the reader signs in, then applied
+  by `account-store.ts`. Email-link preference editing (`manage` tokens) is
+  gone; the one-click unsubscribe link stays token-only, as the law needs.
+- **Read the session in one page only: `/account`.** Pages are CDN-cached by
+  URL, so any other page reading `fcw_session` would serve one reader's
+  account to the next. `/account` (the dashboard) is excluded from
+  `PAGE_SOURCE` and keeps `private, no-store` (`cache-policy.test.ts` pins
+  it); everywhere else the browser fetches `/api/account` (`no-store`), and
+  the readable `fcw_signed_in` hint cookie spares signed-out visitors that.
+  `/watchlist` 308s to `/account`.
+- The dashboard's figures come from the pages' own queries filtered to the
+  follows (`lib/account-queries.ts`); congressional and Form 4 stay apart.
+- The watchlist in localStorage is the account's mirror
+  (`app/account-store.ts`): follows go up item by item, a pre-account list
+  merges into the first account signed in on that browser
+  (`fatcat_watchlist_owner_v1`), sign-out clears it. State-changing routes
+  check `isSameOrigin`.
+- e2e signs in for real with `WHALE_TEST_MEMORY_STORE=1` + `ALERTS_SECRET`
+  (an in-memory account store, refused whenever `VERCEL` is set) and mints
+  the login token itself (`e2e/account.spec.ts`); without them those tests
+  skip.
 - Env: `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` (redirect URI
   `<origin>/api/auth/google/callback`, registered per origin), plus the
   existing `ALERTS_SECRET`, Blob and `RESEND_API_KEY`. Missing pieces hide

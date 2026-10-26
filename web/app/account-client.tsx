@@ -1,18 +1,27 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Check, LogOut, Mail, Trash2, UserRound } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Check, LogOut, Mail, Plus, Trash2, UserRound, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
 import { BUTTON, BUTTON_PRIMARY, FIELD } from "./ui";
-import { Card, SectionTitle } from "./charts";
+import { Card } from "./charts";
 import { ICON_BUTTON } from "./nav";
 import { useAccount } from "./watchlist-client";
-import { deleteAccount, saveAccountSettings, signInHref, signOut, type Account } from "./account-store";
+import { isBioguideId, isWatchTicker } from "@/lib/watchlist";
+import {
+  changeFollows,
+  deleteAccount,
+  saveAccountSettings,
+  signInHref,
+  signOut,
+  type Account,
+} from "./account-store";
 
 /**
  * Masthead account control: a person icon to /signin when signed out, the
- * account's initial to /watchlist when signed in. Rendered after hydration
+ * account's initial to the dashboard (/account) when signed in. Rendered after hydration
  * only (pages are CDN-cached and identical for everyone); until then it holds
  * its place so the toolbar does not shift.
  */
@@ -25,7 +34,7 @@ export function HeaderAccountButton() {
     const initial = account.account.email.charAt(0).toUpperCase();
     return (
       <a
-        href="/watchlist"
+        href="/account"
         className={ICON_BUTTON}
         aria-label={`Your account (${account.account.email})`}
         title={account.account.email}
@@ -88,8 +97,8 @@ export function SignInPanel({
           <a href={next} className={BUTTON_PRIMARY}>
             Continue
           </a>
-          <a href="/watchlist" className={BUTTON}>
-            Account &amp; watchlist
+          <a href="/account" className={BUTTON}>
+            Your dashboard
           </a>
         </div>
       </Card>
@@ -148,7 +157,7 @@ export function SignInPanel({
 
       {googleEnabled ? (
         <a
-          href={`/api/auth/google${next !== "/watchlist" ? `?next=${encodeURIComponent(next)}` : ""}`}
+          href={`/api/auth/google${next !== "/account" ? `?next=${encodeURIComponent(next)}` : ""}`}
           onClick={() => trackEvent("sign_in_start", { method: "google" })}
           className={cn(BUTTON, "h-11 w-full text-[15px]")}
         >
@@ -215,44 +224,101 @@ function GoogleG() {
 }
 
 /**
- * `/watchlist`'s account section: who is signed in, the email settings
- * (saved as they change), sign out and delete. Signed out, an invitation to
- * sign in instead.
+ * The dashboard's settings card: who is signed in, the email settings (saved
+ * as they change), sign out and delete. The page renders it with the account
+ * it read on the server; once the browser has loaded its own copy (which
+ * every save updates) that copy is shown.
  */
-export function AccountPanel({ emailEnabled }: { emailEnabled: boolean }) {
+export function AccountSettings({ initial }: { initial: Account }) {
   const account = useAccount();
-  const [href, setHref] = useState("/signin");
-  useEffect(() => setHref(signInHref()), []);
+  return <SignedInPanel account={account.status === "signed_in" ? account.account : initial} />;
+}
 
-  if (account.status === "loading") {
-    return (
-      <Card className="space-y-4">
-        <p className="text-[14px] text-muted-foreground">Checking your account…</p>
-      </Card>
-    );
-  }
+/**
+ * Re-renders the server-drawn dashboard when the account's follows change
+ * under it: a follow carried over from before sign-in, another tab, a Follow
+ * button in the popover.
+ */
+export function DashboardSync({ follows }: { follows: string }) {
+  const account = useAccount();
+  const router = useRouter();
+  const current =
+    account.status === "signed_in" ? [...account.account.members, ...account.account.tickers].join(",") : null;
+  useEffect(() => {
+    if (current !== null && current !== follows) router.refresh();
+  }, [current, follows, router]);
+  return null;
+}
 
-  if (account.status === "signed_out") {
-    return (
-      <Card className="space-y-4">
-        <p className="text-[14px] leading-relaxed text-ink-2">
-          Sign in to keep your watchlist on every device and get a daily email when anything you follow files a new
-          STOCK Act report or SEC Form 4, or a cluster forms. No password: Google, or a link by email.
-        </p>
-        <a href={href} onClick={() => trackEvent("sign_in_start", { from: "watchlist_page" })} className={BUTTON_PRIMARY}>
-          <UserRound className="size-3.5" aria-hidden />
-          Sign in
-        </a>
-        {!emailEnabled ? (
-          <p className="text-[12px] text-muted-foreground">
-            Email digests are not configured on this deployment; signing in still syncs your watchlist.
-          </p>
-        ) : null}
-      </Card>
-    );
-  }
+/** An unfollow control on a dashboard card. */
+export function UnfollowButton({ kind, id, label }: { kind: "member" | "ticker"; id: string; label: string }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        const ok = await changeFollows({ remove: kind === "member" ? { members: [id] } : { tickers: [id] } });
+        trackEvent("watchlist_toggle", { kind, id, followed: false, from: "dashboard", ok });
+        setBusy(false);
+      }}
+      aria-label={`Unfollow ${label}`}
+      title={`Unfollow ${label}`}
+      className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-fill hover:text-foreground disabled:opacity-50"
+    >
+      <X className="size-3.5" aria-hidden />
+    </button>
+  );
+}
 
-  return <SignedInPanel account={account.account} />;
+/** Follow by symbol or Bioguide ID, for someone who knows exactly what they want. */
+export function AddFollowForm() {
+  const [value, setValue] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  return (
+    <form
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setError(null);
+        const raw = value.trim().toUpperCase();
+        if (!raw) return;
+        const change = isBioguideId(raw)
+          ? { add: { members: [raw] } }
+          : isWatchTicker(raw)
+            ? { add: { tickers: [raw] } }
+            : null;
+        if (!change) {
+          setError("Enter a ticker (NVDA, BRK.B) or a member's Bioguide ID (P000197).");
+          return;
+        }
+        setBusy(true);
+        const ok = await changeFollows(change);
+        setBusy(false);
+        trackEvent("watchlist_toggle", { kind: isBioguideId(raw) ? "member" : "ticker", id: raw, followed: true, from: "dashboard_add", ok });
+        if (ok) setValue("");
+        else setError("Could not add that right now. Please try again.");
+      }}
+      className="space-y-1.5"
+    >
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="Ticker or Bioguide ID"
+          aria-label="Add a ticker or Bioguide ID"
+          className={FIELD}
+        />
+        <button type="submit" disabled={busy} className={BUTTON_PRIMARY}>
+          <Plus className="size-3.5" aria-hidden />
+          Follow
+        </button>
+      </div>
+      {error ? <p className="pl-1 text-[12.5px] text-ink-2">{error}</p> : null}
+    </form>
+  );
 }
 
 function SignedInPanel({ account }: { account: Account }) {
@@ -269,7 +335,7 @@ function SignedInPanel({ account }: { account: Account }) {
     trackEvent(key === "emailAlerts" ? "email_alerts_toggle" : "account_setting_toggle", {
       setting: key,
       on,
-      from: "watchlist_page",
+      from: "dashboard",
       ok,
     });
   };
@@ -278,7 +344,8 @@ function SignedInPanel({ account }: { account: Account }) {
     setSaving(true);
     const ok = await deleteAccount();
     setSaving(false);
-    if (!ok) setNotice("Could not delete the account. Please try again.");
+    if (ok) window.location.assign("/");
+    else setNotice("Could not delete the account. Please try again.");
   };
 
   const followed = account.members.length + account.tickers.length;
@@ -297,7 +364,14 @@ function SignedInPanel({ account }: { account: Account }) {
             </p>
           </div>
         </div>
-        <button type="button" onClick={() => void signOut()} className={cn(BUTTON, "h-8 text-[12.5px]")}>
+        <button
+          type="button"
+          onClick={async () => {
+            await signOut();
+            window.location.assign("/");
+          }}
+          className={cn(BUTTON, "h-8 text-[12.5px]")}
+        >
           <LogOut className="size-3.5" aria-hidden />
           Sign out
         </button>

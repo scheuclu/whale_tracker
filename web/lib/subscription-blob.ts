@@ -1,11 +1,31 @@
 import { BlobPreconditionFailedError, del, get, list, put } from "@vercel/blob";
 import { alertsSecret } from "./subscription-token";
-import type { ListedSubscriptionBlob, SubscriptionBlobBackend } from "./subscription-store";
+import {
+  createMemorySubscriptionBackend,
+  type ListedSubscriptionBlob,
+  type SubscriptionBlobBackend,
+} from "./subscription-store";
 
 type Env = Record<string, string | undefined>;
 
+/**
+ * The e2e suite's account store: in this process's memory, so the sign-in
+ * and dashboard tests run against `next start` with no Blob token. Switched
+ * on only by `WHALE_TEST_MEMORY_STORE=1`, and never on Vercel, where `VERCEL`
+ * is always set — a stray variable there cannot swap real accounts for an
+ * empty map.
+ */
+export function memoryStoreEnabled(env: Env = process.env): boolean {
+  return env.WHALE_TEST_MEMORY_STORE === "1" && !env.VERCEL;
+}
+
+// On globalThis, not in a module variable: Next bundles route handlers and
+// pages separately, and each bundle would otherwise hold its own empty map.
+const MEMORY_KEY = Symbol.for("whale.memorySubscriptionBackend");
+type WithMemory = typeof globalThis & { [MEMORY_KEY]?: SubscriptionBlobBackend };
+
 export function blobStoreConfigured(env: Env = process.env): boolean {
-  return Boolean(env.BLOB_STORE_ID?.trim() || env.BLOB_READ_WRITE_TOKEN?.trim());
+  return memoryStoreEnabled(env) || Boolean(env.BLOB_STORE_ID?.trim() || env.BLOB_READ_WRITE_TOKEN?.trim());
 }
 
 export function subscriptionsConfigured(env: Env = process.env): boolean {
@@ -64,5 +84,6 @@ export const vercelSubscriptionBackend: SubscriptionBlobBackend = {
 };
 
 export function subscriptionBackend(env: Env = process.env): SubscriptionBlobBackend | null {
+  if (memoryStoreEnabled(env)) return ((globalThis as WithMemory)[MEMORY_KEY] ??= createMemorySubscriptionBackend());
   return blobStoreConfigured(env) ? vercelSubscriptionBackend : null;
 }

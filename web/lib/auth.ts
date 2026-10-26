@@ -37,12 +37,12 @@ export type SignInMethod = "google" | "email";
 export const NO_STORE = { "Cache-Control": "private, no-store" } as const;
 
 /**
- * Where to send the reader after signing in: a same-site path, or `/watchlist`.
+ * Where to send the reader after signing in: a same-site path, or `/account`.
  * `//evil.example`, `/\evil.example` and anything with a scheme are refused —
  * an open redirect on the sign-in route would lend our domain to phishing.
  */
 export function safeNextPath(raw: unknown): string {
-  const fallback = "/watchlist";
+  const fallback = "/account";
   if (typeof raw !== "string") return fallback;
   const s = raw.trim();
   if (!s.startsWith("/") || s.startsWith("//") || s.startsWith("/\\")) return fallback;

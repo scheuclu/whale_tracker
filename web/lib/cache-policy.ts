@@ -40,6 +40,10 @@ export const PAGE_CDN_CACHE_CONTROL = `public, s-maxage=${PAGE_CDN_SECONDS}, sta
  * - `/api/…` — each route handler states its own policy (the CSV export is
  *   `no-store`, a scan image is cached for a week);
  * - `/_next/…` — hashed assets and the image optimizer, which Next caches;
+ * - `/account` — the signed-in dashboard, the one page rendered from the
+ *   reader's session cookie. The CDN key has no cookie in it, so caching it
+ *   would hand one reader's account to the next; it keeps Next's
+ *   `private, no-store`;
  * - files and metadata images (`/icon.svg`, `/opengraph-image`, `…/robots.txt`)
  *   — prerendered, and already cached far longer than a page.
  *
@@ -48,7 +52,7 @@ export const PAGE_CDN_CACHE_CONTROL = `public, s-maxage=${PAGE_CDN_SECONDS}, sta
  * the whole string is also a plain regex, which is how the tests check it.
  */
 export const PAGE_SOURCE =
-  "/((?!api/|_next/)(?!(?:.*/)?(?:opengraph-image|twitter-image|apple-icon|icon)(?:[-./]|$))(?!.*\\.(?:svg|png|jpe?g|gif|webp|ico|txt|xml|json|md|webmanifest|csv)$).*)";
+  "/((?!api/|_next/|account(?:/|$))(?!(?:.*/)?(?:opengraph-image|twitter-image|apple-icon|icon)(?:[-./]|$))(?!.*\\.(?:svg|png|jpe?g|gif|webp|ico|txt|xml|json|md|webmanifest|csv)$).*)";
 
 /**
  * Share cards (every `opengraph-image`). They read the database, so Next

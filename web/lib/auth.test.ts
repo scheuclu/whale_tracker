@@ -39,9 +39,9 @@ const GOOD_CLAIMS = {
 describe("auth: redirects", () => {
   it("keeps same-site paths and refuses everything that could leave the site", () => {
     assert.equal(safeNextPath("/tickers/NVDA?w=30"), "/tickers/NVDA?w=30");
-    assert.equal(safeNextPath(undefined), "/watchlist");
+    assert.equal(safeNextPath(undefined), "/account");
     for (const bad of ["https://evil.example", "//evil.example", "/\\evil.example", "evil", "/api/account", "/a\nb"]) {
-      assert.equal(safeNextPath(bad), "/watchlist", bad);
+      assert.equal(safeNextPath(bad), "/account", bad);
     }
   });
 

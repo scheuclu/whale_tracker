@@ -103,12 +103,12 @@ export function subscriptionActionUrls(email: string, secret: string, nowSeconds
     { purpose: "verify", email, exp: nowSeconds + VERIFY_TTL_SECONDS },
     secret
   );
-  const manageToken = signSubscriptionToken({ purpose: "manage", email }, secret);
   const unsubscribeToken = signSubscriptionToken({ purpose: "unsubscribe", email }, secret);
 
   return {
     verifyUrl: absoluteUrl(`/api/alerts/verify?token=${encodeURIComponent(verifyToken)}`),
-    manageUrl: absoluteUrl(`/watchlist?token=${encodeURIComponent(manageToken)}`),
+    // Managing needs a sign-in now; the link is the dashboard itself.
+    manageUrl: absoluteUrl("/account"),
     unsubscribeUrl: absoluteUrl(`/api/alerts/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`),
   };
 }

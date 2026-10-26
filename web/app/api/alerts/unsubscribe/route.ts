@@ -24,7 +24,7 @@ async function handleUnsubscribe(req: Request): Promise<{ ok: boolean }> {
 export async function GET(req: Request) {
   const { ok } = await handleUnsubscribe(req);
   return NextResponse.redirect(
-    absoluteUrl(`/watchlist?status=${ok ? "unsubscribed" : "invalid_token"}`),
+    absoluteUrl(`/account?status=${ok ? "unsubscribed" : "invalid_token"}`),
     303
   );
 }

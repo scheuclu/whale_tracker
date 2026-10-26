@@ -5,7 +5,7 @@
  * stock symbols (by `ticker`, e.g. `NVDA` or `BRK.B`) without creating an
  * account. The state lives in `localStorage` under `WATCHLIST_STORAGE_KEY`
  * and serializes into a compact, unambiguous `?watch=P000197,NVDA` URL
- * parameter so the server-rendered feed and `/watchlist` page can filter by
+ * parameter so the server-rendered feed can filter by
  * it and readers can bookmark or share their watchlist across devices.
  */
 

@@ -48,6 +48,12 @@ test("every page gets the CDN header", () => {
   }
 });
 
+test("the signed-in dashboard is never held on the CDN", () => {
+  for (const p of ["/account", "/account/"]) assert.ok(!matches(p), p);
+  // Only that page: a ticker or member that merely starts with the word is still cached.
+  assert.ok(matches("/accounts"));
+});
+
 test("API routes, Next assets, files and metadata images keep their own policy", () => {
   for (const p of [
     "/api/export.csv",
