@@ -1,50 +1,29 @@
 import { Fragment } from "react";
-import { assetLabel } from "@/lib/asset-label";
 import {
-  STOCK_ACT_DEADLINE_DAYS,
   getCommittee,
   getCommitteeMembers,
-  getLateFilings,
-  getLateMembers,
-  getLateMonthly,
-  getLateTotals,
   getPoliticianTotals,
   getPoliticians,
   getSubcommittees,
 } from "@/lib/queries";
 import type { Metadata } from "next";
-import { committeeHref, memberHref, range, shortDate, usd } from "@/lib/format";
+import { committeeHref, memberHref, usd } from "@/lib/format";
 import { absoluteUrl, plural } from "@/lib/site";
 import { ShareControl } from "../share-control";
 import { clip, pageCard, pageMetadata } from "@/lib/seo";
 import {
   Card,
-  ColumnSeries,
   Empty,
   SectionTitle,
   StatTile,
-  VOLUME_NOTE,
-  DivergingSplit,
-  MagnitudeBars,
-  VolumeRange,
 } from "../charts";
 import {
-  ActionBadge,
-  Amount,
-  DelayTag,
-  OwnerTag,
   PartyBadge,
   ResponsiveTable,
-  ScanTag,
-  TickerChip,
-  Segmented,
 } from "../ui";
-import { AssetName, TradeList, TradeRow } from "../trade-row";
-import { ExportLink } from "../feed-controls";
 import { MemberAvatar } from "../avatar";
-import { Disclosure, RangeCaption } from "../disclosure";
+import { Disclosure } from "../disclosure";
 import { DataError, PAGE_STACK, PageHeader, Quiet } from "../page-header";
-import { MemberBars } from "./member-bars";
 import { CHAMBER_LABEL, SeatTag } from "../members/[slug]/member-detail";
 import { POLITICIAN_SORT, isDefaultSort, parseSort, type PoliticianSortKey } from "@/lib/table-sort";
 import {
@@ -59,40 +38,20 @@ import {
 } from "../sortable-table";
 import { RowLinkBody, StickyThead } from "../table-client";
 import { ROW_LINK } from "../grouped-list";
-import { TRACK_PATH, TrackView } from "./track-view";
-import { parseTrackHorizon } from "@/lib/track-queries";
+import { LATE_PATH } from "../rankings/late-view";
 
 export const dynamic = "force-dynamic";
 
 type Params = { action?: string; committee?: string; view?: string; sort?: string; dir?: string; h?: string };
 
 /**
- * Four pages share this route: the roster, `?view=late`, `?view=track` and
- * `?committee=<id>`. Each canonicalises to itself with only the parameter
- * that defines it; a sorted roster is the roster, so its canonical is the
- * bare path, and the track record's 30-day horizon (`&h=30`) is the track
- * record.
+ * Two pages share this route: the roster and `?committee=<id>`. Each
+ * canonicalises to itself with only the parameter that defines it; a sorted
+ * roster is the roster, so its canonical is the bare path. The track record
+ * and late view moved to /rankings.
  */
 export async function generateMetadata({ searchParams }: { searchParams: Promise<Params> }): Promise<Metadata> {
   const params = await searchParams;
-  if (params.view === "track") {
-    return pageMetadata({
-      title: "Track record: whose stock trades beat the market",
-      description:
-        "Members of Congress ranked by how the stocks they traded moved afterwards against the S&P 500, from the trade date and from the disclosure, with intervals and a luck check. A stock's move, not anyone's profit; not advice.",
-      path: TRACK_PATH,
-      card: pageCard("/cards/track", "Track record: members of Congress whose trades were followed by the biggest market-beating moves, against the S&P 500"),
-    });
-  }
-  if (params.view === "late") {
-    return pageMetadata({
-      title: "Late STOCK Act disclosures by member of Congress",
-      description:
-        "Members of Congress ranked by trades disclosed more than 45 days after the trade, the STOCK Act deadline, with the filings behind each count. A reporting fact, not an allegation.",
-      path: "/politicians?view=late",
-      card: pageCard("/cards/late", "Late STOCK Act disclosures: late trades, their share of all disclosed trades, members late and filings"),
-    });
-  }
   if (params.committee) {
     const path = `/politicians?committee=${encodeURIComponent(params.committee)}`;
     let name: string | null = null;
@@ -161,20 +120,8 @@ export default async function PoliticiansPage({
   // here (next.config.ts → app/api/legacy-redirect).
   // Keyed so a switch between list and sub-view (a search-param change)
   // remounts instead of morphing the list DOM.
-  if (params.view === "late")
-    return (
-      <Fragment key="late">
-        <LateView />
-      </Fragment>
-    );
-  if (params.view === "track") {
-    const horizon = parseTrackHorizon(params.h);
-    return (
-      <Fragment key={`track:${horizon}`}>
-        <TrackView horizon={horizon} />
-      </Fragment>
-    );
-  }
+  // `?view=track` and `?view=late` are answered with a 308 to /rankings
+  // before they get here (next.config.ts).
   if (params.committee)
     return (
       <Fragment key={`c:${params.committee}`}>
@@ -199,7 +146,6 @@ export default async function PoliticiansPage({
   if (!rows.length) return <Empty>No transactions yet.</Empty>;
   table ??= rows;
 
-  const byTrades = [...rows].sort((a, b) => b.trades - a.trades);
   const maxVolume = Math.max(0, ...rows.map((r) => r.volume_mid));
   const maxTrades = Math.max(0, ...rows.map((r) => r.trades));
   const header = (column: PoliticianSortKey, label: string, opts: { align?: "left" | "right"; hint?: string } = {}) => (
@@ -220,19 +166,19 @@ export default async function PoliticiansPage({
       <PageHeader
         eyebrow="Congress · by member"
         title="Members of Congress"
-        subtitle="Every member with a disclosed trade, by estimated volume and by number of trades. Amounts are disclosed brackets, so every volume here is an estimate."
+        subtitle="Every member with a disclosed trade, sortable by trades, tickers, estimated volume and filing delay. Amounts are disclosed brackets, so every volume here is an estimate."
       >
       <section aria-label="All members" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <StatTile label="Members" value={String(totals.members)} hint="with disclosed trades" />
         <StatTile label="Total volume" value={usd(totals.volume_mid)} hint="estimated" />
-        <a href="/politicians?view=late" className="block rounded-tile [&>div]:transition-shadow [&>div]:duration-(--dur) hover:[&>div]:shadow-[var(--elev-card-hover)]" title="Ranked late-filing view">
+        <a href={LATE_PATH} className="block rounded-tile [&>div]:transition-shadow [&>div]:duration-(--dur) hover:[&>div]:shadow-[var(--elev-card-hover)]" title="Ranked late-filing view">
           <StatTile
             label="Late disclosures"
             value={totals.late_trades.toLocaleString()}
             hint="past 45 days · ranked view →"
           />
         </a>
-        <a href="/politicians?view=late" className="block rounded-tile [&>div]:transition-shadow [&>div]:duration-(--dur) hover:[&>div]:shadow-[var(--elev-card-hover)]" title="Ranked late-filing view">
+        <a href={LATE_PATH} className="block rounded-tile [&>div]:transition-shadow [&>div]:duration-(--dur) hover:[&>div]:shadow-[var(--elev-card-hover)]" title="Ranked late-filing view">
           <StatTile
             label="Members late"
             value={String(totals.members_late)}
@@ -241,16 +187,17 @@ export default async function PoliticiansPage({
         </a>
       </section>
       <a
-        href={TRACK_PATH}
+        href="/rankings"
         className="apple-hero-surface apple-card-reveal group flex items-center justify-between gap-4 rounded-tile px-5 py-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-elevated sm:px-6 sm:py-5"
-        data-track-link
+        data-rankings-link
       >
         <span className="min-w-0">
-          <span className="apple-section-kicker mb-1">Post-trade performance</span>
-          <span className="block font-display text-[18px] font-bold tracking-[-0.02em] text-foreground sm:text-[20px]">Track record</span>
+          <span className="apple-section-kicker mb-1">Rankings</span>
+          <span className="block font-display text-[18px] font-bold tracking-[-0.02em] text-foreground sm:text-[20px]">
+            Track record, most active, late filers
+          </span>
           <span className="mt-0.5 block text-[13.5px] leading-snug text-muted-foreground">
-            Whose trades were followed by the biggest market-beating moves: the stock&rsquo;s move against the S&amp;P
-            500, not anyone&rsquo;s profit.
+            Whose trades were followed by the biggest market-beating moves, who trades the most, and who files late.
           </span>
         </span>
         <span aria-hidden className="inline-flex shrink-0 items-center gap-1 rounded-full bg-fill/85 px-3.5 py-1.5 text-[13px] font-semibold text-foreground ring-1 ring-black/[0.05] transition-transform duration-200 group-hover:translate-x-0.5 dark:ring-white/[0.08]">
@@ -258,50 +205,6 @@ export default async function PoliticiansPage({
         </span>
       </a>
       </PageHeader>
-
-      <section className="grid gap-6 lg:grid-cols-2">
-        <div>
-          <SectionTitle kicker="Volume Ranking">By estimated volume</SectionTitle>
-          <Card>
-            <MemberBars
-              data={rows.slice(0, 12).map((r) => ({
-                key: r.member_name,
-                name: r.member_name,
-                bioguideId: r.bioguide_id,
-                sublabel: `${r.party ?? "?"}-${r.state ?? "?"} · ${r.trades} trade${r.trades === 1 ? "" : "s"}`,
-                value: r.volume_mid,
-                valueLabel: usd(r.volume_mid),
-                detail:
-                  r.volume_min != null
-                    ? `disclosed ${range(r.volume_min, r.volume_max ?? null)}`
-                    : undefined,
-                href: memberHref(r.member_name, r.bioguide_id),
-              }))}
-              note={VOLUME_NOTE}
-            />
-          </Card>
-        </div>
-        <div>
-          <SectionTitle kicker="Activity Ranking">By number of trades</SectionTitle>
-          <Card>
-            <MemberBars
-              data={byTrades.slice(0, 12).map((r) => ({
-                key: r.member_name,
-                name: r.member_name,
-                bioguideId: r.bioguide_id,
-                // A scan-only member has trades but no symbol: paper forms do not print one.
-                sublabel:
-                  r.tickers === 0 && r.transcribed > 0
-                    ? "tickers not printed on paper filings"
-                    : `${r.tickers} distinct ticker${r.tickers === 1 ? "" : "s"}`,
-                value: r.trades,
-                valueLabel: String(r.trades),
-                href: memberHref(r.member_name, r.bioguide_id),
-              }))}
-            />
-          </Card>
-        </div>
-      </section>
 
       <section id="all-members" className="table-anchor">
         <SectionTitle
@@ -630,356 +533,3 @@ async function CommitteeView({ id }: { id: string }) {
   );
 }
 
-/* ---------------------------------------------------------- ?view=late */
-
-/** Filings listed on the late view, newest first; the tiles cover all. */
-const LATE_FILING_PAGE = 25;
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-function monthLabel(month: string, withYear: boolean): string {
-  const [y, m] = month.split("-");
-  const name = MONTHS[Number(m) - 1] ?? month;
-  return withYear || m === "01" ? `${name} ${y.slice(2)}` : name;
-}
-
-/** "12%" — one decimal under 10% so a small share does not read as zero. */
-function share(n: number, of: number): string {
-  if (!of) return "—";
-  const pct = (n / of) * 100;
-  return `${pct > 0 && pct < 10 ? pct.toFixed(1) : Math.round(pct)}%`;
-}
-
-/**
- * The ranked late-filing view. Every number here is the same measure the
- * politicians tiles report — trade date → filing date, more than 45 days —
- * and the tiles come from the same whole-dataset totals, so the two pages
- * cannot disagree.
- */
-async function LateView() {
-  let totals, late, members, monthly, filings;
-  try {
-    [totals, late, members, monthly, filings] = await Promise.all([
-      getPoliticianTotals(),
-      getLateTotals(),
-      getLateMembers(200),
-      getLateMonthly(),
-      getLateFilings(LATE_FILING_PAGE),
-    ]);
-  } catch (err) {
-    return <DataError error={err} />;
-  }
-  if (!members.length) {
-    return (
-      <Empty>
-        No trades disclosed past the {STOCK_ACT_DEADLINE_DAYS}-day deadline.{" "}
-        <a href="/politicians" className="underline underline-offset-2 hover:text-primary">
-          All members
-        </a>
-      </Empty>
-    );
-  }
-
-  const byWorst = [...members].sort(
-    (a, b) => b.worst_delay - a.worst_delay || b.late_count - a.late_count
-  );
-
-  return (
-    <div className={PAGE_STACK}>
-      <PageHeader
-        back={{ href: "/politicians", label: "all members" }}
-        share={<ShareControl url={absoluteUrl("/politicians?view=late")} text="Late STOCK Act disclosures by members of Congress" />}
-        eyebrow="Congress · the STOCK Act deadline"
-        title="Late disclosures"
-        subtitle={
-          <>
-            Trades disclosed more than {STOCK_ACT_DEADLINE_DAYS} days after they were made — the STOCK
-            Act&rsquo;s deadline. A late count is a reporting fact, not an allegation of wrongdoing.
-          </>
-        }
-      >
-        <Disclosure
-          size="sm"
-          lead={
-            <>
-              Delay is measured from the trade to the date the report reached the Clerk, never the
-              report&rsquo;s &ldquo;Notification Date&rdquo; column, which reads 0 for a member trading their
-              own account.
-            </>
-          }
-        />
-      <section aria-label="Late totals" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <StatTile
-          label="Late trades"
-          value={totals.late_trades.toLocaleString()}
-          hint={`${share(totals.late_trades, late.trades)} of ${late.trades} disclosed trades`}
-        />
-        <StatTile
-          label="Members late"
-          value={String(totals.members_late)}
-          hint={`of ${totals.members} with disclosed trades`}
-        />
-        <StatTile
-          label="Filings with late trades"
-          value={String(late.late_filings)}
-          hint={`${late.all_late_filings} entirely late · of ${late.filings} filings`}
-        />
-        <StatTile
-          label="Worst delay"
-          value={late.worst_delay == null ? "—" : `${late.worst_delay}d`}
-          hint="trade to filing"
-        />
-      </section>
-      </PageHeader>
-
-      <section className="grid gap-6 lg:grid-cols-2">
-        <div>
-          <SectionTitle>By late trades</SectionTitle>
-          <Card>
-            <MemberBars
-              data={members.slice(0, 12).map((r) => ({
-                key: r.member_name,
-                name: r.member_name,
-                bioguideId: r.bioguide_id,
-                sublabel: `${r.late_count} of ${r.trades} trades · ${r.late_filings} filing${
-                  r.late_filings === 1 ? "" : "s"
-                }`,
-                value: r.late_count,
-                valueLabel: String(r.late_count),
-                href: memberHref(r.member_name, r.bioguide_id),
-              }))}
-            />
-          </Card>
-        </div>
-        <div>
-          <SectionTitle>By worst delay</SectionTitle>
-          <Card>
-            <MemberBars
-              data={byWorst.slice(0, 12).map((r) => ({
-                key: r.member_name,
-                name: r.member_name,
-                bioguideId: r.bioguide_id,
-                sublabel: `${r.late_count} late · mean ${Math.round(r.avg_late_delay)}d`,
-                value: r.worst_delay,
-                valueLabel: `${r.worst_delay}d`,
-                href: memberHref(r.member_name, r.bioguide_id),
-              }))}
-            />
-          </Card>
-        </div>
-      </section>
-
-      <section>
-        <SectionTitle
-          right={
-            <span className="text-[11px] text-muted-foreground">
-              share of each month&rsquo;s filed trades that were late
-            </span>
-          }
-        >
-          Late share by month filed
-        </SectionTitle>
-        <Card>
-          <ColumnSeries
-            data={monthly.map((m, i) => ({
-              key: m.month,
-              label: monthLabel(m.month, i === 0),
-              value: m.trades ? m.late_trades / m.trades : 0,
-              valueLabel: share(m.late_trades, m.trades),
-              detail: `${m.late_trades} of ${m.trades} trades in ${m.filings} filings`,
-            }))}
-          />
-        </Card>
-        <ResponsiveTable className="mt-4">
-          <table className="w-full text-[12px]">
-            <thead>
-              <tr className="border-b border-border text-left text-[12px] font-medium text-muted-foreground">
-                <th className="py-1.5 pr-3 font-medium">Month filed</th>
-                <th className="py-1.5 pr-3 text-right font-medium">Filings</th>
-                <th className="py-1.5 pr-3 text-right font-medium">Trades</th>
-                <th className="py-1.5 pr-3 text-right font-medium">Late</th>
-                <th className="py-1.5 pr-3 text-right font-medium">Share</th>
-                <th className="py-1.5 text-right font-medium">Members late</th>
-              </tr>
-            </thead>
-            <tbody>
-              {monthly.map((m) => (
-                <tr key={m.month} className="border-b border-border/50 last:border-0">
-                  <td className="tabular py-1.5 pr-3">{m.month}</td>
-                  <td className="tabular py-1.5 pr-3 text-right text-muted-foreground">{m.filings}</td>
-                  <td className="tabular py-1.5 pr-3 text-right text-muted-foreground">{m.trades}</td>
-                  <td
-                    className={`tabular py-1.5 pr-3 text-right ${
-                      m.late_trades > 0 ? "font-medium text-foreground" : "text-muted-foreground"
-                    }`}
-                  >
-                    {m.late_trades || "—"}
-                  </td>
-                  <td className="tabular py-1.5 pr-3 text-right">{share(m.late_trades, m.trades)}</td>
-                  <td className="tabular py-1.5 text-right text-muted-foreground">
-                    {m.members_late || "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </ResponsiveTable>
-        <Disclosure
-          size="sm"
-          className="mt-3"
-          lead="By month of filing, not of trade: a trade made last month cannot be late yet."
-        >
-          <p>
-            The ones that will be are not in the database until they are filed. A month&rsquo;s filings
-            are complete once the month is over.
-          </p>
-        </Disclosure>
-      </section>
-
-      <section>
-        <SectionTitle
-          right={
-            <span className="text-[11px] text-muted-foreground">
-              ranked by late trades, then worst delay
-            </span>
-          }
-        >
-          All members with late trades
-        </SectionTitle>
-        <ResponsiveTable>
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="border-b border-border text-left text-[12px] font-medium text-muted-foreground">
-                <th className="px-4 py-2.5 font-medium">Member</th>
-                <th className="px-4 py-2.5 text-right font-medium">Trades</th>
-                <th className="px-4 py-2.5 text-right font-medium">Late</th>
-                <th className="px-4 py-2.5 text-right font-medium">Share</th>
-                <th className="px-4 py-2.5 text-right font-medium">Worst delay</th>
-                <th className="px-4 py-2.5 text-right font-medium">Mean late delay</th>
-                <th className="px-4 py-2.5 text-right font-medium">Filings</th>
-                <th className="px-4 py-2.5 text-right font-medium">Last late filing</th>
-              </tr>
-            </thead>
-            <tbody>
-              {members.map((r) => (
-                <tr key={r.member_name} className="border-b border-border/60 transition-colors duration-(--dur-fast) last:border-0 hover:bg-raised">
-                  <td className="px-4 py-2">
-                    <div className="flex items-center gap-2">
-                      <MemberAvatar name={r.member_name} bioguideId={r.bioguide_id} size="sm" />
-                      <a href={memberHref(r.member_name, r.bioguide_id)} className="font-medium hover:text-primary">
-                        {r.member_name}
-                      </a>
-                      <PartyBadge party={r.party} />
-                      <span className="text-[11px] text-muted-foreground">
-                        {r.state}
-                        {r.district && r.district !== "0" ? r.district : ""}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="tabular px-4 py-2 text-right text-muted-foreground">{r.trades}</td>
-                  <td className="tabular px-4 py-2 text-right font-medium text-foreground">
-                    {r.late_count}
-                  </td>
-                  <td className="tabular px-4 py-2 text-right">{share(r.late_count, r.trades)}</td>
-                  <td className="tabular px-4 py-2 text-right">{r.worst_delay}d</td>
-                  <td className="tabular px-4 py-2 text-right text-muted-foreground">
-                    {Math.round(r.avg_late_delay)}d
-                  </td>
-                  <td className="tabular px-4 py-2 text-right text-muted-foreground">{r.late_filings}</td>
-                  <td className="tabular px-4 py-2 text-right text-muted-foreground">
-                    {shortDate(r.last_late_filing)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </ResponsiveTable>
-        <Disclosure
-          size="sm"
-          className="mt-3"
-          lead={
-            <>
-              &ldquo;Worst delay&rdquo; is the longest gap from a trade to its filing; &ldquo;Mean late
-              delay&rdquo; averages the late trades only. A trade whose dates contradict each other has no
-              delay and is never counted as late.
-            </>
-          }
-        />
-      </section>
-
-      <section>
-        <SectionTitle
-          right={
-            <span className="text-[11px] text-muted-foreground">
-              {filings.length < late.late_filings
-                ? `newest ${filings.length} of ${late.late_filings} filings`
-                : `${filings.length} filing${filings.length === 1 ? "" : "s"}`}
-            </span>
-          }
-        >
-          The filings behind the numbers
-        </SectionTitle>
-        <div className="divide-y divide-border border-y border-border">
-          {filings.map((f) => (
-            <Card key={f.filing_id} className="py-3">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
-                <PartyBadge party={f.party} />
-                <a href={memberHref(f.member_name, f.bioguide_id)} className="font-medium hover:text-primary">
-                  {f.member_name}
-                </a>
-                <span className="text-[11px] text-muted-foreground">
-                  {f.state}
-                  {f.district && f.district !== "0" ? f.district : ""}
-                </span>
-                <span className="text-xs text-muted-foreground">filed {shortDate(f.filing_date)}</span>
-                <span
-                  className="text-xs font-medium text-foreground"
-                  title={
-                    f.late.length === f.trades
-                      ? "Every trade in this filing was past the deadline — its Telegram message led with how late"
-                      : "Some trades in this filing were on time; the late ones are listed"
-                  }
-                >
-                  {f.late.length === f.trades
-                    ? `all ${f.trades} trade${f.trades === 1 ? "" : "s"} late`
-                    : `${f.late.length} of ${f.trades} trades late`}
-                </span>
-                <a
-                  href={f.pdf_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="ml-auto text-[11px] text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
-                >
-                  filing
-                </a>
-              </div>
-              <div className="mt-2 space-y-1">
-                {f.late.map((r) => (
-                  <div
-                    key={r.id}
-                    className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border/50 pt-1 first:border-0 first:pt-0"
-                  >
-                    <ActionBadge action={r.action} />
-                    <TickerChip ticker={r.ticker} type={r.asset_type} />
-                    <Amount
-                      min={r.amount_min_cents}
-                      max={r.amount_max_cents}
-                      exact={r.amount_exact_cents}
-                    />
-                    <OwnerTag owner={r.owner} />
-                    <ScanTag transcribed={r.transcribed} docId={r.doc_id} />
-                    <AssetName name={r.asset_name} ticker={r.ticker} className="flex-1 text-[13px]" />
-                    <span className="tabular text-xs text-muted-foreground">
-                      traded {shortDate(r.tx_date)}
-                    </span>
-                    <DelayTag days={r.delay_days} inconsistent={r.dates_inconsistent} />
-                  </div>
-                ))}
-              </div>
-            </Card>
-          ))}
-        </div>
-      </section>
-    </div>
-  );
-}

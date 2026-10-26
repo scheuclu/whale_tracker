@@ -1010,7 +1010,7 @@ export async function getPipeline(): Promise<Pipeline> {
 
 /* --------------------------------------------------------- late disclosures */
 //
-// `/politicians?view=late`. Everything here is a re-cut of the measure the
+// `/rankings?view=late`. Everything here is a re-cut of the measure the
 // politicians tiles already report — trade date → filing date, more than 45
 // days — so each query must reconcile with `getPoliticianTotals` (see
 // late.test.ts). The report's "Notification Date" column is never used: it

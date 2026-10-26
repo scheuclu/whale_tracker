@@ -185,7 +185,7 @@ export const QUOTING_RULES: QuotingRule[] = [
     short:
       "Track-record figures are how a stock moved after a member's trade minus SPY over the same trading days, signed by direction, in points: never the member's profit, return or skill, and shrunk toward zero for small samples.",
     body:
-      "The track record (`/politicians?view=track`, `/api/v1/track-record`) measures, for each decision (one member, " +
+      "The track record (`/rankings`, `/api/v1/track-record`) measures, for each decision (one member, " +
       "ticker, direction and filing), the stock's close-to-close move over 30, 90 or 180 trading days minus SPY's over " +
       "the same days, read the way the trade pointed (a sale followed by a fall is positive). It starts from the first " +
       "close on or after the trade date (`after_trade`) and from the first close after the filing date " +

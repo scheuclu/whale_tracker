@@ -859,7 +859,7 @@ def check_track_record(conn, today: date | None = None) -> list[Finding]:
 
     INFO: decisions measured at 30 and 90 trading days out of the eligible
     ones, members ranked, the exclusion counts and the shrinkage fit, with
-    the step's status — what /politicians?view=track stands on. WARN
+    the step's status — what /rankings stands on. WARN
     `track_record_stale` only when an eligible decision's 30-day horizon is a
     week overdue and its series has not been read past it: the step failing
     (a wall, a throttle, a budget always spent elsewhere, the step not
@@ -896,7 +896,7 @@ def check_track_record(conn, today: date | None = None) -> list[Finding]:
         "A decision is one member, ticker, direction and filing; it is measured as the "
         "ticker's move after it against SPY. Excluded decisions (options, non-equity, "
         "transcribed, dates as filed, no price series) are counted below. Figures on "
-        "/politicians?view=track are a stock's move, never anyone's profit.",
+        "/rankings are a stock's move, never anyone's profit.",
         evidence,
     )]
     stale = []

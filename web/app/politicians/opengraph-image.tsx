@@ -6,7 +6,7 @@ export const size = CARD_SIZE;
 export const contentType = "image/png";
 export const revalidate = 3600;
 
-/** The roster card. `?view=late` and `?committee=` have their own, under app/cards/. */
+/** The roster card. `?committee=` has its own under app/cards/, as do the /rankings views. */
 export default async function Image() {
   const stats = [];
   try {

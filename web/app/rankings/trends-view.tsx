@@ -6,7 +6,6 @@ import { tickerHref, usd } from "@/lib/format";
 import {
   Card,
   ChartLegend,
-  Empty,
   MagnitudeBars,
   MonthlyColumns,
   MonthlyLines,
@@ -17,20 +16,11 @@ import {
   type Texture,
 } from "../charts";
 import { DataTable } from "../data-table";
-import { pageCard, pageMetadata } from "@/lib/seo";
 import { Disclosure } from "../disclosure";
 import { DataError, PAGE_STACK, PageHeader, PillLinks, Quiet } from "../page-header";
 
-export const dynamic = "force-dynamic";
-
-/** Window and ticker parameters are views of `/trends`. */
-export const metadata = pageMetadata({
-  title: "Congressional trading trends by month",
-  description:
-    "Monthly trades disclosed by members of Congress, disclosure delay against the 45-day STOCK Act deadline, rising tickers and scanned paper filings, beside SEC Form 4 insider activity.",
-  path: "/trends",
-  card: pageCard("/trends", "Congressional stock trades by month: purchases above the line, sales below, last 12 months by trade date"),
-});
+/** `/rankings?view=trends` (was `/trends`); its window and month are views of it. */
+export const TRENDS_PATH = "/rankings?view=trends";
 
 /**
  * Change over time. Every other page ranks a snapshot; this one buckets by
@@ -68,12 +58,7 @@ const num = (n: number) => n.toLocaleString();
 const days = (d: number | null) => (d == null ? "—" : `${Number.isInteger(d) ? d : d.toFixed(1)}d`);
 
 
-export default async function TrendsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ w?: string; t?: string }>;
-}) {
-  const params = await searchParams;
+export async function TrendsView({ params, nav }: { params: { w?: string; t?: string }; nav?: React.ReactNode }) {
   const months = WINDOWS.find((w) => String(w.months) === params.w)?.months ?? 12;
   const keys = monthKeys(months);
   const current = keys[keys.length - 1];
@@ -87,10 +72,10 @@ export default async function TrendsPage({
     const q = new URLSearchParams();
     const w = "w" in overrides ? overrides.w : months;
     const t = "t" in overrides ? overrides.t : params.t;
+    q.set("view", "trends");
     if (w && w !== 12) q.set("w", String(w));
     if (t) q.set("t", t);
-    const s = q.toString();
-    return s ? `/trends?${s}` : "/trends";
+    return `/rankings?${q.toString()}`;
   };
 
   let trades, delay, rising, insiders, scans;
@@ -182,6 +167,7 @@ export default async function TrendsPage({
   return (
     <div className={PAGE_STACK}>
       <PageHeader
+        lead={nav}
         eyebrow="Over time"
         title="Trends"
         subtitle="Change over time, by calendar month: trading, filing delay, insiders and scans."

@@ -29,7 +29,7 @@ const SECTIONS = [
   { href: "/politicians", label: "Members" },
   { href: "/insiders", label: "Insiders" },
   { href: "/tickers", label: "Stocks" },
-  { href: "/trends", label: "Trends" },
+  { href: "/rankings", label: "Rankings" },
   { href: "/search", label: "Search" },
 ];
 

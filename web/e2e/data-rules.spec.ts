@@ -80,7 +80,7 @@ const TILE_PAGES = [
   "/tickers/MSFT",
   "/insiders",
   "/insiders?t=BBD",
-  "/trends",
+  "/rankings?view=trends",
 ];
 
 for (const path of TILE_PAGES) {

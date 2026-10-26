@@ -48,6 +48,11 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       { source: "/watchlist", destination: "/account", permanent: true },
+      // The track record, the late view and the trends moved into /rankings;
+      // the query string (`h`, `w`, `t`, `view`) travels with them.
+      { source: "/politicians", has: [{ type: "query" as const, key: "view", value: "track" }], destination: "/rankings", permanent: true },
+      { source: "/politicians", has: [{ type: "query" as const, key: "view", value: "late" }], destination: "/rankings", permanent: true },
+      { source: "/trends", destination: "/rankings?view=trends", permanent: true },
       ...FEED_REDIRECT_KEYS.map((key) => ({
         source: "/",
         has: [{ type: "query" as const, key }],

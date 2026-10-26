@@ -17,7 +17,7 @@ import {
 import { Card, SectionTitle, StatTile } from "../../charts";
 import { Disclosure } from "../../disclosure";
 import { DataError, Quiet } from "../../page-header";
-import { TRACK_PATH } from "../../politicians/track-view";
+import { TRACK_PATH } from "../../rankings/track-view";
 import { ActionBadge, ResponsiveTable, TickerChip } from "../../ui";
 import { IntervalBar, Points, intervalText } from "../../track-ui";
 

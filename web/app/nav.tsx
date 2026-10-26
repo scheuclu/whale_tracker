@@ -20,7 +20,7 @@ const TABS = [
   { href: "/politicians", label: "Members" },
   { href: "/insiders", label: "Insiders" },
   { href: "/tickers", label: "Stocks" },
-  { href: "/trends", label: "Trends" },
+  { href: "/rankings", label: "Rankings" },
 ];
 
 /**

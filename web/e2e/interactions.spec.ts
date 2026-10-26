@@ -133,7 +133,7 @@ const KNOWN_OVERFLOW: Record<string, string> = {};
 
 test.describe("phone width (390px)", () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
-  for (const path of ["/", "/feed", "/politicians", "/members/nancy-pelosi-p000197", "/tickers/MSFT", "/insiders", "/trends", "/methodology"]) {
+  for (const path of ["/", "/feed", "/politicians", "/members/nancy-pelosi-p000197", "/tickers/MSFT", "/insiders", "/rankings?view=trends", "/methodology"]) {
     test(`no horizontal overflow on ${path}`, async ({ page }) => {
       test.fail(path in KNOWN_OVERFLOW, KNOWN_OVERFLOW[path]);
       await visit(page, path);

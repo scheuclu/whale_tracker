@@ -356,7 +356,7 @@ async function TrackRecords() {
       <SectionTitle
         kicker="Track record · 90 trading days"
         right={
-          <a href="/politicians?view=track" className="ink-link text-[13px]">
+          <a href="/rankings" className="ink-link text-[13px]">
             Full ranking →
           </a>
         }

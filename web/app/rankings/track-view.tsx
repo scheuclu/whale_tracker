@@ -22,17 +22,17 @@ import { PartyBadge, ResponsiveTable, Segmented } from "../ui";
 import { IntervalBar, Points, intervalText } from "../track-ui";
 
 /*
- * `/politicians?view=track` — the members' track record (CLAUDE.md, "Track
+ * `/rankings` (was `/politicians?view=track`) — the members' track record (CLAUDE.md, "Track
  * record"). Every figure is read from tables the pipeline derives once in
  * Python; this page computes no score. The framing is fixed: "whose trades
  * were followed by the biggest market-beating moves" — a stock's move after
  * a disclosed trade, never anyone's profit, return or skill.
  */
 
-export const TRACK_PATH = "/politicians?view=track";
+export const TRACK_PATH = "/rankings";
 
 export function trackHref(horizon: TrackHorizon): string {
-  return horizon === 90 ? TRACK_PATH : `${TRACK_PATH}&h=${horizon}`;
+  return horizon === 90 ? TRACK_PATH : `${TRACK_PATH}?h=${horizon}`;
 }
 
 /** Every caveat, once (DESIGN.md: "state the caveat once, well"). */
@@ -90,7 +90,7 @@ export function TrackCaveats({ minimum, minFilings, k }: { minimum: number | nul
   );
 }
 
-export async function TrackView({ horizon }: { horizon: TrackHorizon }) {
+export async function TrackView({ horizon, nav }: { horizon: TrackHorizon; nav?: React.ReactNode }) {
   let board: TrackLeaderboard;
   try {
     board = await getTrackLeaderboard(horizon);
@@ -100,7 +100,7 @@ export async function TrackView({ horizon }: { horizon: TrackHorizon }) {
   const model = board.model.trade;
   const header = (
     <PageHeader
-      back={{ href: "/politicians", label: "all members" }}
+      lead={nav}
       share={<ShareControl url={absoluteUrl(TRACK_PATH)} text="Members of Congress whose trades were followed by the biggest market-beating moves" />}
       eyebrow="Congress · track record"
       title="Track record"

@@ -662,7 +662,7 @@ function memberTrackJson(t: MemberTrack, origin: string) {
     decisions_waiting_for_horizon: t.pending,
     decisions_whose_price_series_ended: t.ended,
     excluded_decisions: t.excluded,
-    url: absolute(origin, "/politicians?view=track"),
+    url: absolute(origin, "/rankings"),
   };
 }
 
@@ -720,7 +720,7 @@ export async function buildTrackRecord(origin: string, search: URLSearchParams):
         },
         meta: meta(origin, asOf, {
           ...(notices.length ? { notices } : {}),
-          page: absolute(origin, horizon === 90 ? "/politicians?view=track" : `/politicians?view=track&h=${horizon}`),
+          page: absolute(origin, horizon === 90 ? "/rankings" : `/rankings?h=${horizon}`),
         }),
       },
     };

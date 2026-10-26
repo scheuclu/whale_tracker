@@ -348,7 +348,7 @@ parser stays faithful to the PDF and the UI flags the row rather than
   since — a series the source answered for with nothing newer (a buyout)
   is evidence, not a weekly warning.
 
-## Track record (`/politicians?view=track`, `track_*` tables)
+## Track record (`/rankings`, `track_*` tables)
 
 - The user's brief: "estimate how well each member is actually doing with
   their trades, so we can rank who's the best". Decided: **members of
@@ -701,7 +701,7 @@ it.
   `filing_id` and the dedupe still reads it). It is recorded only after
   delivery, once per filing (`stats.is_new_late_filing`, kind-scoped), never
   on a dry run, and is a marker rather than a message — see *Alert log*.
-- The dashboard's `?view=late` queries (`LATE` in `web/lib/queries.ts`) must
+- The dashboard's `/rankings?view=late` queries (`LATE` in `web/lib/queries.ts`) must
   reconcile with `getPoliticianTotals` — `web/lib/late.test.ts` asserts it on
   the committed DB. The monthly series is by month of *filing*: by trade month
   the recent months always look cleaner than they are.
