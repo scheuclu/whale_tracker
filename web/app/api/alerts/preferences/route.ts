@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { subscriptionBackend } from "@/lib/subscription-blob";
-import { unsubscribeAll, upsertSubscription } from "@/lib/subscription-store";
+import { stopEmails, upsertSubscription } from "@/lib/subscription-store";
 import { alertsSecret, verifySubscriptionToken } from "@/lib/subscription-token";
 
 export async function POST(req: Request) {
@@ -24,7 +24,7 @@ export async function POST(req: Request) {
   }
 
   if (body.unsubscribeAll === true) {
-    await unsubscribeAll(backend, secret, payload.email);
+    await stopEmails(backend, secret, payload.email);
     return NextResponse.json({ status: "unsubscribed" });
   }
 
@@ -36,6 +36,7 @@ export async function POST(req: Request) {
     : [];
   const clusters = Boolean(body.clusters);
   const weeklyDigest = Boolean(body.weeklyDigest);
+  const emailAlerts = body.emailAlerts === undefined ? undefined : Boolean(body.emailAlerts);
 
   const updated = await upsertSubscription(backend, secret, {
     email: payload.email,
@@ -43,6 +44,7 @@ export async function POST(req: Request) {
     tickers,
     clusters,
     weeklyDigest,
+    emailAlerts,
     merge: false,
   });
 
@@ -55,6 +57,7 @@ export async function POST(req: Request) {
       tickers: updated.tickers,
       clusters: updated.clusters,
       weeklyDigest: updated.weeklyDigest,
+      emailAlerts: updated.emailAlerts,
     },
   });
 }

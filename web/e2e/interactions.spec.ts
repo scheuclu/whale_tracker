@@ -118,6 +118,26 @@ test("watchlist follow button persists and filters the feed", async ({ page }) =
   await expect(page.locator("[data-watchlist-banner]")).toBeVisible();
 });
 
+test("sign-in entry point keeps the page to return to; account routes refuse other sites", async ({ page }) => {
+  await visit(page, "/tickers/MSFT");
+  const signIn = page.getByRole("link", { name: "Sign in", exact: true });
+  await expect(signIn).toHaveAttribute("href", "/signin?next=%2Ftickers%2FMSFT");
+  await signIn.click();
+  await expect(page).toHaveURL(/\/signin\?next=%2Ftickers%2FMSFT$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
+
+  // Signed out, the account is a 401 (or 503 where accounts are unconfigured), never cached.
+  const account = await page.request.get("/api/account");
+  expect([401, 503]).toContain(account.status());
+  expect(account.headers()["cache-control"]).toContain("no-store");
+
+  const crossSite = await page.request.post("/api/account/watch", {
+    headers: { origin: "https://evil.example" },
+    data: { add: { tickers: ["NVDA"] } },
+  });
+  expect(crossSite.status()).toBe(403);
+});
+
 /**
  * KNOWN BUG (expected to fail until fixed): on a member page a trade row's
  * tag group (option badge · sector · owner, app/trade-row.tsx) is

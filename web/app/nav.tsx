@@ -73,7 +73,7 @@ export function Tabs({ className }: { className?: string }) {
   );
 }
 
-const ICON_BUTTON = cn(
+export const ICON_BUTTON = cn(
   "group flex size-8 shrink-0 items-center justify-center rounded-full text-ink-2",
   "transition-[background-color,color] duration-(--dur) ease-(--ease-out) hover:bg-fill hover:text-foreground active:bg-foreground/[0.12]",
   "outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"

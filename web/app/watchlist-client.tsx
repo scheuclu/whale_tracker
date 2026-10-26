@@ -1,41 +1,36 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Bell, Bookmark, Check, ExternalLink, Mail, Sparkles, Star, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
-import { BUTTON, BUTTON_PRIMARY, FIELD, FOCUS_RING } from "./ui";
+import { BUTTON, BUTTON_PRIMARY, FOCUS_RING } from "./ui";
 import {
   EMPTY_WATCHLIST,
-  WATCHLIST_STORAGE_KEY,
-  sanitizeWatchlistState,
   serializeWatchParam,
   toggleWatchItem,
   watchlistFeedHref,
   type WatchlistState,
 } from "@/lib/watchlist";
+import {
+  WATCHLIST_EVENT,
+  getAccountState,
+  getServerAccountState,
+  pushWatchChange,
+  readWatchlist,
+  saveAccountSettings,
+  signInHref,
+  startAccount,
+  subscribeAccount,
+  writeWatchlist,
+  type AccountState,
+} from "./account-store";
 
-const WATCHLIST_EVENT = "fatcat:watchlist-change";
-
-function readWatchlist(): WatchlistState {
-  if (typeof window === "undefined") return EMPTY_WATCHLIST;
-  try {
-    const raw = window.localStorage.getItem(WATCHLIST_STORAGE_KEY);
-    if (!raw) return EMPTY_WATCHLIST;
-    return sanitizeWatchlistState(JSON.parse(raw));
-  } catch {
-    return EMPTY_WATCHLIST;
-  }
-}
-
-function writeWatchlist(next: WatchlistState): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(next));
-    window.dispatchEvent(new CustomEvent(WATCHLIST_EVENT));
-  } catch {
-    /* localStorage unavailable or quota exceeded */
-  }
+/** The signed-in account, or `loading` / `signed_out` (see `account-store.ts`). */
+export function useAccount(): AccountState {
+  const snapshot = useSyncExternalStore(subscribeAccount, getAccountState, getServerAccountState);
+  useEffect(() => startAccount(), []);
+  return snapshot;
 }
 
 export function useWatchlist() {
@@ -45,6 +40,7 @@ export function useWatchlist() {
   useEffect(() => {
     setMounted(true);
     setState(readWatchlist());
+    startAccount();
     const sync = () => setState(readWatchlist());
     window.addEventListener(WATCHLIST_EVENT, sync);
     window.addEventListener("storage", sync);
@@ -59,6 +55,9 @@ export function useWatchlist() {
     const { next, followed } = toggleWatchItem(current, item);
     writeWatchlist(next);
     setState(next);
+    const id = item.id.trim().toUpperCase();
+    const ids = item.kind === "member" ? { members: [id] } : { tickers: [id] };
+    pushWatchChange(followed ? { add: ids } : { remove: ids });
     trackEvent("watchlist_toggle", {
       kind: item.kind,
       id: item.id.toUpperCase(),
@@ -69,6 +68,8 @@ export function useWatchlist() {
   }, []);
 
   const clear = useCallback(() => {
+    const current = readWatchlist();
+    pushWatchChange({ remove: { members: current.members, tickers: current.tickers } });
     writeWatchlist(EMPTY_WATCHLIST);
     setState(EMPTY_WATCHLIST);
     trackEvent("watchlist_clear");
@@ -142,11 +143,9 @@ export function GetAlertsPopover({
   className?: string;
 }) {
   const { state, mounted, toggle } = useWatchlist();
+  const account = useAccount();
   const [open, setOpen] = useState(false);
-  const [email, setEmail] = useState("");
-  const [clusters, setClusters] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
   const normId = subject?.id.trim().toUpperCase();
@@ -175,61 +174,13 @@ export function GetAlertsPopover({
 
   const totalWatched = state.members.length + state.tickers.length;
   const feedUrl = watchlistFeedHref(state);
+  const what = subject ? `${subject.label} or your watchlist` : "your watchlist";
 
-  const handleEmailSubscribe = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email.trim()) return;
-    setSubmitting(true);
-    setNotice(null);
-    const members = [...state.members];
-    const tickers = [...state.tickers];
-    if (subject && normId) {
-      if (subject.kind === "member" && !members.includes(normId)) members.push(normId);
-      if (subject.kind === "ticker" && !tickers.includes(normId)) tickers.push(normId);
-      if (!isFollowed) toggle({ kind: subject.kind, id: normId, label: subject.label });
-    }
-    try {
-      const res = await fetch("/api/alerts/subscribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          members,
-          tickers,
-          clusters,
-        }),
-      });
-      const data = (await res.json()) as {
-        message?: string;
-        error?: string;
-        status?: string;
-        code?: string;
-      };
-      trackEvent("alert_email_subscribed", {
-        from: normId ?? "global",
-        status: res.ok ? (data.status ?? "ok") : (data.code ?? "error"),
-        members: members.length,
-        tickers: tickers.length,
-        clusters,
-      });
-      if (res.ok) {
-        setNotice(data.message ?? "Check your inbox to confirm your daily alert subscription.");
-        setEmail("");
-      } else {
-        setNotice(data.error ?? "Saved to your device watchlist.");
-      }
-    } catch {
-      trackEvent("alert_email_subscribed", {
-        from: normId ?? "global",
-        status: "network_error",
-        members: members.length,
-        tickers: tickers.length,
-        clusters,
-      });
-      setNotice("Saved to your device watchlist.");
-    } finally {
-      setSubmitting(false);
-    }
+  const turnOnEmails = async () => {
+    setSaving(true);
+    const ok = await saveAccountSettings({ emailAlerts: true });
+    setSaving(false);
+    trackEvent("email_alerts_toggle", { on: true, from: "alerts_popover", ok });
   };
 
   return (
@@ -309,50 +260,61 @@ export function GetAlertsPopover({
                   </button>
                 </div>
                 <p className="mt-1 text-[12px] leading-snug text-muted-foreground">
-                  Pins {subject.label} to your personal Following feed on this device.
+                  Pins {subject.label} to your personal Following feed
+                  {account.status === "signed_in" ? " on every device you sign in on." : " on this device."}
                 </p>
               </div>
             ) : null}
 
-            <form
-              onSubmit={handleEmailSubscribe}
-              className="rounded-[14px] bg-fill/65 p-3 ring-1 ring-black/[0.04] dark:ring-white/[0.07]"
-            >
-              <p className="font-medium text-foreground">Daily Email Digest</p>
-              <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground">
-                At most 1 email/day when{" "}
-                {subject ? `${subject.label} or your watchlist` : "your watchlist"} files new trades.
-              </p>
-              <div className="mt-2 flex items-center gap-1.5">
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  aria-label="Email address for daily digest alerts"
-                  className={cn(FIELD, "h-8 text-[12.5px]")}
-                />
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className={cn(BUTTON_PRIMARY, "h-8 px-3 text-[12px]")}
-                >
-                  <Mail className="size-3" aria-hidden />
-                  <span>{submitting ? "…" : "Subscribe"}</span>
-                </button>
-              </div>
-              <label className="mt-2 flex cursor-pointer items-center gap-1.5 text-[11.5px] text-ink-2">
-                <input
-                  type="checkbox"
-                  checked={clusters}
-                  onChange={(e) => setClusters(e.target.checked)}
-                  className="size-3.5 accent-foreground"
-                />
-                <span>Also include high-signal cluster alerts</span>
-              </label>
-              {notice ? <p className="mt-2 text-[12px] font-medium text-foreground">{notice}</p> : null}
-            </form>
+            <div className="rounded-[14px] bg-fill/65 p-3 ring-1 ring-black/[0.04] dark:ring-white/[0.07]">
+              <p className="font-medium text-foreground">Daily email digest</p>
+              {account.status === "signed_in" ? (
+                account.account.emailAlerts ? (
+                  <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground">
+                    On. At most one email a day to{" "}
+                    <span className="font-medium text-foreground">{account.account.email}</span> when {what}{" "}
+                    files new trades.
+                  </p>
+                ) : (
+                  <div className="mt-0.5 flex items-center justify-between gap-2">
+                    <p className="text-[12px] leading-snug text-muted-foreground">
+                      Off for {account.account.email}.
+                    </p>
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={turnOnEmails}
+                      className={cn(BUTTON_PRIMARY, "h-7 shrink-0 px-3 text-[12px]")}
+                    >
+                      <Mail className="size-3" aria-hidden />
+                      {saving ? "…" : "Turn on"}
+                    </button>
+                  </div>
+                )
+              ) : (
+                <>
+                  <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground">
+                    Sign in and get one email a day when {what} files new trades. Your watchlist comes with
+                    you to every device.
+                  </p>
+                  <a
+                    href={signInHref()}
+                    onClick={() => {
+                      // Follow first, so the subject is in the watchlist the
+                      // sign-in carries over to the account.
+                      if (subject && normId && !isFollowed) {
+                        toggle({ kind: subject.kind, id: normId, label: subject.label });
+                      }
+                      trackEvent("sign_in_start", { from: "alerts_popover" });
+                    }}
+                    className={cn(BUTTON_PRIMARY, "mt-2 h-8 px-3 text-[12px]")}
+                  >
+                    <Mail className="size-3" aria-hidden />
+                    {subject && !isFollowed ? `Follow & sign in` : "Sign in for email alerts"}
+                  </a>
+                </>
+              )}
+            </div>
 
             <div className="flex items-center justify-between border-t border-border/60 pt-2.5 text-[12px]">
               <a
@@ -485,6 +447,7 @@ export function ActiveWatchlistBanner({
       tickers: mergedTickers,
       labels: state.labels,
     });
+    pushWatchChange({ add: { members: activeWatch.members, tickers: activeWatch.tickers } });
     trackEvent("watchlist_import_shared", { count: tokens.length });
   };
 

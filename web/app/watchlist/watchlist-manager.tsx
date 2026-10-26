@@ -6,7 +6,8 @@ import { cn } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
 import { BUTTON, BUTTON_PRIMARY, FIELD } from "../ui";
 import { Card, SectionTitle } from "../charts";
-import { useWatchlist } from "../watchlist-client";
+import { useAccount, useWatchlist } from "../watchlist-client";
+import { AccountPanel } from "../account-client";
 import { isBioguideId, isWatchTicker, watchlistFeedHref } from "@/lib/watchlist";
 
 export interface ManagedSubscriptionProps {
@@ -32,6 +33,7 @@ export function WatchlistManager({
   emailEnabled: boolean;
 }) {
   const { state, mounted, toggle, clear } = useWatchlist();
+  const signedIn = useAccount().status === "signed_in";
   const [addInput, setAddInput] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
 
@@ -43,8 +45,7 @@ export function WatchlistManager({
     }
   }, [statusCode]);
 
-  // Email subscribe / preferences state
-  const [email, setEmail] = useState(initialSub?.email ?? "");
+  // Preferences opened from an email link (`?token=`)
   const [subMembers, setSubMembers] = useState<string[]>(initialSub?.members ?? []);
   const [subTickers, setSubTickers] = useState<string[]>(initialSub?.tickers ?? []);
   const [clusters, setClusters] = useState(initialSub?.clusters ?? true);
@@ -72,59 +73,6 @@ export function WatchlistManager({
     setAddError("Enter a stock ticker (e.g. NVDA, BRK.B) or a Bioguide ID (e.g. P000197).");
   };
 
-  const handleSubscribeNew = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setFeedback(null);
-    try {
-      const res = await fetch("/api/alerts/subscribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          members: state.members,
-          tickers: state.tickers,
-          clusters,
-          weeklyDigest,
-        }),
-      });
-      const data = (await res.json()) as {
-        message?: string;
-        error?: string;
-        status?: string;
-        code?: string;
-      };
-      trackEvent("alert_email_subscribed", {
-        from: "watchlist_page",
-        status: res.ok ? (data.status ?? "ok") : (data.code ?? "error"),
-        members: state.members.length,
-        tickers: state.tickers.length,
-        clusters,
-        weeklyDigest,
-      });
-      if (!res.ok) {
-        setFeedback({ tone: "err", text: data.error ?? "Could not subscribe right now." });
-      } else {
-        setFeedback({
-          tone: "ok",
-          text: data.message ?? "Check your inbox to confirm your daily alert subscription.",
-        });
-      }
-    } catch {
-      trackEvent("alert_email_subscribed", {
-        from: "watchlist_page",
-        status: "network_error",
-        members: state.members.length,
-        tickers: state.tickers.length,
-        clusters,
-        weeklyDigest,
-      });
-      setFeedback({ tone: "err", text: "Network error while subscribing." });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const handleSaveTokenPreferences = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token) return;
@@ -140,6 +88,9 @@ export function WatchlistManager({
           tickers: subTickers,
           clusters,
           weeklyDigest,
+          // Saving the digest's settings is asking for the digest, so it
+          // undoes an earlier unsubscribe link.
+          emailAlerts: true,
         }),
       });
       const data = (await res.json()) as { error?: string };
@@ -322,7 +273,7 @@ export function WatchlistManager({
       <section className="grid gap-8 lg:grid-cols-2 lg:gap-5">
         <div className="flex flex-col [&>:last-child]:flex-1">
           <SectionTitle
-            kicker="On-Device Watchlist"
+            kicker={signedIn ? "Synced Watchlist" : "On-Device Watchlist"}
             right={
               totalLocal > 0 ? (
                 <a href={feedHref} className="ink-link text-[13px]">
@@ -422,7 +373,7 @@ export function WatchlistManager({
               </div>
             ) : (
               <p className="text-[13px] text-muted-foreground">
-                Your watchlist on this device is empty. Follow members on <a href="/politicians" className="ink-link">/politicians</a> or stocks on <a href="/tickers" className="ink-link">/tickers</a>.
+                {signedIn ? "Your watchlist is empty." : "Your watchlist on this device is empty."} Follow members on <a href="/politicians" className="ink-link">/politicians</a> or stocks on <a href="/tickers" className="ink-link">/tickers</a>.
               </p>
             )}
           </Card>
@@ -430,67 +381,12 @@ export function WatchlistManager({
 
         <div className="flex flex-col [&>:last-child]:flex-1">
           <SectionTitle
-            kicker="Daily Email Digest"
+            kicker="Account & Email Digest"
             right={<span className="text-muted-foreground">At most 1 email / day</span>}
           >
-            Get email alerts
+            Your account
           </SectionTitle>
-          <Card className="space-y-4">
-            <p className="text-[14px] leading-relaxed text-ink-2">
-              Subscribe your watchlist to a passwordless daily email digest. Whenever a followed member files a STOCK Act report, a corporate insider files an SEC Form 4 on a followed ticker, or a cluster forms, you receive one combined morning summary.
-            </p>
-            <form onSubmit={handleSubscribeNew} className="space-y-4">
-              <div>
-                <label className="block pl-1 text-[13px] font-medium text-muted-foreground">
-                  Email address
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    className={cn(FIELD, "mt-1.5")}
-                  />
-                </label>
-              </div>
-              <div className="space-y-2 text-[13.5px]">
-                <label className="flex cursor-pointer items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={clusters}
-                    onChange={(e) => setClusters(e.target.checked)}
-                    className="size-4 accent-foreground"
-                  />
-                  <span>Include high-signal congressional &amp; insider cluster alerts</span>
-                </label>
-                <label className="flex cursor-pointer items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={weeklyDigest}
-                    onChange={(e) => setWeeklyDigest(e.target.checked)}
-                    className="size-4 accent-foreground"
-                  />
-                  <span>Include weekly consensus &amp; convergence roundup</span>
-                </label>
-              </div>
-              <div className="flex items-center justify-between gap-3 pt-1">
-                <span className="text-[12px] text-muted-foreground">
-                  {totalLocal > 0
-                    ? `Includes your ${totalLocal} followed item${totalLocal === 1 ? "" : "s"}`
-                    : "Subscribes to selected digest options"}
-                </span>
-                <button type="submit" disabled={submitting} className={BUTTON_PRIMARY}>
-                  <Mail className="size-3.5" aria-hidden />
-                  {submitting ? "Sending…" : "Subscribe"}
-                </button>
-              </div>
-              {!emailEnabled ? (
-                <p className="text-[12px] text-muted-foreground">
-                  Note: On local/preview builds without Resend &amp; Private Blob credentials configured, your watchlist operates in on-device and shareable-URL mode.
-                </p>
-              ) : null}
-            </form>
-          </Card>
+          <AccountPanel emailEnabled={emailEnabled} />
         </div>
       </section>
     </div>
