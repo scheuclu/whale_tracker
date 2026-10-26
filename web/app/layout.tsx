@@ -17,7 +17,7 @@ import { relativeTime } from "@/lib/format";
 import { SITE_DESCRIPTION, SITE_NAME, siteUrl } from "@/lib/site";
 import { SearchForm, SearchLink, Tabs, ThemeToggle } from "./nav";
 import { HeaderWatchlistPill } from "./watchlist-client";
-import { HeaderAccountButton } from "./account-client";
+import { HeaderAccountButton, HeaderAlertsButton } from "./account-client";
 import "./globals.css";
 import "./motion.css";
 
@@ -90,7 +90,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <Link
                   href="/"
                   className="group -m-1 flex min-w-0 items-center gap-2.5 rounded-[12px] p-1 outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-ring"
-                  aria-label="FatCat Watch — feed"
+                  aria-label="FatCat Watch — home"
                 >
                   <span className="flex size-8 items-center justify-center rounded-[9px] bg-fill/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_1px_2px_rgba(0,0,0,0.05)] ring-1 ring-black/[0.05] transition-transform duration-200 ease-out motion-safe:group-hover:scale-105 dark:ring-white/[0.08]">
                     <BrandMark className="size-[22px] transition-transform duration-200 ease-out motion-safe:group-hover:-rotate-6" />
@@ -107,6 +107,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <SearchForm className="hidden w-56 sm:flex md:w-64 lg:w-56 xl:w-64" />
                 <SearchLink className="sm:hidden" />
                 <ThemeToggle />
+                <HeaderAlertsButton />
                 <HeaderAccountButton />
               </div>
             </div>

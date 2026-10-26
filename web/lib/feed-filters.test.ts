@@ -73,8 +73,8 @@ test("empty and repeated parameters: blank is unset, the first repeat wins", () 
 });
 
 test("hrefs: the feed anchors the list, the export is the same query", () => {
-  assert.equal(feedHref({}), "/");
-  assert.equal(feedHref({ action: "sell", party: "R" }, 240), "/?action=sell&party=R&offset=240#trades");
+  assert.equal(feedHref({}), "/feed");
+  assert.equal(feedHref({ action: "sell", party: "R" }, 240), "/feed?action=sell&party=R&offset=240#trades");
   assert.equal(exportHref({}), "/api/export.csv");
   assert.equal(exportHref({ ticker: "NVDA" }), "/api/export.csv?ticker=NVDA");
   assert.equal(exportHref({ member: "Nancy Pelosi" }), "/api/export.csv?member=Nancy+Pelosi");

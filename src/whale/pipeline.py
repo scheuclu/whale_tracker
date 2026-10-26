@@ -172,25 +172,28 @@ TRACK_RUN_SOFT_LIMIT_S = 900
 
 def _sync_track_record(conn: sqlite3.Connection, config: Config, dry_run: bool = False,
                        deadline: float | None = None) -> None:
-    """Best-effort, last: the members' track record is the least urgent
-    thing a run produces and fetches the most. `track.sync` absorbs the
-    failures it knows about (a throttle, a wall, a ticker that errors) and
-    keeps its own budget; this guard is for everything else. Skipped on a
-    dry run, which writes nothing."""
+    """Best-effort, last: the track record is the least urgent thing a run
+    produces and fetches the most. Members of Congress first, then corporate
+    insiders, each in its own tables under its own budget and the run's
+    shared deadline. `track.sync` absorbs the failures it knows about (a
+    throttle, a wall, a ticker that errors); this guard is for everything
+    else, per population, so a fault in one never stops the other. Skipped
+    on a dry run, which writes nothing."""
     if dry_run:
         return
-    try:
-        result = track.sync(conn, config, deadline=deadline)
-    except Exception as exc:
-        log.exception("track record failed unexpectedly")
+    for population in (track.CONGRESS, track.INSIDERS):
         try:
-            conn.rollback()
-            db.set_state(conn, track.STATE_STATUS, f"error: {exc}"[:300])
-            conn.commit()
-        except Exception:
-            log.exception("could not record the track-record failure")
-        return
-    log.info("track record: %s", result.summary())
+            result = track.sync(conn, config, deadline=deadline, population=population)
+        except Exception as exc:
+            log.exception("track record (%s) failed unexpectedly", population.name)
+            try:
+                conn.rollback()
+                db.set_state(conn, population.state_status, f"error: {exc}"[:300])
+                conn.commit()
+            except Exception:
+                log.exception("could not record the track-record failure")
+            continue
+        log.info("track record (%s): %s", population.name, result.summary())
 
 
 # --- sync -------------------------------------------------------------------

@@ -2,7 +2,7 @@ import { STOCK_ACT_DEADLINE_DAYS, getLateTotals, getPoliticianTotals } from "@/l
 import { CARD_SIZE, count, noun, renderPageCard } from "../../share-card";
 
 /**
- * The card for `/politicians?view=late`. A query-string view cannot have a
+ * The card for `/rankings?view=late`. A query-string view cannot have a
  * file-based card in its own segment (the image route never sees the
  * search params), so the query-string views' cards live under app/cards/
  * and the page names them through `pageCard` (lib/seo.ts). This folder has

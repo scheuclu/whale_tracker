@@ -2,7 +2,7 @@ import { getInsiderIssuer } from "@/lib/insider-queries";
 import { BUY, CARD_SIZE, SELL, cardDate, count, noun, renderPageCard, renderPlainCard } from "../../../share-card";
 
 /**
- * The card for `/insiders?t=<SYMBOL>` (see app/cards/late for why it lives
+ * The card for an insider-only stock page (`/tickers/<SYMBOL>`; was `/insiders?t=<SYMBOL>`) (see app/cards/late for why it lives
  * here). Counts only, from SEC Form 4: never pooled with congressional data.
  */
 

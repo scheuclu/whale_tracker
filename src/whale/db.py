@@ -65,7 +65,7 @@ from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 
 # The alerts table's columns, shared by the fresh-database DDL and the
 # version-13 rebuild so the two cannot drift.
@@ -535,6 +535,72 @@ CREATE TABLE IF NOT EXISTS track_price_fetches (
 );
 """
 
+# Insider track record (schema 17): the same measurement for corporate
+# insiders, in tables of its own (CLAUDE.md, "Track record" → "Insiders
+# later"). A decision is (primary reporting owner, ticker, direction, Form 4)
+# — owner_index = 0, as everywhere "distinct insiders" is counted — keyed on
+# the owner's CIK. Never rows in the congressional tables and never one
+# ranking with them; the per-ticker fetch record (`track_price_fetches`) is
+# shared, because a symbol's price series does not depend on who traded it.
+_INSIDER_TRACK_DDL = """
+CREATE TABLE IF NOT EXISTS insider_track_decisions (
+  id INTEGER PRIMARY KEY,
+  filing_id INTEGER NOT NULL REFERENCES insider_filings(id) ON DELETE CASCADE,
+  owner_cik TEXT NOT NULL,             -- the filing's primary reporting owner
+  ticker TEXT NOT NULL,
+  direction TEXT NOT NULL,             -- 'buy' | 'sell'
+  tx_date TEXT,
+  rows INTEGER NOT NULL,
+  exclusion TEXT,
+  t0_trade TEXT,
+  t0_disclosure TEXT,
+  signed_trade_30 REAL, signed_trade_90 REAL, signed_trade_180 REAL,
+  signed_disclosure_30 REAL, signed_disclosure_90 REAL, signed_disclosure_180 REAL,
+  checked_through TEXT,
+  series_ended TEXT,
+  UNIQUE (filing_id, ticker, direction)
+);
+
+CREATE TABLE IF NOT EXISTS insider_track_scores (
+  owner_cik TEXT NOT NULL,
+  horizon INTEGER NOT NULL,
+  n INTEGER NOT NULL,
+  filings INTEGER NOT NULL,
+  min_decisions INTEGER NOT NULL,
+  min_filings INTEGER NOT NULL,
+  qualifies INTEGER NOT NULL,
+  rank INTEGER,
+  trade_mean REAL NOT NULL, trade_score REAL NOT NULL, trade_lo REAL, trade_hi REAL,
+  trade_hit_rate REAL NOT NULL, trade_luck REAL,
+  disclosure_mean REAL NOT NULL, disclosure_score REAL NOT NULL, disclosure_lo REAL,
+  disclosure_hi REAL, disclosure_hit_rate REAL NOT NULL, disclosure_luck REAL,
+  computed_at TEXT NOT NULL,
+  PRIMARY KEY (owner_cik, horizon)
+);
+
+CREATE TABLE IF NOT EXISTS insider_track_model (
+  clock TEXT NOT NULL,
+  horizon INTEGER NOT NULL,
+  k REAL, sigma2 REAL, tau2 REAL,
+  mean REAL,
+  members_fit INTEGER NOT NULL,
+  decisions INTEGER NOT NULL,
+  members INTEGER NOT NULL,             -- insiders, in this table
+  ranked INTEGER NOT NULL,
+  min_decisions INTEGER NOT NULL,
+  min_filings INTEGER NOT NULL,
+  computed_at TEXT NOT NULL,
+  PRIMARY KEY (clock, horizon)
+);
+
+CREATE TABLE IF NOT EXISTS insider_track_coverage (
+  outcome TEXT PRIMARY KEY,
+  rows INTEGER NOT NULL,
+  decisions INTEGER NOT NULL,
+  computed_at TEXT NOT NULL
+);
+"""
+
 # Statuses whose transactions count toward statistics. A filing that failed to
 # parse contributes nothing, and one that is merely 'new' has no rows yet.
 COUNTED_STATUSES = ("parsed", "notified", "backfilled")
@@ -639,6 +705,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
         # `whale track-record`) fills them; the fill needs the price source,
         # so there is nothing to do at migration time.
         conn.executescript(_TRACK_DDL)
+    if version < 17:
+        # Insider track record tables; filled by the poll run's insider
+        # track step (or `whale track-record --insiders`).
+        conn.executescript(_INSIDER_TRACK_DDL)
     if version < SCHEMA_VERSION:
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         conn.commit()

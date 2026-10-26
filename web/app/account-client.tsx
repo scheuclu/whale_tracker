@@ -243,7 +243,9 @@ export function DashboardSync({ follows }: { follows: string }) {
   const account = useAccount();
   const router = useRouter();
   const current =
-    account.status === "signed_in" ? [...account.account.members, ...account.account.tickers].join(",") : null;
+    account.status === "signed_in"
+      ? [...account.account.members, ...account.account.tickers, ...(account.account.insiders ?? [])].join(",")
+      : null;
   useEffect(() => {
     if (current !== null && current !== follows) router.refresh();
   }, [current, follows, router]);
@@ -251,7 +253,7 @@ export function DashboardSync({ follows }: { follows: string }) {
 }
 
 /** An unfollow control on a dashboard card. */
-export function UnfollowButton({ kind, id, label }: { kind: "member" | "ticker"; id: string; label: string }) {
+export function UnfollowButton({ kind, id, label }: { kind: "member" | "ticker" | "insider"; id: string; label: string }) {
   const [busy, setBusy] = useState(false);
   return (
     <button
@@ -259,7 +261,9 @@ export function UnfollowButton({ kind, id, label }: { kind: "member" | "ticker";
       disabled={busy}
       onClick={async () => {
         setBusy(true);
-        const ok = await changeFollows({ remove: kind === "member" ? { members: [id] } : { tickers: [id] } });
+        const ok = await changeFollows({
+          remove: kind === "member" ? { members: [id] } : kind === "ticker" ? { tickers: [id] } : { insiders: [id] },
+        });
         trackEvent("watchlist_toggle", { kind, id, followed: false, from: "dashboard", ok });
         setBusy(false);
       }}
@@ -348,7 +352,7 @@ function SignedInPanel({ account }: { account: Account }) {
     else setNotice("Could not delete the account. Please try again.");
   };
 
-  const followed = account.members.length + account.tickers.length;
+  const followed = account.members.length + account.tickers.length + (account.insiders?.length ?? 0);
 
   return (
     <Card className="space-y-5">
@@ -447,5 +451,40 @@ function SignedInPanel({ account }: { account: Account }) {
         )}
       </div>
     </Card>
+  );
+}
+
+/**
+ * The landing page's call to action: "Get free alerts" (to sign in, then the
+ * dashboard) for a visitor, "Your dashboard" once signed in. Rendered in the
+ * signed-out form on the server, like every account control (lib/auth.ts).
+ */
+export function AlertsCta({ from, className }: { from: string; className?: string }) {
+  const account = useAccount();
+  const signedIn = account.status === "signed_in";
+  return (
+    <a
+      href={signedIn ? "/account" : "/signin?next=%2Faccount"}
+      onClick={() => trackEvent(signedIn ? "dashboard_cta_click" : "sign_in_start", { from })}
+      className={cn(BUTTON_PRIMARY, "h-11 px-6 text-[15px]", className)}
+    >
+      {signedIn ? <UserRound className="size-4" aria-hidden /> : <Mail className="size-4" aria-hidden />}
+      {signedIn ? "Your dashboard" : "Get free alerts"}
+    </a>
+  );
+}
+
+/** The masthead's "Get alerts" capsule, beside the account icon, for a signed-out visitor on a wide screen. */
+export function HeaderAlertsButton() {
+  const account = useAccount();
+  if (account.status !== "signed_out") return null;
+  return (
+    <a
+      href="/signin?next=%2Faccount"
+      onClick={() => trackEvent("sign_in_start", { from: "header_cta" })}
+      className={cn(BUTTON_PRIMARY, "hidden h-8 px-3.5 text-[13px] lg:inline-flex")}
+    >
+      Get alerts
+    </a>
   );
 }

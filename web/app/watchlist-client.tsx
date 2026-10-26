@@ -10,6 +10,7 @@ import {
   serializeWatchParam,
   toggleWatchItem,
   watchlistFeedHref,
+  type WatchKind,
   type WatchlistState,
 } from "@/lib/watchlist";
 import {
@@ -58,9 +59,9 @@ export function useWatchlist() {
   const signedIn = account.status === "signed_in";
   const state = signedIn ? stored : EMPTY_WATCHLIST;
 
-  const toggle = useCallback((item: { kind: "member" | "ticker"; id: string; label?: string }) => {
+  const toggle = useCallback((item: { kind: WatchKind; id: string; label?: string }) => {
     const id = item.id.trim().toUpperCase();
-    const ids = item.kind === "member" ? { members: [id] } : { tickers: [id] };
+    const ids = item.kind === "member" ? { members: [id] } : item.kind === "ticker" ? { tickers: [id] } : { insiders: [id] };
     // Loading means a session cookie is there and being checked: the change
     // is queued and sent once it is. Signed out, it waits for a sign-in.
     if (getAccountState().status === "signed_out") {
@@ -103,15 +104,15 @@ export function FollowButton({
   label,
   className,
 }: {
-  kind: "member" | "ticker";
+  kind: WatchKind;
   id: string;
   label?: string;
   className?: string;
 }) {
   const { state, mounted, toggle } = useWatchlist();
   const normId = id.trim().toUpperCase();
-  const isFollowed =
-    mounted && (kind === "member" ? state.members.includes(normId) : state.tickers.includes(normId));
+  const list = kind === "member" ? state.members : kind === "ticker" ? state.tickers : state.insiders;
+  const isFollowed = mounted && list.includes(normId);
 
   return (
     <button
@@ -478,6 +479,7 @@ export function ActiveWatchlistBanner({
     writeWatchlist({
       members: mergedMembers,
       tickers: mergedTickers,
+      insiders: state.insiders,
       labels: state.labels,
     });
     pushWatchChange({ add: { members: activeWatch.members, tickers: activeWatch.tickers } });

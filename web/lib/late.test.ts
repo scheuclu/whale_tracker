@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import * as q from "./queries.ts";
 
-// The late view (/politicians?view=late) re-cuts the measure the politicians
+// The late view (/rankings?view=late) re-cuts the measure the politicians
 // tiles already report: trades disclosed more than 45 days after they were
 // made, trade date → filing date. Every query behind it must reconcile with
 // `getPoliticianTotals` on the committed database, or one dataset would show

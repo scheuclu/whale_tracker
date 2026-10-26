@@ -2,7 +2,7 @@ import { getTrackLeaderboard, points } from "@/lib/track-queries";
 import { CARD_SIZE, count, noun, renderPageCard } from "../../share-card";
 
 /**
- * The card for `/politicians?view=track` (a query-string view: its card
+ * The card for `/rankings` (the track record) (a query-string view: its card
  * lives under app/cards/, see app/cards/late). Counts and the base rate
  * only — no member is named on a card that travels without its caveats.
  */

@@ -93,12 +93,17 @@ export async function getFollowedTrades(
   return getTransactions({ watch: follows, limit });
 }
 
-/** Form 4 trades in a followed ticker, newest first. */
-export async function getFollowedInsiderTrades(tickers: string[], limit = 20): Promise<InsiderTradeRow[]> {
-  if (tickers.length === 0) return [];
-  const per = await Promise.all(tickers.map((t) => getInsiderTrades({ ticker: t, limit })));
+/** Form 4 trades in a followed ticker or by a followed insider, newest first, each once. */
+export async function getFollowedInsiderTrades(tickers: string[], limit = 20, ciks: string[] = []): Promise<InsiderTradeRow[]> {
+  if (tickers.length === 0 && ciks.length === 0) return [];
+  const per = await Promise.all([
+    ...tickers.map((t) => getInsiderTrades({ ticker: t, limit })),
+    ...ciks.map((cik) => getInsiderTrades({ cik, limit })),
+  ]);
+  const seen = new Set<number>();
   return per
     .flat()
+    .filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)))
     .sort((a, b) => (b.tx_date ?? "").localeCompare(a.tx_date ?? "") || b.id - a.id)
     .slice(0, limit);
 }

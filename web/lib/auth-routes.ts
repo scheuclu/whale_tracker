@@ -80,6 +80,7 @@ export function accountJson(s: StoredSubscription) {
     email: s.email,
     members: s.members,
     tickers: s.tickers,
+    insiders: s.insiders,
     clusters: s.clusters,
     weeklyDigest: s.weeklyDigest,
     emailAlerts: s.emailAlerts,

@@ -14,12 +14,16 @@ export const MAX_WATCH_ITEMS = 40;
 
 const BIOGUIDE_RE = /^[A-Z]\d{6}$/;
 const TICKER_RE = /^[A-Z]{1,6}(?:\.[A-Z]{1,2})?$/;
+const CIK_RE = /^\d{10}$/;
 
 export type WatchlistState = {
   /** Uppercase bioguide IDs, e.g. ["P000197", "C001123"]. */
   members: string[];
   /** Uppercase ticker symbols, e.g. ["NVDA", "MSFT"]. */
   tickers: string[];
+  /** Corporate insiders by SEC CIK (ten digits). Not part of `?watch=`: the
+   *  congressional feed has nothing to filter by them. */
+  insiders: string[];
   /** Optional display labels remembered from the page where the user clicked Follow. */
   labels: Record<string, string>;
 };
@@ -27,11 +31,30 @@ export type WatchlistState = {
 export const EMPTY_WATCHLIST: WatchlistState = {
   members: [],
   tickers: [],
+  insiders: [],
   labels: {},
 };
 
 export function isBioguideId(token: string): boolean {
   return BIOGUIDE_RE.test(token.trim().toUpperCase());
+}
+
+/** A corporate insider's SEC CIK as stored: ten digits, zero-padded. */
+export function isInsiderCik(token: string): boolean {
+  return CIK_RE.test(token.trim());
+}
+
+/** Deduplicated valid CIKs, at most MAX_WATCH_ITEMS. */
+export function cleanInsiderCiks(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const v of raw) {
+    if (typeof v !== "string") continue;
+    const t = v.trim();
+    if (CIK_RE.test(t) && !out.includes(t)) out.push(t);
+    if (out.length >= MAX_WATCH_ITEMS) break;
+  }
+  return out;
 }
 
 export function isWatchTicker(token: string): boolean {
@@ -100,7 +123,7 @@ export function serializeWatchParam(w: { members: readonly string[]; tickers: re
 /** Builds the homepage feed URL filtered to the visitor's watchlist. */
 export function watchlistFeedHref(w: { members: readonly string[]; tickers: readonly string[] }): string {
   const param = serializeWatchParam(w);
-  return param ? `/?watch=${encodeURIComponent(param)}#trades` : "/";
+  return param ? `/feed?watch=${encodeURIComponent(param)}#trades` : "/feed";
 }
 
 /** Normalizes raw JSON read from localStorage into a valid `WatchlistState`. */
@@ -123,17 +146,20 @@ export function sanitizeWatchlistState(raw: unknown): WatchlistState {
   return {
     members: parsed.members,
     tickers: parsed.tickers,
+    insiders: cleanInsiderCiks(obj.insiders),
     labels,
   };
 }
 
 /** Toggles a member or ticker in a `WatchlistState` and returns the next state + whether it is now followed. */
+export type WatchKind = "member" | "ticker" | "insider";
+
 export function toggleWatchItem(
   state: WatchlistState,
-  item: { kind: "member" | "ticker"; id: string; label?: string }
+  item: { kind: WatchKind; id: string; label?: string }
 ): { next: WatchlistState; followed: boolean } {
   const id = item.id.trim().toUpperCase();
-  const list = item.kind === "member" ? state.members : state.tickers;
+  const list = item.kind === "member" ? state.members : item.kind === "ticker" ? state.tickers : state.insiders;
   const exists = list.includes(id);
   const nextList = exists ? list.filter((x) => x !== id) : [...list, id].slice(-MAX_WATCH_ITEMS);
   const nextLabels = { ...state.labels };
@@ -145,6 +171,7 @@ export function toggleWatchItem(
     next: {
       members: item.kind === "member" ? nextList : state.members,
       tickers: item.kind === "ticker" ? nextList : state.tickers,
+      insiders: item.kind === "insider" ? nextList : state.insiders,
       labels: nextLabels,
     },
   };

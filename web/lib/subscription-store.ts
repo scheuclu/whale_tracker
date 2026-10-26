@@ -1,5 +1,5 @@
 import { emailSubscriberKey, normalizeEmail } from "./subscription-token";
-import { isBioguideId, isWatchTicker, MAX_WATCH_ITEMS } from "./watchlist";
+import { cleanInsiderCiks, isBioguideId, isWatchTicker, MAX_WATCH_ITEMS } from "./watchlist";
 
 /**
  * Email alert subscriptions stored in a private Vercel Blob store. Server-only.
@@ -23,6 +23,8 @@ export interface StoredSubscription {
   updatedAt: string;
   members: string[];
   tickers: string[];
+  /** Corporate insiders followed, by SEC CIK. Absent on records from before insider follows: []. */
+  insiders: string[];
   clusters: boolean;
   weeklyDigest: boolean;
   /**
@@ -118,6 +120,7 @@ export function parseStoredSubscription(body: string): StoredSubscription | null
     updatedAt: r.updatedAt,
     members: cleanMembers(r.members),
     tickers: cleanTickers(r.tickers),
+    insiders: cleanInsiderCiks(r.insiders),
     clusters: Boolean(r.clusters),
     weeklyDigest: Boolean(r.weeklyDigest),
     emailAlerts: r.emailAlerts === undefined ? true : Boolean(r.emailAlerts),
@@ -195,6 +198,7 @@ export async function upsertSubscription(
       updatedAt: nowIso,
       members,
       tickers,
+      insiders: existing ? existing.insiders : [],
       clusters,
       weeklyDigest,
       emailAlerts:
@@ -290,7 +294,7 @@ export async function signInAccount(
   backend: SubscriptionBlobBackend,
   secret: string,
   email: string,
-  local: { members?: string[]; tickers?: string[] } = {},
+  local: { members?: string[]; tickers?: string[]; insiders?: string[] } = {},
   now = new Date()
 ): Promise<StoredSubscription> {
   const norm = normalizeEmail(email);
@@ -308,6 +312,7 @@ export async function signInAccount(
       updatedAt: nowIso,
       members: cleanMembers([...(existing?.members ?? []), ...(local.members ?? [])]),
       tickers: cleanTickers([...(existing?.tickers ?? []), ...(local.tickers ?? [])]),
+      insiders: cleanInsiderCiks([...(existing?.insiders ?? []), ...(local.insiders ?? [])]),
       clusters: existing?.clusters ?? false,
       weeklyDigest: existing?.weeklyDigest ?? false,
       emailAlerts: existing?.emailAlerts ?? true,
@@ -320,8 +325,8 @@ export async function signInAccount(
 }
 
 export interface WatchChange {
-  add?: { members?: string[]; tickers?: string[] };
-  remove?: { members?: string[]; tickers?: string[] };
+  add?: { members?: string[]; tickers?: string[]; insiders?: string[] };
+  remove?: { members?: string[]; tickers?: string[]; insiders?: string[] };
 }
 
 /**
@@ -338,6 +343,7 @@ export async function updateAccountWatch(
 ): Promise<StoredSubscription | null> {
   const dropMembers = new Set(cleanMembers(change.remove?.members ?? []));
   const dropTickers = new Set(cleanTickers(change.remove?.tickers ?? []));
+  const dropInsiders = new Set(cleanInsiderCiks(change.remove?.insiders ?? []));
   return mutateSubscription(
     backend,
     secret,
@@ -351,6 +357,9 @@ export async function updateAccountWatch(
         ),
         tickers: cleanTickers([...existing.tickers, ...(change.add?.tickers ?? [])]).filter(
           (t) => !dropTickers.has(t)
+        ),
+        insiders: cleanInsiderCiks([...existing.insiders, ...(change.add?.insiders ?? [])]).filter(
+          (c) => !dropInsiders.has(c)
         ),
       },
     now
@@ -435,7 +444,11 @@ export async function listVerifiedSubscriptions(
       sub &&
       sub.verified &&
       sub.emailAlerts &&
-      (sub.members.length > 0 || sub.tickers.length > 0 || sub.clusters || sub.weeklyDigest)
+      (sub.members.length > 0 ||
+        sub.tickers.length > 0 ||
+        sub.insiders.length > 0 ||
+        sub.clusters ||
+        sub.weeklyDigest)
     ) {
       out.push(sub);
     }

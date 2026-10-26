@@ -144,7 +144,7 @@ export function feedHref(filters: TransactionFilters, offset = 0): string {
   const q = filtersToParams(filters);
   if (offset > 0) q.set("offset", String(offset));
   const s = q.toString();
-  return s ? `/?${s}#trades` : "/";
+  return s ? `/feed?${s}#trades` : "/feed";
 }
 
 /** The CSV export of the same filtered set. */

@@ -99,6 +99,7 @@ describe("subscription-store", () => {
       })
     );
     assert.equal(old?.emailAlerts, true);
+    assert.deepEqual(old?.insiders, []);
   });
 
   it("signs in: creates a verified account, merges the device's follows, keeps settings", async () => {
@@ -123,6 +124,19 @@ describe("subscription-store", () => {
     const verified = await signInAccount(backend, SECRET, "pending@example.com");
     assert.equal(verified.verified, true);
     assert.deepEqual(verified.tickers, ["MSFT"]);
+  });
+
+  it("follows corporate insiders by CIK alongside members and tickers", async () => {
+    const backend = createMemorySubscriptionBackend();
+    const created = await signInAccount(backend, SECRET, "reader@example.com", { insiders: ["0001234567", "nope"] });
+    assert.deepEqual(created.insiders, ["0001234567"]);
+    const changed = await updateAccountWatch(backend, SECRET, "reader@example.com", {
+      add: { insiders: ["0007654321"] },
+      remove: { insiders: ["0001234567"] },
+    });
+    assert.deepEqual(changed?.insiders, ["0007654321"]);
+    // An account that follows only insiders still gets its digest.
+    assert.equal((await listVerifiedSubscriptions(backend)).length, 1);
   });
 
   it("adds and removes follows item by item and changes settings", async () => {

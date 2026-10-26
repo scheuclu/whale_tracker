@@ -1,82 +1,35 @@
 import type { Metadata } from "next";
-import { assetLabel } from "@/lib/asset-label";
-import { redirect } from "next/navigation";
+import { Bell, Mail, Star, Users } from "lucide-react";
 import { getFilingSpan } from "@/lib/entities";
-import { getInsiderTotals } from "@/lib/insider-queries";
+import { getInsiderTotals, getInsiderTrades, type InsiderTradeRow } from "@/lib/insider-queries";
+import { getConsensusTickers, getPipeline, getTransactions, type TransactionRow } from "@/lib/queries";
+import { getTrackLeaderboard, points, type TrackScoreRow } from "@/lib/track-queries";
+import { assetLabel } from "@/lib/asset-label";
+import { insiderIssuerHref, memberHref, memberLabel, relativeTime, shortDate, tickerHref, usd } from "@/lib/format";
 import { pageMetadata } from "@/lib/seo";
 import { datasetLd, organizationLd, websiteLd } from "@/lib/structured-data";
+import { plural } from "@/lib/site";
 import { JsonLd } from "./json-ld";
-import {
-  getConsensusTickers,
-  getPipeline,
-  getTransactionTotals,
-  getTransactions,
-  getWeeklyActivity,
-} from "@/lib/queries";
-import {
-  getBothSides,
-  getSharedTickers,
-  type BothSidesRow,
-  type SharedTickers,
-} from "@/lib/crossover-queries";
-import {
-  COUNT_NOUN,
-  KIND_LABEL,
-  getAlerts,
-  isInsiderKind,
-  type AlertKind,
-  type AlertRow,
-} from "@/lib/alert-queries";
-import { FILTER_KEYS, feedHref, parseOffset, parseTransactionFilters } from "@/lib/feed-filters";
-import { memberHref, range, relativeTime, tickerHref, usd } from "@/lib/format";
-import { Card, DivergingSplit, SectionTitle, StatTile, type StatDelta } from "./charts";
-import { ExportLink, FilterBar, Pagination, ShownLine } from "./feed-controls";
-import { DirectionFilter, FeedList } from "./feed-list";
-import { ActionBadge, MoneyText, PartyBadge, Tag, TickerChip } from "./ui";
-import { Disclosure } from "./disclosure";
-import { DataError, PAGE_STACK, PageHeader, Quiet } from "./page-header";
-import { AgentAlternates } from "./agent-alternates";
+import { Card, DivergingSplit, SectionTitle } from "./charts";
+import { ActionBadge, Amount, BUTTON, MoneyText, PartyBadge, TickerChip } from "./ui";
+import { MemberAvatar } from "./avatar";
 import { GroupedList, LIST_FOOT_LINK, ROW_LINK } from "./grouped-list";
-import { ActiveWatchlistBanner, FeedWatchlistToggle, GetAlertsPopover } from "./watchlist-client";
+import { IntervalBar, Points, intervalText } from "./track-ui";
+import { LiveRelativeTime } from "./live-relative-time";
+import { SignalsAndConvergence } from "./signals";
+import { AlertsCta } from "./account-client";
+import { Quiet } from "./page-header";
 import { ChevronRight } from "lucide-react";
+
+/**
+ * The landing page. What the site is, in one screen, then the evidence:
+ * what is happening right now, both sources side by side (never summed),
+ * whose trades were followed by the biggest moves, where members agree, and
+ * how alerts reach you. The live feed itself is `/feed`.
+ */
 
 export const dynamic = "force-dynamic";
 
-/** Trades per page; `?offset=` pages through the rest, newest first. */
-const PAGE = 120;
-
-/** The stat tiles' trend window: rolling 7-day buckets back from today. */
-const WEEKS = 12;
-
-/** "filed Oct 12–18" for each rolling week, oldest first — the sparkline's hover names. */
-function rollingWeekLabels(weeks: number): string[] {
-  const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-  const now = Date.now();
-  const day = 86_400_000;
-  return Array.from({ length: weeks }, (_, i) => {
-    const ago = weeks - 1 - i;
-    return `filed ${fmt(new Date(now - (ago * 7 + 6) * day))}–${fmt(new Date(now - ago * 7 * day))}`;
-  });
-}
-
-/** Trades disclosed in the window against the equal window before it. No
- *  delta when the corpus does not cover the earlier window. */
-function tradesDelta(current: number, prior: number | null): StatDelta | undefined {
-  if (prior == null || prior === 0) return undefined;
-  const pct = Math.round(((current - prior) / prior) * 100);
-  return {
-    direction: pct > 0 ? "up" : pct < 0 ? "down" : "flat",
-    text: `${pct > 0 ? "+" : pct < 0 ? "−" : ""}${Math.abs(pct)}% vs prior ${WEEKS} wk`,
-    title: `${current.toLocaleString()} trades disclosed in the last ${WEEKS} weeks, ${prior.toLocaleString()} in the ${WEEKS} before`,
-  };
-}
-
-/**
- * The feed's filters and pages are views of this one page, so every variant
- * canonicalises to `/`: the newest-first list changes with each pipeline run,
- * and a filtered or offset copy of it has nothing a search result should
- * point at instead.
- */
 export async function generateMetadata(): Promise<Metadata> {
   let lead = "Every stock trade members of Congress disclose under the STOCK Act";
   try {
@@ -88,7 +41,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return pageMetadata({
     title: "FatCat Watch: congressional and insider stock trades",
     absoluteTitle: true,
-    description: `${lead}, newest first, plus SEC Form 4 insider trades. Amounts are shown as the ranges filed, never as invented exact figures.`,
+    description: `${lead}, plus SEC Form 4 corporate insider trades, with free email alerts. Amounts are shown as the ranges filed, never as invented exact figures.`,
     path: "/",
   });
 }
@@ -115,401 +68,407 @@ async function SiteStructuredData() {
   return <JsonLd data={dataset ? [organizationLd(), websiteLd(), dataset] : [organizationLd(), websiteLd()]} />;
 }
 
-export default async function FeedPage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
-  const params = await searchParams;
-  // The feed used to double as the member view (`?member=<name>`); that URL
-  // is answered with a 308 to /members/<slug> before it gets here
-  // (next.config.ts → app/api/legacy-redirect).
-
-  const { filters, ignored } = parseTransactionFilters(params);
-  const offset = parseOffset(params.offset);
-  // The filter form submits every field, blank ones included; send the
-  // reader to the canonical URL so a copied link carries only the filters.
-  // Not when something was ignored: the notice about it must still render.
-  if (!ignored.length && FILTER_KEYS.some((k) => params[k] === "")) redirect(feedHref(filters, offset));
-
-  let rows, totals, consensus, pipeline, weekly;
-  try {
-    [rows, totals, consensus, pipeline, weekly] = await Promise.all([
-      getTransactions({ ...filters, limit: PAGE, offset }),
-      getTransactionTotals(filters),
-      getConsensusTickers(90, 6),
-      getPipeline(),
-      getWeeklyActivity(WEEKS),
-    ]);
-  } catch (err) {
-    return <DataError error={err} />;
-  }
-
-  const weekLabels = rollingWeekLabels(WEEKS);
+export default async function HomePage() {
+  const [pipeline, insiderTotals] = await Promise.all([
+    getPipeline().catch(() => null),
+    getInsiderTotals().catch(() => null),
+  ]);
 
   return (
-    <div className={PAGE_STACK}>
+    <div className="space-y-16 sm:space-y-24">
       <SiteStructuredData />
-      <AgentAlternates markdown="/api/v1/feed.md" json="/api/v1/trades" />
-      <section id="overview" className="apple-snap-section">
-        <PageHeader
-          eyebrow={
-            <>
-              <span className="size-1.5 rounded-full bg-ok motion-safe:animate-pulse" aria-hidden />
-              House &amp; Senate · STOCK Act Disclosures
-            </>
-          }
-          title="Congressional trades"
-          subtitle="Stock trades members of the House and Senate disclose under the STOCK Act, reproduced as filed. Amounts are the disclosed bracket, never one exact figure."
-        >
-          <section aria-label="All disclosed trades" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-            <StatTile
-              label="Trades"
-              value={pipeline.totals.transactions.toLocaleString()}
-              hint={`disclosed · ${weekly.window.trades.toLocaleString()} in last ${WEEKS} wk`}
-              trend={weekly.trades}
-              trendLabels={weekLabels}
-              trendCaption="per week"
-              trendLabel={`Trades disclosed per week, last ${WEEKS} weeks, by filing date`}
-              delta={tradesDelta(weekly.window.trades, weekly.priorTrades)}
-            />
-            <StatTile
-              label="Tickers"
-              value={pipeline.totals.tickers.toLocaleString()}
-              hint={`distinct symbols · ${weekly.window.tickers.toLocaleString()} in last ${WEEKS} wk`}
-            />
-            <StatTile
-              label="Members"
-              value={pipeline.totals.members.toLocaleString()}
-              hint={`filing trades · ${weekly.window.members.toLocaleString()} in last ${WEEKS} wk`}
-            />
-            <StatTile
-              label="Filings"
-              value={pipeline.coverage.parsed.toLocaleString()}
-              hint={`parsed · ${weekly.window.filings.toLocaleString()} in last ${WEEKS} wk`}
-              trend={weekly.filings}
-              trendLabels={weekLabels}
-              trendCaption="per week"
-              trendLabel={`Filings parsed per week, last ${WEEKS} weeks, by filing date`}
-            />
-          </section>
-        </PageHeader>
-      </section>
-
+      <Hero
+        trades={pipeline?.totals.transactions ?? null}
+        members={pipeline?.totals.members ?? null}
+        insiderTrades={insiderTotals?.trades ?? null}
+        issuers={insiderTotals?.issuers ?? null}
+        updatedAt={pipeline?.lastUpdated ?? null}
+      />
       <SignalsAndConvergence />
-
-      {consensus.length ? (
-        <section id="consensus" className="apple-snap-section">
-          <SectionTitle
-            kicker="Bipartisan Activity"
-            right={<span className="text-muted-foreground">Last 90 days</span>}
-          >
-            Where members agree
-          </SectionTitle>
-          <Card>
-            <DivergingSplit
-              unit="members trading, by direction"
-              data={consensus.map((c) => ({
-                key: c.ticker,
-                label: c.ticker,
-                sublabel: assetLabel(c.asset_name, { ticker: c.ticker }) || undefined,
-                buy: c.buy_politicians,
-                sell: c.sell_politicians,
-                href: tickerHref(c.ticker),
-              }))}
-            />
-          </Card>
-        </section>
-      ) : null}
-
-      <section id="trades" className="apple-snap-section">
-        <SectionTitle
-          kicker="Live Disclosures"
-          right={<span className="text-muted-foreground">By trade date, newest first</span>}
-        >
-          Recent trades
-        </SectionTitle>
-
-        <ActiveWatchlistBanner
-          activeWatch={filters.watch}
-          clearHref={feedHref({ ...filters, watch: undefined })}
-        />
-
-        <FeedList
-          rows={rows}
-          toolbar={
-            <>
-              <DirectionFilter current={filters.action} hrefFor={(k) => feedHref({ ...filters, action: k })} />
-              <FeedWatchlistToggle
-                activeWatch={filters.watch}
-                allHref={feedHref({ ...filters, watch: undefined })}
-              />
-              <FilterBar filters={filters} ignored={ignored} />
-            </>
-          }
-          actions={<ExportLink filters={filters} />}
-          summary={<ShownLine offset={offset} shown={rows.length} totals={totals} />}
-          empty={
-            offset > 0 && totals.trades ? (
-              <>
-                Nothing past trade {totals.trades.toLocaleString()}.{" "}
-                <a href={feedHref(filters)} className="ink-link text-foreground">
-                  Back to the newest
-                </a>
-              </>
-            ) : undefined
-          }
-        />
-        <Pagination filters={filters} offset={offset} shown={rows.length} total={totals.trades} page={PAGE} />
-      </section>
+      <TwoSources />
+      <TrackRecords />
+      <Consensus />
+      <HowAlertsWork />
     </div>
   );
 }
 
-/** Trade-date window for the overlap. 30 days, not 90: this card wants both
- *  sides moving at once, and Form 4's two-business-day deadline fills the
- *  insider side immediately. */
-const BOTH_SIDES_DAYS = 30;
-const SIGNALS_LIMIT = 5;
+/* ------------------------------------------------------------------ hero */
 
-/**
- * Two-column Bento showcase right above the main feed:
- * Left: Latest triggered high-signal alerts from the alert log (`getAlerts`).
- * Right: Convergence radar (`BothSides`) showing tickers traded the same way
- * by both Congress and corporate insiders in the last 30 days.
- */
-async function SignalsAndConvergence() {
-  let alerts: AlertRow[] = [];
-  let rows: BothSidesRow[] = [];
-  let shared: SharedTickers = { tickers: 0, same_direction: 0 };
-  try {
-    [alerts, rows, shared] = await Promise.all([
-      getAlerts({ limit: SIGNALS_LIMIT }).catch(() => []),
-      getBothSides(BOTH_SIDES_DAYS, 6).catch(() => []),
-      getSharedTickers(BOTH_SIDES_DAYS).catch(() => ({ tickers: 0, same_direction: 0 })),
-    ]);
-  } catch {
-    return null;
-  }
-  if (!alerts.length && !rows.length) return null;
+function Hero({
+  trades,
+  members,
+  insiderTrades,
+  issuers,
+  updatedAt,
+}: {
+  trades: number | null;
+  members: number | null;
+  insiderTrades: number | null;
+  issuers: number | null;
+  updatedAt: string | null;
+}) {
+  const figures = [
+    trades != null ? { value: trades.toLocaleString("en-US"), label: "congressional trades" } : null,
+    members != null ? { value: members.toLocaleString("en-US"), label: "members of Congress" } : null,
+    insiderTrades != null ? { value: insiderTrades.toLocaleString("en-US"), label: "corporate insider trades" } : null,
+    issuers != null ? { value: issuers.toLocaleString("en-US"), label: "companies" } : null,
+  ].filter((f): f is { value: string; label: string } => f != null);
 
   return (
-    <section id="signals" className="apple-snap-section grid gap-8 lg:grid-cols-2 lg:gap-5">
-      <RecentSignalsCard alerts={alerts} />
-      <BothSidesCard rows={rows} shared={shared} />
+    <section className="apple-headline-reveal pt-2 text-center sm:pt-8">
+      <p className="inline-flex items-center gap-2 rounded-full bg-fill/85 px-3 py-1 text-[12px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+        <span className="size-1.5 rounded-full bg-ok motion-safe:animate-pulse" aria-hidden />
+        Updated <LiveRelativeTime iso={updatedAt} initial={relativeTime(updatedAt)} />
+      </p>
+      <h1 className="mx-auto mt-5 max-w-[16ch] text-balance text-[40px] font-bold leading-[1.04] tracking-[-0.035em] text-foreground sm:text-[64px]">
+        See what Congress and insiders are trading.
+      </h1>
+      <p className="mx-auto mt-5 max-w-[40rem] text-pretty text-[17px] leading-relaxed text-ink-2 sm:text-[21px]">
+        Every stock trade members of Congress disclose under the STOCK Act, and every large open-market trade
+        company insiders file with the SEC. Reproduced as filed, searchable, and in your inbox when it matters.
+      </p>
+      <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+        <AlertsCta from="home_hero" />
+        <a href="/feed" className={`${BUTTON} h-11 px-6 text-[15px]`}>
+          Browse the live feed
+        </a>
+      </div>
+      {figures.length ? (
+        <dl className="mx-auto mt-12 grid max-w-[52rem] grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-4">
+          {figures.map((f) => (
+            <div key={f.label}>
+              <dt className="sr-only">{f.label}</dt>
+              <dd>
+                <span className="tabular block text-[28px] font-semibold tracking-[-0.02em] text-foreground sm:text-[34px]">
+                  {f.value}
+                </span>
+                <span className="text-[13px] text-muted-foreground">{f.label}</span>
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
     </section>
   );
 }
 
-function SignalVolume({ a }: { a: AlertRow }) {
-  const insider = isInsiderKind(a.kind);
-  if (a.volume_min_cents != null) {
-    return (
-      <span
-        className="tabular text-[12.5px] font-medium text-ink-2"
-        title={insider ? "shares × reported price" : "the disclosed bracket range; the midpoint is an estimate"}
-      >
-        <MoneyText value={range(a.volume_min_cents, a.volume_max_cents)} />
-        {!insider ? (
-          <span className="text-muted-foreground">
-            {" "}
-            · est. <MoneyText value={usd(a.volume_mid_cents)} />
-          </span>
-        ) : null}
-      </span>
-    );
+/* ----------------------------------------------------------- two sources */
+
+const LATEST = 6;
+/** Rows read to find LATEST filings: one filing can hold dozens of trades. */
+const ROWS_READ = 300;
+
+/** Rows grouped into filings, in the order the rows arrive (newest filing first). */
+function byFiling<T>(rows: T[], key: (r: T) => string, limit: number): T[][] {
+  const groups = new Map<string, T[]>();
+  for (const r of rows) {
+    const k = key(r);
+    const g = groups.get(k);
+    if (g) g.push(r);
+    else if (groups.size < limit) groups.set(k, [r]);
   }
-  if (a.volume_mid_cents != null) {
-    return (
-      <span
-        className="tabular text-[12.5px] font-medium text-ink-2"
-        title={insider ? "shares × reported price" : "bracket-midpoint estimate; the range was not logged"}
-      >
-        {insider ? usd(a.volume_mid_cents) : `est. ${usd(a.volume_mid_cents)}`}
-      </span>
-    );
-  }
-  return null;
+  return [...groups.values()];
 }
 
-function RecentSignalsCard({ alerts }: { alerts: AlertRow[] }) {
+async function TwoSources() {
+  const [congress, insiders] = await Promise.all([
+    // Newest disclosure first, dated by filing: a trade date as filed can be
+    // mistyped into the future, and would otherwise sit at the top for months.
+    getTransactions({ order: "filed", limit: ROWS_READ }).catch(() => [] as TransactionRow[]),
+    getInsiderTrades({ order: "filed", limit: ROWS_READ }).catch(() => [] as InsiderTradeRow[]),
+  ]);
+  const congressFilings = byFiling(congress, (r) => r.doc_id, LATEST);
+  const insiderFilings = byFiling(insiders, (r) => r.accession, LATEST);
   return (
-    <div className="flex min-w-0 flex-col [&>:last-child]:flex-1">
-      <SectionTitle
-        kicker="Notable Signals"
-        right={
-          <span className="inline-flex items-center gap-2">
-            <GetAlertsPopover />
-          </span>
-        }
-      >
-        Recent alerts
-      </SectionTitle>
-      {alerts.length ? (
+    <section className="grid gap-8 lg:grid-cols-2 lg:gap-5">
+      <div className="flex min-w-0 flex-col [&>:last-child]:flex-1">
+        <SectionTitle kicker="STOCK Act · House & Senate" right={<span className="text-muted-foreground">newest filings</span>}>
+          Congress
+        </SectionTitle>
         <GroupedList
           footer={
-            <>
-              <Disclosure
-                size="sm"
-                lead="Congressional alerts show the disclosed bracket range (midpoints are estimates); insider alerts show shares × reported price."
-              >
-                <p>
-                  Triggered when 2+ members or 3+ corporate insiders converge on a ticker, or when a watched filer or C-suite buyer clears the alert threshold.
-                </p>
-              </Disclosure>
-              <a href="/alerts" className={LIST_FOOT_LINK}>
-                Every dispatched alert &amp; post-alert return
-                <ChevronRight aria-hidden className="size-3.5" strokeWidth={2.25} />
-              </a>
-            </>
+            <a href="/feed" className={LIST_FOOT_LINK}>
+              The live feed
+              <ChevronRight aria-hidden className="size-3.5" strokeWidth={2.25} />
+            </a>
           }
         >
-          {alerts.map((a) => {
-            const kind = a.kind as AlertKind;
-            const action = a.direction === "buy" ? "purchase" : a.direction === "sell" ? "sale" : null;
-            const hasTicker = Boolean(a.ticker && !/^\d{10}$/.test(a.ticker));
-            const who = a.member_name ?? a.participants;
-            return (
-              <li key={a.id} className="px-4 py-3 transition-colors duration-(--dur-fast) hover:bg-[var(--feed-hover)] sm:px-5">
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-                  <Tag variant="outline" className="font-medium text-ink-2">
-                    {KIND_LABEL[kind] ?? a.kind}
-                  </Tag>
-                  {action ? <ActionBadge action={action} /> : null}
-                  {hasTicker && a.ticker ? (
-                    <TickerChip
-                      ticker={a.ticker}
-                      href={isInsiderKind(a.kind) ? `/insiders?t=${encodeURIComponent(a.ticker)}` : undefined}
-                    />
-                  ) : null}
-                  <SignalVolume a={a} />
-                  <span className="flex-1" />
-                  <time dateTime={a.fired_at} title={a.fired_at} className="tabular text-[12px] text-muted-foreground">
-                    {relativeTime(a.fired_at)}
-                  </time>
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] text-ink-2">
-                  {(a.kind === "filing" || a.kind === "watchlist") && a.member_name ? (
-                    <>
-                      <a href={memberHref(a.member_name, a.bioguide_id)} className={ROW_LINK}>
-                        {a.member_name}
-                      </a>
-                      <PartyBadge party={a.party} />
-                    </>
-                  ) : who ? (
-                    <span className="min-w-0 truncate">{who}</span>
-                  ) : null}
-                  {a.window_days > 0 ? (
-                    <span className="text-[12px] text-muted-foreground">
-                      · {a.politician_count} {COUNT_NOUN[kind] ?? "filers"} in {a.window_days}d
-                    </span>
-                  ) : null}
-                </div>
-              </li>
-            );
-          })}
+          {congressFilings.length ? (
+            congressFilings.map((rows) => <CongressFiling key={rows[0].doc_id} rows={rows} />)
+          ) : (
+            <li className="px-5 py-4">
+              <Quiet>No trades yet.</Quiet>
+            </li>
+          )}
         </GroupedList>
-      ) : (
-        <Card>
-          <Quiet>No alerts recorded yet.</Quiet>
-        </Card>
-      )}
-    </div>
+      </div>
+      <div className="flex min-w-0 flex-col [&>:last-child]:flex-1">
+        <SectionTitle kicker="SEC Form 4 · officers & directors" right={<span className="text-muted-foreground">newest filings</span>}>
+          Corporate insiders
+        </SectionTitle>
+        <GroupedList
+          footer={
+            <a href="/insiders" className={LIST_FOOT_LINK}>
+              Insider activity
+              <ChevronRight aria-hidden className="size-3.5" strokeWidth={2.25} />
+            </a>
+          }
+        >
+          {insiderFilings.length ? (
+            insiderFilings.map((rows) => <InsiderFiling key={rows[0].accession} rows={rows} />)
+          ) : (
+            <li className="px-5 py-4">
+              <Quiet>No insider trades yet.</Quiet>
+            </li>
+          )}
+        </GroupedList>
+      </div>
+    </section>
+  );
+}
+
+const ROW = "px-4 py-3 transition-colors duration-(--dur-fast) hover:bg-[var(--feed-hover)] sm:px-5";
+const CHIPS_SHOWN = 4;
+
+/**
+ * One congressional filing: each direction once with what was traded that
+ * way, and the amount only when it is a single trade (brackets are not
+ * added up here).
+ */
+function CongressFiling({ rows }: { rows: TransactionRow[] }) {
+  const r = rows[0];
+  // Each direction once, then what was traded that way.
+  const sides = new Map<string, { key: string; ticker: string | null; label: string }[]>();
+  for (const x of rows) {
+    const list = sides.get(x.action) ?? [];
+    const key = x.ticker ?? x.asset_name;
+    if (!list.some((i) => i.key === key)) list.push({ key, ticker: x.ticker, label: assetLabel(x.asset_name, { ticker: null }) });
+    sides.set(x.action, list);
+  }
+  return (
+    <li className={ROW}>
+      <div className="flex items-center gap-2.5">
+        <MemberAvatar name={r.member_name} bioguideId={r.bioguide_id} size="sm" />
+        <a href={memberHref(r.member_name, r.bioguide_id)} className={`${ROW_LINK} min-w-0 truncate`}>
+          {memberLabel(r.member_name, null, r.state, r.district, r.chamber)}
+        </a>
+        <PartyBadge party={r.party} />
+        <span className="flex-1" />
+        <span className="tabular shrink-0 text-[12px] text-muted-foreground">filed {shortDate(r.filing_date)}</span>
+      </div>
+      <div className="mt-1.5 space-y-1.5 pl-[34px]">
+        {[...sides.entries()].map(([action, items]) => (
+          <div key={action} className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1.5">
+            <ActionBadge action={action} />
+            {items.slice(0, CHIPS_SHOWN).map((i) =>
+              i.ticker ? (
+                <TickerChip key={i.key} ticker={i.ticker} href={tickerHref(i.ticker)} />
+              ) : (
+                <span key={i.key} className="max-w-[16rem] truncate text-[13px] text-ink-2">
+                  {i.label}
+                </span>
+              )
+            )}
+            {items.length > CHIPS_SHOWN ? (
+              <span className="text-[12.5px] text-muted-foreground">+{items.length - CHIPS_SHOWN} more</span>
+            ) : null}
+          </div>
+        ))}
+        <p className="text-[12.5px] text-muted-foreground">
+          {rows.length === 1 ? (
+            <span className="font-medium text-ink-2">
+              <Amount min={r.amount_min_cents} max={r.amount_max_cents} exact={r.amount_exact_cents} />
+            </span>
+          ) : (
+            plural(rows.length, "trade")
+          )}
+        </p>
+      </div>
+    </li>
   );
 }
 
 /**
- * Tickers a member of Congress and a corporate insider traded the same way
- * inside the window. Two sets of books set beside each other — members from
- * House and Senate disclosures, insiders from SEC Form 4s — and never summed:
- * each count is that side's own aggregate, matched on the listed symbol alone.
+ * One Form 4. Per direction: the trades and their value (shares × reported
+ * price, summed within this one filing). A direction with an unpriced or
+ * implausible row says its sum is partial; one with no priced row has none.
  */
-function BothSidesCard({ rows, shared }: { rows: BothSidesRow[]; shared: SharedTickers }) {
-  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
-
+function InsiderFiling({ rows }: { rows: InsiderTradeRow[] }) {
+  const r = rows[0];
+  const sides = (["purchase", "sale"] as const)
+    .map((action) => {
+      const these = rows.filter((x) => x.action === action);
+      const priced = these.filter((x) => x.implausible !== 1 && x.amount_exact_cents != null);
+      return {
+        action,
+        n: these.length,
+        cents: priced.length ? priced.reduce((sum, x) => sum + (x.amount_exact_cents ?? 0), 0) : null,
+        partial: priced.length > 0 && priced.length < these.length,
+      };
+    })
+    .filter((side) => side.n > 0);
   return (
-    <div id="both-sides" className="flex min-w-0 flex-col [&>:last-child]:flex-1">
-      <SectionTitle
-        kicker="Convergence Radar"
-        right={
-          <span className="text-muted-foreground">
-            Last {BOTH_SIDES_DAYS}d · {shared.same_direction} same-way
+    <li className={ROW}>
+      <div className="flex items-center gap-2.5">
+        <span className="min-w-0 truncate text-[14px] font-semibold text-foreground">{r.insider_name ?? "Unknown filer"}</span>
+        <span className="min-w-0 truncate text-[13px] text-muted-foreground">{r.issuer_name}</span>
+        <span className="flex-1" />
+        <span className="tabular shrink-0 text-[12px] text-muted-foreground">filed {shortDate(r.filing_date)}</span>
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+        {r.ticker ? <TickerChip ticker={r.ticker} href={insiderIssuerHref(r.ticker)} /> : null}
+        {sides.map((side) => (
+          <span key={side.action} className="inline-flex items-center gap-1.5">
+            <ActionBadge action={side.action} />
+            <span className="tabular text-[13px] text-ink-2" title="shares × reported price, summed within this filing">
+              {side.cents != null ? (
+                <span className="font-medium">
+                  {side.partial ? "≥" : ""}
+                  <MoneyText value={usd(side.cents)} />
+                </span>
+              ) : (
+                "no value"
+              )}
+              {side.n > 1 ? <span className="text-muted-foreground"> · {plural(side.n, "trade")}</span> : null}
+            </span>
           </span>
+        ))}
+      </div>
+    </li>
+  );
+}
+
+/* --------------------------------------------------------- track records */
+
+async function TrackRecords() {
+  let ranked: TrackScoreRow[] = [];
+  try {
+    const board = await getTrackLeaderboard(90);
+    ranked = board.available ? board.ranked.slice(0, 5) : [];
+  } catch {
+    return null;
+  }
+  if (!ranked.length) return null;
+  const scale = Math.max(...ranked.flatMap((r) => [Math.abs(r.trade.lo ?? 0), Math.abs(r.trade.hi ?? 0), Math.abs(r.trade.score)]), 0.01);
+  return (
+    <section>
+      <SectionTitle
+        kicker="Track record · 90 trading days"
+        right={
+          <a href="/rankings" className="ink-link text-[13px]">
+            Full ranking →
+          </a>
         }
       >
-        Both sides
+        Whose trades were followed by the biggest moves
       </SectionTitle>
-      {rows.length ? (
-        <GroupedList
-          footer={
-            <>
-              <Disclosure
-                size="sm"
-                lead={
-                  <>
-                    Two sets of books, never summed: members are distinct filers on House and Senate disclosures,
-                    insiders are distinct primary reporting owners on SEC Form 4s.
-                  </>
-                }
-              >
-                <p>
-                  Matched on the listed symbol alone. Same direction, both inside the last {BOTH_SIDES_DAYS} days on
-                  trade date ({plural(shared.tickers, "ticker")} traded by both overall).
-                </p>
-                <p>
-                  Form 4 is due in two business days and a member&apos;s report in 45, so the member side of the most
-                  recent weeks is still arriving.
-                </p>
-              </Disclosure>
-              <a href="/insiders" className={LIST_FOOT_LINK}>
-                Explore corporate insider clusters
-                <ChevronRight aria-hidden className="size-3.5" strokeWidth={2.25} />
+      <p className="mb-4 max-w-[68ch] text-[14px] leading-relaxed text-muted-foreground">
+        How the stocks each member traded moved over the next 90 trading days against the S&amp;P 500, read the way
+        the trade pointed. A stock&apos;s move, not anyone&apos;s profit, and not evidence of wrongdoing. The bar is a 90%
+        interval: one that crosses the line cannot be told apart from no edge.
+      </p>
+      <GroupedList>
+        {ranked.map((r) => (
+          <li key={r.member_name} className={`${ROW} grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-x-3 sm:grid-cols-[1.5rem_minmax(0,22rem)_minmax(8rem,1fr)_5.5rem]`}>
+            <span className="tabular text-[13px] text-muted-foreground">{r.rank}</span>
+            <span className="flex min-w-0 items-center gap-2.5">
+              <MemberAvatar name={r.member_name} bioguideId={r.bioguide_id} size="sm" />
+              <a href={memberHref(r.member_name, r.bioguide_id)} className={`${ROW_LINK} min-w-0 truncate`}>
+                {memberLabel(r.member_name, null, r.state, r.district, r.chamber)}
               </a>
-            </>
-          }
-        >
-          {rows.map((r) => (
-            <li
-              key={`${r.ticker}-${r.direction}`}
-              className="px-4 py-3 transition-colors duration-(--dur-fast) hover:bg-[var(--feed-hover)] sm:px-5"
-            >
-              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                <TickerChip ticker={r.ticker} />
-                <ActionBadge action={r.direction === "buy" ? "purchase" : "sale"} />
-                <span
-                  className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground"
-                  title={r.issuer_name ?? r.asset_name ?? undefined}
-                >
-                  {assetLabel(r.issuer_name ?? r.asset_name, { ticker: r.ticker })}
-                </span>
-              </div>
-              <div className="tabular mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px]">
-                <a
-                  href={tickerHref(r.ticker)}
-                  className="font-medium text-foreground decoration-border-strong underline-offset-[3px] hover:underline"
-                >
-                  {plural(r.members, "member")}
-                </a>
-                <span className="text-muted-foreground">({plural(r.member_trades, "trade")})</span>
-                <span aria-hidden className="text-muted-foreground">
-                  ·
-                </span>
-                <a
-                  href={`/insiders?t=${encodeURIComponent(r.ticker)}`}
-                  className="font-medium text-foreground decoration-border-strong underline-offset-[3px] hover:underline"
-                >
-                  {plural(r.insiders, "insider")}
-                </a>
-                <span className="text-muted-foreground">({plural(r.insider_filings, "filing")})</span>
-              </div>
-            </li>
-          ))}
-        </GroupedList>
-      ) : (
-        <Card>
-          <Quiet>No symbol was traded in the same direction by both sides in the last {BOTH_SIDES_DAYS} days.</Quiet>
-        </Card>
-      )}
-    </div>
+              <PartyBadge party={r.party} />
+            </span>
+            <IntervalBar
+              className="hidden sm:block"
+              score={r.trade.score}
+              lo={r.trade.lo}
+              hi={r.trade.hi}
+              scale={scale}
+              label={`${points(r.trade.score)} points, 90% interval ${intervalText(r.trade.lo, r.trade.hi)}`}
+            />
+            <span className="text-right text-[15px] font-semibold">
+              <Points value={r.trade.score} />
+              <span className="block text-[11.5px] font-normal text-muted-foreground">{plural(r.n, "decision")}</span>
+            </span>
+          </li>
+        ))}
+      </GroupedList>
+    </section>
+  );
+}
+
+/* -------------------------------------------------------------- consensus */
+
+async function Consensus() {
+  const consensus = await getConsensusTickers(90, 6).catch(() => []);
+  if (!consensus.length) return null;
+  return (
+    <section>
+      <SectionTitle kicker="Bipartisan activity" right={<span className="text-muted-foreground">Last 90 days</span>}>
+        Where members agree
+      </SectionTitle>
+      <Card>
+        <DivergingSplit
+          unit="members trading, by direction"
+          data={consensus.map((c) => ({
+            key: c.ticker,
+            label: c.ticker,
+            sublabel: assetLabel(c.asset_name, { ticker: c.ticker }) || undefined,
+            buy: c.buy_politicians,
+            sell: c.sell_politicians,
+            href: tickerHref(c.ticker),
+          }))}
+        />
+      </Card>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------- how alerts work */
+
+const STEPS = [
+  {
+    icon: Star,
+    title: "Follow members and stocks",
+    body: "One tap on any member or ticker page. Your follows live on your account, on every device.",
+  },
+  {
+    icon: Mail,
+    title: "Get one email a day",
+    body: "When anything you follow files a new trade, a single morning digest. Nothing on quiet days.",
+  },
+  {
+    icon: Users,
+    title: "Catch the clusters",
+    body: "Optional alerts when several members, or several insiders, trade the same stock the same way.",
+  },
+];
+
+function HowAlertsWork() {
+  return (
+    <section className="tile apple-card-reveal px-6 py-10 text-center sm:px-12 sm:py-14">
+      <Bell className="mx-auto size-7 text-foreground" strokeWidth={1.8} aria-hidden />
+      <h2 className="mx-auto mt-4 max-w-[20ch] text-balance text-[30px] font-bold leading-tight tracking-[-0.03em] sm:text-[40px]">
+        Alerts that come to you.
+      </h2>
+      <p className="mx-auto mt-3 max-w-[36rem] text-[16px] leading-relaxed text-ink-2 sm:text-[17px]">
+        Free. No password: sign in with Google or a link by email.
+      </p>
+      <div className="mx-auto mt-10 grid max-w-[56rem] gap-8 text-left sm:grid-cols-3">
+        {STEPS.map(({ icon: Icon, title, body }) => (
+          <div key={title}>
+            <span className="flex size-10 items-center justify-center rounded-full bg-fill">
+              <Icon className="size-[18px] text-foreground" strokeWidth={2} aria-hidden />
+            </span>
+            <p className="mt-3 text-[16px] font-semibold text-foreground">{title}</p>
+            <p className="mt-1 text-[14px] leading-relaxed text-muted-foreground">{body}</p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-10">
+        <AlertsCta from="home_alerts" />
+      </div>
+    </section>
   );
 }

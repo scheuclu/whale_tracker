@@ -25,11 +25,11 @@ const SOURCES = [
 
 /** The reader sections, as in the masthead, plus search. */
 const SECTIONS = [
-  { href: "/", label: "Feed" },
+  { href: "/feed", label: "Feed" },
   { href: "/politicians", label: "Members" },
-  { href: "/tickers", label: "Tickers" },
   { href: "/insiders", label: "Insiders" },
-  { href: "/trends", label: "Trends" },
+  { href: "/tickers", label: "Stocks" },
+  { href: "/rankings", label: "Rankings" },
   { href: "/search", label: "Search" },
 ];
 
@@ -88,7 +88,7 @@ export function SiteFooter({
       <div className="mx-auto max-w-[1080px] px-4 pb-12 pt-10 sm:px-6 sm:pb-16 sm:pt-12">
         <div className="grid gap-x-10 gap-y-8 text-[12px] leading-relaxed text-muted-foreground sm:grid-cols-2 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.7fr)_minmax(0,1.1fr)_minmax(0,1.25fr)]">
           <div className="space-y-3.5">
-            <Link href="/" className="inline-flex items-center gap-2.5 rounded-control" aria-label="FatCat Watch — feed">
+            <Link href="/" className="inline-flex items-center gap-2.5 rounded-control" aria-label="FatCat Watch — home">
               <span className="flex size-7 items-center justify-center rounded-[8px] bg-card shadow-2xs ring-1 ring-border">
                 <BrandMark className="size-[18px]" />
               </span>

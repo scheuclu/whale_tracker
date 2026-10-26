@@ -24,7 +24,7 @@ const RANGE = new RegExp(`^${FIGURE}–${FIGURE}$`);
 const OPEN = new RegExp(`^≥${FIGURE}$`);
 const SINGLE = new RegExp(`^-?${FIGURE}$`);
 
-const BRACKET_PAGES = ["/", "/members/nancy-pelosi-p000197", "/tickers/MSFT", "/?action=sell"];
+const BRACKET_PAGES = ["/feed", "/members/nancy-pelosi-p000197", "/tickers/MSFT", "/feed?action=sell"];
 
 for (const path of BRACKET_PAGES) {
   test(`amounts render as disclosed ranges on ${path}`, async ({ page }) => {
@@ -67,7 +67,7 @@ for (const path of BRACKET_PAGES) {
 
 /** Every congressional trade row carries a bracket, not a bare figure. */
 test("every feed row renders its bracket", async ({ page }) => {
-  await visit(page, "/");
+  await visit(page, "/feed");
   const rows = page.locator("li.feed-row");
   expect(await rows.count()).toBeGreaterThan(10);
   const missing = await rows.evaluateAll((els) => els.filter((li) => !li.querySelector("svg[data-bracket-kind]")).length);
@@ -79,8 +79,8 @@ const TILE_PAGES = [
   "/members/nancy-pelosi-p000197",
   "/tickers/MSFT",
   "/insiders",
-  "/insiders?t=BBD",
-  "/trends",
+  "/tickers/BBD",
+  "/rankings?view=trends",
 ];
 
 for (const path of TILE_PAGES) {

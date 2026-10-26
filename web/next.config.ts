@@ -2,6 +2,9 @@ import path from "node:path";
 import type { NextConfig } from "next";
 import { PAGE_CDN_CACHE_CONTROL, PAGE_SOURCE } from "./lib/cache-policy";
 import { SECURITY_SOURCE, securityHeaders } from "./lib/security-headers";
+import { FILTER_KEYS } from "./lib/feed-filters";
+
+const FEED_REDIRECT_KEYS = [...FILTER_KEYS.filter((k) => k !== "member"), "offset"];
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["better-sqlite3"],
@@ -38,8 +41,25 @@ const nextConfig: NextConfig = {
   // original query string travels with the rewrite.
   // The watchlist page became the signed-in dashboard; old links (email
   // footers, bookmarks) keep working, query string included.
+  // `/` became the landing page and the feed moved to `/feed`: a filtered or
+  // paged feed link from before (bookmarks, digest emails, shared watchlists)
+  // carries its query string over. `?member=` is not here — it still goes to
+  // the member's own page through the legacy rewrite below.
   async redirects() {
-    return [{ source: "/watchlist", destination: "/account", permanent: true }];
+    return [
+      { source: "/watchlist", destination: "/account", permanent: true },
+      // The track record, the late view and the trends moved into /rankings;
+      // the query string (`h`, `w`, `t`, `view`) travels with them.
+      { source: "/politicians", has: [{ type: "query" as const, key: "view", value: "track" }], destination: "/rankings", permanent: true },
+      { source: "/politicians", has: [{ type: "query" as const, key: "view", value: "late" }], destination: "/rankings", permanent: true },
+      { source: "/trends", destination: "/rankings?view=trends", permanent: true },
+      ...FEED_REDIRECT_KEYS.map((key) => ({
+        source: "/",
+        has: [{ type: "query" as const, key }],
+        destination: "/feed",
+        permanent: true,
+      })),
+    ];
   },
   async rewrites() {
     return {
@@ -47,6 +67,8 @@ const nextConfig: NextConfig = {
         { source: "/politicians", has: [{ type: "query", key: "m" }], destination: "/api/legacy-redirect/member" },
         { source: "/", has: [{ type: "query", key: "member" }], destination: "/api/legacy-redirect/feed-member" },
         { source: "/tickers", has: [{ type: "query", key: "t" }], destination: "/api/legacy-redirect/ticker" },
+        { source: "/insiders", has: [{ type: "query", key: "t" }], destination: "/api/legacy-redirect/issuer" },
+        { source: "/insiders", has: [{ type: "query", key: "cik" }], destination: "/api/legacy-redirect/insider" },
       ],
       afterFiles: [],
       fallback: [],

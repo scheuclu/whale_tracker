@@ -7,7 +7,7 @@ import {
   KIND_LABEL,
   isInsiderKind,
 } from "@/lib/alert-queries";
-import { memberHref, range, relativeTime, telegramPlainText, usd } from "@/lib/format";
+import { insiderIssuerHref, memberHref, range, relativeTime, telegramPlainText, usd } from "@/lib/format";
 import { Card } from "../charts";
 import { ActionBadge, PartyBadge, Tag, TickerChip } from "../ui";
 import { ROW_LINK } from "../grouped-list";
@@ -105,7 +105,7 @@ function Subject({ a }: { a: AlertRow }) {
     return (
       <TickerChip
         ticker={a.ticker}
-        href={isInsiderKind(a.kind) ? `/insiders?t=${encodeURIComponent(a.ticker)}` : undefined}
+        href={isInsiderKind(a.kind) ? insiderIssuerHref(a.ticker) : undefined}
       />
     );
   }

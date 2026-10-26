@@ -54,7 +54,7 @@ type Card = { url: string; width: number; height: number; type: string; alt: str
  * X alike: one image route, so one render and one CDN entry per card rather
  * than two. `alt` is the page's own, specific description of the card.
  *
- * Pages that are a query-string view of a route (`/politicians?view=late`,
+ * Pages that are a query-string view of a route (`/rankings?view=late`,
  * `?committee=<id>`, `/insiders?t=<SYM>`) cannot have a file-based card —
  * the image route never sees the search params — so theirs live under
  * `app/cards/` and the page passes that path here.

@@ -36,9 +36,12 @@ export function PageHeader({
   subtitle,
   aside,
   share,
+  lead,
   children,
 }: {
   back?: { href: string; label: string };
+  /** In place of the back link, on the share row: a hub's view switcher (/rankings). */
+  lead?: React.ReactNode;
   /** The page's `ShareControl` (app/share-control.tsx), on the back link's row, right-aligned. */
   share?: React.ReactNode;
   eyebrow?: React.ReactNode;
@@ -55,9 +58,9 @@ export function PageHeader({
   return (
     <header className="space-y-6 sm:space-y-8">
       <div className="apple-headline-reveal space-y-3.5">
-        {back || share ? (
+        {back || share || lead ? (
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-            {back ? <BackLink href={back.href} label={back.label} /> : <span />}
+            {lead ?? (back ? <BackLink href={back.href} label={back.label} /> : <span />)}
             {share}
           </div>
         ) : null}

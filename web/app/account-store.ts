@@ -40,6 +40,7 @@ export interface Account {
   email: string;
   members: string[];
   tickers: string[];
+  insiders: string[];
   clusters: boolean;
   weeklyDigest: boolean;
   emailAlerts: boolean;
@@ -92,7 +93,12 @@ function storageSet(key: string, value: string | null): void {
 
 /** Copies the account's lists into localStorage, keeping remembered labels. */
 function mirror(account: Account): void {
-  writeWatchlist({ members: account.members, tickers: account.tickers, labels: readWatchlist().labels });
+  writeWatchlist({
+    members: account.members,
+    tickers: account.tickers,
+    insiders: account.insiders ?? [],
+    labels: readWatchlist().labels,
+  });
 }
 
 // --- account store -----------------------------------------------------------
@@ -103,8 +109,8 @@ let started = false;
 let queued: WatchChange[] = [];
 
 type WatchChange = {
-  add?: { members?: string[]; tickers?: string[] };
-  remove?: { members?: string[]; tickers?: string[] };
+  add?: { members?: string[]; tickers?: string[]; insiders?: string[] };
+  remove?: { members?: string[]; tickers?: string[]; insiders?: string[] };
 };
 
 function setState(next: AccountState): void {
@@ -175,14 +181,16 @@ export function startAccount(): void {
         const local = readWatchlist();
         add.members.push(...local.members);
         add.tickers.push(...local.tickers);
+        add.insiders.push(...local.insiders);
         storageSet(OWNER_KEY, account.email);
       }
       const members = [...new Set(add.members)].filter((m) => !account.members.includes(m));
       const tickers = [...new Set(add.tickers)].filter((t) => !account.tickers.includes(t));
-      if (members.length || tickers.length) {
+      const insiders = [...new Set(add.insiders)].filter((c) => !(account.insiders ?? []).includes(c));
+      if (members.length || tickers.length || insiders.length) {
         const merged = await api("/api/account/watch", {
           method: "POST",
-          body: JSON.stringify({ add: { members, tickers } }),
+          body: JSON.stringify({ add: { members, tickers, insiders } }),
         });
         if (merged?.account) account = merged.account;
       }
@@ -199,16 +207,16 @@ export function startAccount(): void {
   })();
 }
 
-function takePendingFollow(): { members: string[]; tickers: string[] } {
+function takePendingFollow(): { members: string[]; tickers: string[]; insiders: string[] } {
   const raw = storageGet(PENDING_KEY);
   storageSet(PENDING_KEY, null);
   try {
-    const p = raw ? (JSON.parse(raw) as { members?: unknown; tickers?: unknown; at?: unknown }) : null;
-    if (!p || typeof p.at !== "number" || Date.now() - p.at > PENDING_TTL_MS) return { members: [], tickers: [] };
+    const p = raw ? (JSON.parse(raw) as { members?: unknown; tickers?: unknown; insiders?: unknown; at?: unknown }) : null;
+    if (!p || typeof p.at !== "number" || Date.now() - p.at > PENDING_TTL_MS) return { members: [], tickers: [], insiders: [] };
     const strings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
-    return { members: strings(p.members), tickers: strings(p.tickers) };
+    return { members: strings(p.members), tickers: strings(p.tickers), insiders: strings(p.insiders) };
   } catch {
-    return { members: [], tickers: [] };
+    return { members: [], tickers: [], insiders: [] };
   }
 }
 
@@ -216,8 +224,14 @@ function takePendingFollow(): { members: string[]; tickers: string[] } {
  * A follow asked for while signed out: remembered, then the reader goes to
  * sign in and comes back here, where `startAccount` applies it.
  */
-export function followAfterSignIn(add: { members?: string[]; tickers?: string[] }, from: string): void {
-  storageSet(PENDING_KEY, JSON.stringify({ members: add.members ?? [], tickers: add.tickers ?? [], at: Date.now() }));
+export function followAfterSignIn(
+  add: { members?: string[]; tickers?: string[]; insiders?: string[] },
+  from: string
+): void {
+  storageSet(
+    PENDING_KEY,
+    JSON.stringify({ members: add.members ?? [], tickers: add.tickers ?? [], insiders: add.insiders ?? [], at: Date.now() })
+  );
   trackEvent("sign_in_start", { from });
   window.location.assign(signInHref());
 }

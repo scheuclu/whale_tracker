@@ -30,7 +30,7 @@ test("parseWatchParam and serializeWatchParam round-trip members and tickers", (
     tickers: ["NVDA", "BRK.B"],
   });
   assert.equal(serializeWatchParam(parsed!), "P000197,C001123,NVDA,BRK.B");
-  assert.equal(watchlistFeedHref(parsed!), "/?watch=P000197%2CC001123%2CNVDA%2CBRK.B#trades");
+  assert.equal(watchlistFeedHref(parsed!), "/feed?watch=P000197%2CC001123%2CNVDA%2CBRK.B#trades");
   assert.equal(parseWatchParam(""), null);
   assert.equal(parseWatchParam(undefined), null);
 });
@@ -64,4 +64,14 @@ test("toggleWatchItem adds and removes items while preserving labels", () => {
   const sanitized = sanitizeWatchlistState(step2.next);
   assert.deepEqual(sanitized.members, ["P000197"]);
   assert.deepEqual(sanitized.tickers, ["NVDA"]);
+});
+
+test("insiders are followed by CIK and stay out of the ?watch= feed filter", () => {
+  const { next, followed } = toggleWatchItem(EMPTY_WATCHLIST, { kind: "insider", id: "0001234567", label: "Hood Amy" });
+  assert.equal(followed, true);
+  assert.deepEqual(next.insiders, ["0001234567"]);
+  assert.equal(serializeWatchParam(next), "");
+  const restored = sanitizeWatchlistState({ ...next, insiders: ["0001234567", "12", 5] });
+  assert.deepEqual(restored.insiders, ["0001234567"]);
+  assert.deepEqual(sanitizeWatchlistState({ members: [], tickers: [] }).insiders, []);
 });

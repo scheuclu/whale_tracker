@@ -240,6 +240,8 @@ export async function getInsiderTrades(opts: {
   cik?: string;
   action?: string;
   days?: number;
+  /** "filed": newest filing first (the landing page). Default: newest trade date first. */
+  order?: "trade" | "filed";
   limit?: number;
 } = {}): Promise<InsiderTradeRow[]> {
   const db = await getDb();
@@ -274,7 +276,7 @@ export async function getInsiderTrades(opts: {
        ${FROM}
        ${sectors ? INSIDER_SECTOR_JOIN : ""}
        WHERE ${where.join(" AND ")} ${sinceClause(opts.days)}
-       ORDER BY t.tx_date DESC, t.id DESC
+       ORDER BY ${opts.order === "filed" ? "f.filing_date DESC, t.id DESC" : "t.tx_date DESC, t.id DESC"}
        LIMIT ?`
     )
     .all(...params) as InsiderTradeRow[];
