@@ -63,7 +63,7 @@ export async function TickerDetail({ stat }: { stat: TickerRow }) {
     <div className={PAGE_STACK}>
       <AgentAlternates ticker={ticker} />
       <header className="space-y-8 sm:space-y-10">
-        <div className="-mb-2 flex items-center justify-between sm:-mb-4">
+        <div className="mb-3 flex items-center justify-between sm:mb-4">
           <BackLink href="/tickers" label="Tickers" />
         </div>
         <SymbolHero

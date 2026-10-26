@@ -653,7 +653,7 @@ async function IssuerDetail({ ticker }: { ticker: string }) {
   return (
     <div className={PAGE_STACK}>
       <header className="space-y-8 sm:space-y-10">
-        <div className="-mb-2 flex items-center justify-between sm:-mb-4">
+        <div className="mb-3 flex items-center justify-between sm:mb-4">
           <BackLink href="/insiders" label="Insiders" />
         </div>
         <SymbolHero

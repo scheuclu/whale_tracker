@@ -35,7 +35,7 @@ export function SymbolHero({
   actions?: React.ReactNode;
 }) {
   return (
-    <section className="apple-hero-surface apple-card-reveal relative flex flex-col items-center overflow-hidden rounded-[28px] px-5 py-8 text-center sm:px-10 sm:py-11">
+    <section className="apple-hero-surface apple-card-reveal relative z-20 flex flex-col items-center rounded-[28px] px-5 py-8 text-center sm:px-10 sm:py-11">
       <SymbolMark symbol={symbol} />
       {badges ? <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5">{badges}</div> : null}
       <h1 className="display mt-3 max-w-full break-words text-[34px] leading-[1.06] tracking-[-0.032em] sm:text-[48px] sm:leading-[1.03]">

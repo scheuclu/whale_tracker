@@ -816,7 +816,7 @@ export function SectionTitle({
   className?: string;
 }) {
   return (
-    <div className={cn("mb-3.5 sm:mb-4 apple-headline-reveal", className)}>
+    <div className={cn("relative z-20 mb-3.5 sm:mb-4 apple-headline-reveal", className)}>
       {kicker ? <div className="apple-section-kicker mb-1.5">{kicker}</div> : null}
       <div className="flex min-h-8 flex-wrap items-end justify-between gap-x-4 gap-y-2">
         <h2 className="font-display text-[24px] font-bold leading-[1.12] tracking-[-0.025em] text-foreground sm:text-[28px] lg:text-[31px]">

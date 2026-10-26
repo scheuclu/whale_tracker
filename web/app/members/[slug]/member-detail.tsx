@@ -73,7 +73,7 @@ export async function MemberDetail({
     <div className={PAGE_STACK}>
       <AgentAlternates member={bioguideId} />
       <header className="space-y-8 sm:space-y-10">
-        <div className="-mb-2 flex items-center justify-between sm:-mb-4">
+        <div className="mb-3 flex items-center justify-between sm:mb-4">
           <BackLink href="/politicians" label="Members" />
         </div>
         <MemberHero
