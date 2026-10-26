@@ -39,6 +39,7 @@ import {
 import { RowLinkBody, StickyThead } from "../table-client";
 import { ROW_LINK } from "../grouped-list";
 import { LATE_PATH } from "../rankings/late-view";
+import { PeopleSwitch } from "../people-switch";
 
 export const dynamic = "force-dynamic";
 
@@ -164,6 +165,7 @@ export default async function PoliticiansPage({
   return (
     <div className={PAGE_STACK}>
       <PageHeader
+        lead={<PeopleSwitch active="congress" />}
         eyebrow="Congress · by member"
         title="Members of Congress"
         subtitle="Every member with a disclosed trade, sortable by trades, tickers, estimated volume and filing delay. Amounts are disclosed brackets, so every volume here is an estimate."

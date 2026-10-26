@@ -39,6 +39,7 @@ import { RowLinkBody, StickyThead } from "../table-client";
 import type { Metadata } from "next";
 import { pageCard, pageMetadata } from "@/lib/seo";
 import { InsiderTradeList } from "../insider-trade-list";
+import { PeopleSwitch } from "../people-switch";
 
 export const dynamic = "force-dynamic";
 
@@ -181,6 +182,7 @@ export default async function InsidersPage({
   return (
     <div className={PAGE_STACK}>
       <PageHeader
+        lead={<PeopleSwitch active="insiders" />}
         eyebrow="SEC Form 4"
         title="Corporate insiders"
         subtitle="Officers, directors and 10% owners trading their own company’s stock on the open market, from SEC Form 4. Only filings of $50k or more in one direction are kept."
@@ -198,6 +200,46 @@ export default async function InsidersPage({
         <StatTile label="Late filings" value={totals.late_trades.toLocaleString()} hint="past 2 business days" />
       </section>
       </PageHeader>
+
+      {people.length ? (
+        <section>
+          <SectionTitle
+            kicker="People"
+            right={<span>{windowKey === "all" ? "all time" : `last ${days} days`} · shares × reported price</span>}
+          >
+            Insiders by value traded
+          </SectionTitle>
+          <GroupedList>
+            {people.map((p) => (
+              <ValueRow
+                key={p.cik}
+                name={
+                  <a href={insiderHref(p.name, p.cik)} className={ROW_LINK}>
+                    {p.name}
+                  </a>
+                }
+                tags={
+                  <span className="inline-flex min-w-0 items-center gap-1.5">
+                    {p.latest_ticker ? <TickerChip ticker={p.latest_ticker} href={insiderIssuerHref(p.latest_ticker)} /> : null}
+                    <RoleTag
+                      isDirector={p.is_director}
+                      isOfficer={p.is_officer}
+                      isTenPercentOwner={p.is_ten_percent_owner}
+                      officerTitle={p.officer_title}
+                    />
+                  </span>
+                }
+                value={
+                  <MoneyText
+                    value={[p.bought ? `+${usd(p.bought)}` : "", p.sold ? `−${usd(p.sold)}` : ""].filter(Boolean).join(" ") || "—"}
+                  />
+                }
+                meta={`${p.buys} buy / ${p.sells} sell`}
+              />
+            ))}
+          </GroupedList>
+        </section>
+      ) : null}
 
       <section>
         <SectionTitle kicker="Cluster Activity" right={<span>last 30 days · 3+ insiders</span>}>
@@ -260,46 +302,6 @@ export default async function InsidersPage({
           return { href: query({ w: key }), label: w.label, active: windowKey === key };
         })}
       />
-
-      {people.length ? (
-        <section>
-          <SectionTitle
-            kicker="People"
-            right={<span>{windowKey === "all" ? "all time" : `last ${days} days`} · shares × reported price</span>}
-          >
-            Insiders by value traded
-          </SectionTitle>
-          <GroupedList>
-            {people.map((p) => (
-              <ValueRow
-                key={p.cik}
-                name={
-                  <a href={insiderHref(p.name, p.cik)} className={ROW_LINK}>
-                    {p.name}
-                  </a>
-                }
-                tags={
-                  <span className="inline-flex min-w-0 items-center gap-1.5">
-                    {p.latest_ticker ? <TickerChip ticker={p.latest_ticker} href={insiderIssuerHref(p.latest_ticker)} /> : null}
-                    <RoleTag
-                      isDirector={p.is_director}
-                      isOfficer={p.is_officer}
-                      isTenPercentOwner={p.is_ten_percent_owner}
-                      officerTitle={p.officer_title}
-                    />
-                  </span>
-                }
-                value={
-                  <MoneyText
-                    value={[p.bought ? `+${usd(p.bought)}` : "", p.sold ? `−${usd(p.sold)}` : ""].filter(Boolean).join(" ") || "—"}
-                  />
-                }
-                meta={`${p.buys} buy / ${p.sells} sell`}
-              />
-            ))}
-          </GroupedList>
-        </section>
-      ) : null}
 
       <section className="grid gap-x-6 gap-y-7 lg:grid-cols-2">
         <div>

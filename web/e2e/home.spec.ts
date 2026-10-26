@@ -24,3 +24,19 @@ test("a feed link from before the landing page still opens the feed", async ({ p
   expect(member.status()).toBe(308);
   expect(member.headers()["location"]).toContain("/members/");
 });
+
+test("People is one section: members and insiders, switched on the page", async ({ page }) => {
+  const people = (p: typeof page) => p.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "People" });
+  for (const path of ["/politicians", "/members/nancy-pelosi-p000197", "/insiders", "/insiders/rothblatt-martine-a-0001106578"]) {
+    await visit(page, path);
+    await expect(people(page), path).toHaveAttribute("aria-current", "page");
+  }
+  await visit(page, "/politicians");
+  const sw = page.getByRole("navigation", { name: "People" });
+  await expect(sw.getByRole("link", { name: "Congress", exact: true })).toHaveAttribute("aria-current", "page");
+  await sw.getByRole("link", { name: "Insiders", exact: true }).click();
+  await expect(page).toHaveURL(/\/insiders$/);
+  await expect(
+    page.getByRole("navigation", { name: "People" }).getByRole("link", { name: "Insiders", exact: true })
+  ).toHaveAttribute("aria-current", "page");
+});
