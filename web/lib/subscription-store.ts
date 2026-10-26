@@ -6,6 +6,12 @@ import { isBioguideId, isWatchTicker, MAX_WATCH_ITEMS } from "./watchlist";
  *
  * One JSON blob per subscriber at `subscriptions/<subscriberKey>.json`, where
  * `<subscriberKey>` is the 32-hex HMAC of the subscriber's lowercase email.
+ *
+ * The same record is the reader's account: signing in (Google or an emailed
+ * link, `lib/auth.ts`) proves the address, so it creates or verifies the
+ * record and its follows become the synced watchlist. There is no second
+ * user table. Unsubscribing therefore turns `emailAlerts` off and keeps the
+ * follows; only deleting the account removes the blob.
  */
 
 export interface StoredSubscription {
@@ -19,6 +25,12 @@ export interface StoredSubscription {
   tickers: string[];
   clusters: boolean;
   weeklyDigest: boolean;
+  /**
+   * Whether any digest is emailed. False after an unsubscribe link, so the
+   * account and its follows survive it. Records written before accounts
+   * existed lack the field and read as true: they were double-opted-in.
+   */
+  emailAlerts: boolean;
   /** YYYY-MM-DD of the last daily digest sent to this subscriber. */
   lastSentDate: string | null;
 }
@@ -108,6 +120,7 @@ export function parseStoredSubscription(body: string): StoredSubscription | null
     tickers: cleanTickers(r.tickers),
     clusters: Boolean(r.clusters),
     weeklyDigest: Boolean(r.weeklyDigest),
+    emailAlerts: r.emailAlerts === undefined ? true : Boolean(r.emailAlerts),
     lastSentDate,
   };
 }
@@ -118,6 +131,7 @@ export interface UpsertSubscriptionInput {
   tickers?: string[];
   clusters?: boolean;
   weeklyDigest?: boolean;
+  emailAlerts?: boolean;
   /** When true (default), merges new members/tickers into any existing subscription. */
   merge?: boolean;
 }
@@ -183,6 +197,12 @@ export async function upsertSubscription(
       tickers,
       clusters,
       weeklyDigest,
+      emailAlerts:
+        input.emailAlerts !== undefined
+          ? Boolean(input.emailAlerts)
+          : existing
+            ? existing.emailAlerts
+            : true,
       lastSentDate: existing ? existing.lastSentDate : null,
     };
 
@@ -220,7 +240,8 @@ export async function verifySubscriber(
   return null;
 }
 
-export async function unsubscribeAll(
+/** Deletes the record outright: the account, its follows and its settings. */
+export async function deleteSubscription(
   backend: SubscriptionBlobBackend,
   secret: string,
   email: string
@@ -230,6 +251,150 @@ export async function unsubscribeAll(
   const id = emailSubscriberKey(norm, secret);
   await backend.del(subscriptionPathname(id));
   return true;
+}
+
+/**
+ * Read-modify-write of one record under its ETag, retried on a concurrent
+ * write. `change` returns the next record, or null to leave it alone.
+ * Returns the stored record, or null when there is none (or no change).
+ */
+async function mutateSubscription(
+  backend: SubscriptionBlobBackend,
+  secret: string,
+  email: string,
+  change: (current: StoredSubscription | null, nowIso: string, id: string) => StoredSubscription | null,
+  now = new Date()
+): Promise<StoredSubscription | null> {
+  const norm = normalizeEmail(email);
+  if (!norm) return null;
+  const id = emailSubscriberKey(norm, secret);
+  const pathname = subscriptionPathname(id);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const current = await backend.readByPath(pathname);
+    const stored = current ? parseStoredSubscription(current.body) : null;
+    const next = change(stored, now.toISOString(), id);
+    if (!next) return stored;
+    if ((await backend.write(pathname, JSON.stringify(next), current?.etag)) === "ok") return next;
+  }
+  throw new Error("Subscription collided on update; please retry");
+}
+
+/**
+ * A completed sign-in. The address is proven, so the record is created or
+ * marked verified, and whatever the reader followed on this device before
+ * signing in is merged into the account. A new account emails a daily digest
+ * of its follows (the sign-in page says so); an existing one keeps its
+ * settings, including a previous unsubscribe.
+ */
+export async function signInAccount(
+  backend: SubscriptionBlobBackend,
+  secret: string,
+  email: string,
+  local: { members?: string[]; tickers?: string[] } = {},
+  now = new Date()
+): Promise<StoredSubscription> {
+  const norm = normalizeEmail(email);
+  if (!norm) throw new Error("Invalid email");
+  const sub = await mutateSubscription(
+    backend,
+    secret,
+    norm,
+    (existing, nowIso, id) => ({
+      v: 1,
+      id,
+      email: norm,
+      verified: true,
+      createdAt: existing?.createdAt ?? nowIso,
+      updatedAt: nowIso,
+      members: cleanMembers([...(existing?.members ?? []), ...(local.members ?? [])]),
+      tickers: cleanTickers([...(existing?.tickers ?? []), ...(local.tickers ?? [])]),
+      clusters: existing?.clusters ?? false,
+      weeklyDigest: existing?.weeklyDigest ?? false,
+      emailAlerts: existing?.emailAlerts ?? true,
+      lastSentDate: existing?.lastSentDate ?? null,
+    }),
+    now
+  );
+  if (!sub) throw new Error("Invalid email");
+  return sub;
+}
+
+export interface WatchChange {
+  add?: { members?: string[]; tickers?: string[] };
+  remove?: { members?: string[]; tickers?: string[] };
+}
+
+/**
+ * Adds and removes follows on an existing account. Item-level rather than a
+ * whole-list replace, so two tabs following different things do not
+ * overwrite each other. Null when the account no longer exists.
+ */
+export async function updateAccountWatch(
+  backend: SubscriptionBlobBackend,
+  secret: string,
+  email: string,
+  change: WatchChange,
+  now = new Date()
+): Promise<StoredSubscription | null> {
+  const dropMembers = new Set(cleanMembers(change.remove?.members ?? []));
+  const dropTickers = new Set(cleanTickers(change.remove?.tickers ?? []));
+  return mutateSubscription(
+    backend,
+    secret,
+    email,
+    (existing, nowIso) =>
+      existing && {
+        ...existing,
+        updatedAt: nowIso,
+        members: cleanMembers([...existing.members, ...(change.add?.members ?? [])]).filter(
+          (m) => !dropMembers.has(m)
+        ),
+        tickers: cleanTickers([...existing.tickers, ...(change.add?.tickers ?? [])]).filter(
+          (t) => !dropTickers.has(t)
+        ),
+      },
+    now
+  );
+}
+
+export interface AccountSettings {
+  emailAlerts?: boolean;
+  clusters?: boolean;
+  weeklyDigest?: boolean;
+}
+
+/** Changes the email settings of an existing record; null when there is none. */
+export async function updateAccountSettings(
+  backend: SubscriptionBlobBackend,
+  secret: string,
+  email: string,
+  settings: AccountSettings,
+  now = new Date()
+): Promise<StoredSubscription | null> {
+  return mutateSubscription(
+    backend,
+    secret,
+    email,
+    (existing, nowIso) =>
+      existing && {
+        ...existing,
+        updatedAt: nowIso,
+        emailAlerts: settings.emailAlerts ?? existing.emailAlerts,
+        clusters: settings.clusters ?? existing.clusters,
+        weeklyDigest: settings.weeklyDigest ?? existing.weeklyDigest,
+      },
+    now
+  );
+}
+
+/** An unsubscribe link: stops every email, keeps the account and its follows. */
+export async function stopEmails(
+  backend: SubscriptionBlobBackend,
+  secret: string,
+  email: string,
+  now = new Date()
+): Promise<boolean> {
+  return (await updateAccountSettings(backend, secret, email, { emailAlerts: false }, now)) !== null;
 }
 
 export async function markDigestSent(
@@ -269,6 +434,7 @@ export async function listVerifiedSubscriptions(
     if (
       sub &&
       sub.verified &&
+      sub.emailAlerts &&
       (sub.members.length > 0 || sub.tickers.length > 0 || sub.clusters || sub.weeklyDigest)
     ) {
       out.push(sub);

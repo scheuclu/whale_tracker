@@ -64,7 +64,7 @@ export default async function WatchlistPage({
       <PageHeader
         eyebrow="Personal Tracking"
         title="Watchlist & Alerts"
-        subtitle="Follow specific members of Congress and stock tickers on this device, share a filtered feed link, or subscribe to a combined daily email digest."
+        subtitle="Follow members of Congress and stock tickers, share a filtered feed link, and sign in to keep your watchlist on every device with a daily email digest."
       />
       <WatchlistManager
         token={validToken}

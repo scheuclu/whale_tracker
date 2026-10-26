@@ -7,13 +7,16 @@ import { Code, LegalPage, TextLink, type LegalSection } from "../legal";
  * the code: `@vercel/analytics` in app/layout.tsx, next-themes' `theme` key,
  * the portrait loader in next.config.ts, the contact form's stored fields,
  * the CSP in lib/security-headers.ts (which is what makes "no third-party
- * scripts" true). Change this page in the same PR as any change to those.
+ * scripts" true), reader sign-in (lib/auth.ts, the cookies it sets, and the
+ * account record in lib/subscription-store.ts), the on-device watchlist
+ * (app/account-store.ts) and the digest email (lib/email-digest.ts, Resend).
+ * Change this page in the same PR as any change to those.
  */
 
 export const metadata = pageMetadata({
   title: "Privacy",
   description:
-    "What FatCat Watch collects: cookieless page-view counts, hosting logs, and what you send through the contact form. No reader accounts, no ad trackers, no third-party scripts.",
+    "What FatCat Watch collects: cookieless page-view counts, hosting logs, an optional account (your email address and what you follow), and what you send through the contact form. No ad trackers, no third-party scripts.",
   path: "/privacy",
 });
 
@@ -43,6 +46,56 @@ const SECTIONS: LegalSection[] = [
           <strong>Your theme.</strong> If you switch between light and dark mode, the choice is saved in your own
           browser&apos;s local storage under the key <Code>theme</Code>. It never leaves your device.
         </p>
+        <p>
+          <strong>Your watchlist.</strong> Members and tickers you follow without signing in are saved in your
+          browser&apos;s local storage (<Code>fatcat_watchlist_v1</Code>) and never leave your device unless you
+          sign in or share a watchlist link yourself.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "account",
+    title: "If you sign in",
+    body: (
+      <>
+        <p>
+          Signing in is optional; everything on the site can be read without it. It keeps your watchlist on
+          every device and lets us email it to you. There is no password: you sign in with Google, or with a
+          link we email you that expires after 15 minutes.
+        </p>
+        <p>For an account we store, in private storage that is not publicly accessible:</p>
+        <ul>
+          <li>your email address (the account is keyed by a one-way hash of it);</li>
+          <li>the members and tickers you follow;</li>
+          <li>
+            your email settings: whether you get the daily digest, cluster alerts and the weekly roundup, and
+            the date of the last digest we sent;
+          </li>
+          <li>when the account was created and last changed.</li>
+        </ul>
+        <p>
+          With Google, we ask only for your email address and whether Google has verified it; we do not receive
+          your name, photo, contacts or anything else, and Google learns that you signed in to this site. With
+          an email link, the address you type gets one email; nothing is stored unless the link is opened.
+        </p>
+        <p>
+          <strong>Cookies.</strong> Signing in sets two cookies, both for 30 days: <Code>fcw_session</Code>,
+          which proves you are signed in and cannot be read by scripts, and <Code>fcw_signed_in</Code>, which
+          only tells the page to load your account. During a Google sign-in, <Code>fcw_oauth</Code> holds a
+          one-time check value for up to ten minutes. These are strictly necessary for the sign-in you asked
+          for; none is used for analytics or advertising, and signing out removes them.
+        </p>
+        <p>
+          <strong>Emails.</strong> A new account gets a daily digest (at most one a day, and only on days
+          something you follow has new filings). Every digest has a one-click unsubscribe link, which stops the
+          emails and keeps your account; you can also switch them off on your{" "}
+          <TextLink href="/watchlist">watchlist page</TextLink>. We send nothing else.
+        </p>
+        <p>
+          <strong>Deleting it.</strong> &ldquo;Delete account&rdquo; on the watchlist page removes the record
+          immediately. We keep accounts until you delete them.
+        </p>
       </>
     ),
   },
@@ -51,7 +104,10 @@ const SECTIONS: LegalSection[] = [
     title: "What we do not do",
     body: (
       <ul>
-        <li>No accounts, sign-ups or newsletters for readers, and no cookies set for readers.</li>
+        <li>
+          No cookies unless you sign in, and then only the sign-in cookies described above. No newsletter: the
+          only emails are the digests you choose.
+        </li>
         <li>
           No advertising, no ad networks, no social-media pixels, no fingerprinting, and no third-party scripts:
           the site&apos;s Content Security Policy allows scripts from this domain only.
@@ -103,8 +159,8 @@ const SECTIONS: LegalSection[] = [
         </ul>
         <p>
           Messages are kept in private storage that is not publicly accessible, and are read only by the person
-          who runs this site, who signs in to a private admin page to do so. Readers never sign in, and no
-          sign-in script loads on public pages. We use your message to answer it and, if it reports an error in
+          who runs this site, who signs in to a private admin page to do so. No sign-in script loads on any
+          page. We use your message to answer it and, if it reports an error in
           the data, to fix it. We do not add you to any list.
         </p>
         <p>
@@ -141,17 +197,26 @@ const SECTIONS: LegalSection[] = [
       <ul>
         <li>
           <strong>Vercel Inc.</strong> hosts the site, runs the page-view analytics, keeps the hosting logs and
-          stores contact-form messages in private storage. Vercel is a US company, and data it handles may be
+          stores accounts and contact-form messages in private storage. Vercel is a US company, and data it handles may be
           processed in the United States; see{" "}
           <TextLink href="https://vercel.com/legal/privacy-policy">Vercel&apos;s privacy policy</TextLink>.
+        </li>
+        <li>
+          <strong>Resend</strong> delivers the sign-in emails and digests, so it handles your email address and
+          the content of those emails; see{" "}
+          <TextLink href="https://resend.com/legal/privacy-policy">Resend&apos;s privacy policy</TextLink>.
+        </li>
+        <li>
+          <strong>Google</strong>, only if you choose &ldquo;Continue with Google&rdquo;, confirms your email
+          address; see <TextLink href="https://policies.google.com/privacy">Google&apos;s privacy policy</TextLink>.
         </li>
         <li>
           <strong>The operator&apos;s sign-in provider</strong> confirms who is signing in to the admin page. It
           receives nothing about readers or about anyone who writes to us.
         </li>
         <li>
-          <strong>GitHub</strong> hosts the code and the disclosure database. No reader or contact data is
-          stored there.
+          <strong>GitHub</strong> hosts the code and the disclosure database. No reader, account or contact data
+          is stored there.
         </li>
       </ul>
     ),
@@ -164,7 +229,8 @@ const SECTIONS: LegalSection[] = [
         <p>
           You can ask to see, correct or delete anything you have sent us, or object to how we use it, through
           the <TextLink href="/contact">contact form</TextLink>. Use the email address you wrote from, so we can
-          match the request to your message. We answer within 30 days.
+          match the request to your message. We answer within 30 days. If you have an account, you can delete
+          it yourself at any time from the <TextLink href="/watchlist">watchlist page</TextLink>.
         </p>
         <p>
           Page-view counts are aggregated and cannot be traced back to you, so there is nothing in them to look
@@ -195,7 +261,9 @@ export default function PrivacyPage() {
       summary={
         <>
           Readers need no account and get no cookies. We count page views with a cookieless analytics tool and
-          see only totals; the host keeps short-lived request logs; and if you use the{" "}
+          see only totals, and the host keeps short-lived request logs. If you choose to sign in, we keep your
+          email address and what you follow so we can email you about it, until you delete the account. If you
+          use the{" "}
           <TextLink href="/contact">contact form</TextLink>, we keep what you send so we can answer it, then
           delete it. There are no ad trackers or third-party scripts.
         </>

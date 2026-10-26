@@ -3,13 +3,18 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 /**
  * Stateless HMAC-SHA256 tokens and subscriber keys for email alert subscriptions.
  *
- * Three token purposes:
+ * Token purposes:
  * - `verify`: sent in double-opt-in emails, expires in 48 hours.
  * - `manage`: sent in every email footer to open `/watchlist?token=...` without a password.
  * - `unsubscribe`: used in RFC 8058 `List-Unsubscribe` headers and footer links.
+ * - `login`: the emailed sign-in link, expires in 15 minutes (`lib/auth.ts`).
+ * - `session`: the signed-in cookie, expires in 30 days (`lib/auth.ts`).
+ *
+ * The purpose is inside the signed payload, so a token minted for one purpose
+ * is refused everywhere another is expected.
  */
 
-export type TokenPurpose = "verify" | "manage" | "unsubscribe";
+export type TokenPurpose = "verify" | "manage" | "unsubscribe" | "login" | "session";
 
 export interface SubscriptionTokenPayload {
   v: 1;
@@ -21,6 +26,8 @@ export interface SubscriptionTokenPayload {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const VERIFY_TTL_SECONDS = 48 * 3600;
+export const LOGIN_TTL_SECONDS = 15 * 60;
+export const SESSION_TTL_SECONDS = 30 * 86400;
 
 export function normalizeEmail(raw: unknown): string | null {
   if (typeof raw !== "string") return null;

@@ -3,31 +3,20 @@ import assert from "node:assert/strict";
 import {
   matchSubscriberDigest,
   renderDigestEmail,
-  renderVerificationEmail,
+  renderSignInEmail,
   subscriptionActionUrls,
 } from "./email-digest.ts";
 
 const SECRET = "test-alerts-secret-at-least-16-bytes";
 
 describe("email-digest", () => {
-  it("renders verification email with verify, manage, and unsubscribe links", () => {
-    const urls = subscriptionActionUrls("reader@example.com", SECRET, 1700000000);
-    const mail = renderVerificationEmail(
-      {
-        email: "reader@example.com",
-        members: ["P000197"],
-        tickers: ["NVDA"],
-        clusters: true,
-        weeklyDigest: false,
-      },
-      urls
-    );
-    assert.ok(mail.subject.includes("Confirm"));
-    assert.ok(mail.html.includes("P000197"));
-    assert.ok(mail.html.includes("NVDA"));
-    assert.ok(mail.text.includes(urls.verifyUrl));
-    assert.ok(mail.text.includes(urls.manageUrl));
-    assert.ok(mail.text.includes(urls.unsubscribeUrl));
+  it("renders the sign-in email around the one link it carries", () => {
+    const url = "https://www.fatcatwatch.com/api/auth/email/callback?token=abc.def";
+    const mail = renderSignInEmail(url);
+    assert.ok(mail.subject.includes("sign-in link"));
+    assert.ok(mail.text.includes(url));
+    assert.ok(mail.html.includes(url));
+    assert.ok(mail.text.includes("15 minutes"));
   });
 
   it("matches subscriber digest against database and preserves bracket-range and Form 4 separation", async () => {

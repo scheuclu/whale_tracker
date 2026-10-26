@@ -113,32 +113,19 @@ export function subscriptionActionUrls(email: string, secret: string, nowSeconds
   };
 }
 
-export function renderVerificationEmail(
-  sub: Pick<StoredSubscription, "email" | "members" | "tickers" | "clusters" | "weeklyDigest">,
-  urls: { verifyUrl: string; manageUrl: string; unsubscribeUrl: string }
-): { subject: string; html: string; text: string } {
-  const items = [
-    ...sub.members.map((m) => `Member ${m}`),
-    ...sub.tickers.map((t) => `Ticker ${t}`),
-    ...(sub.clusters ? ["High-signal cluster alerts"] : []),
-    ...(sub.weeklyDigest ? ["Weekly digest"] : []),
-  ];
-  const summary = items.length ? items.join(", ") : "your FatCat Watch alert preferences";
-
-  const subject = `Confirm your ${SITE_NAME} alert subscription`;
+/**
+ * The emailed sign-in link (`lib/auth.ts`). Transactional, so it carries no
+ * unsubscribe link: it is sent once, only because someone asked for it.
+ */
+export function renderSignInEmail(signInUrl: string): { subject: string; html: string; text: string } {
+  const subject = `Your ${SITE_NAME} sign-in link`;
   const text = [
-    `Confirm your ${SITE_NAME} alert subscription`,
+    `Sign in to ${SITE_NAME}`,
     "",
-    `You requested daily email alerts for: ${summary}.`,
+    "Open this link to sign in. It expires in 15 minutes:",
+    signInUrl,
     "",
-    `Confirm subscription:`,
-    urls.verifyUrl,
-    "",
-    `Manage preferences:`,
-    urls.manageUrl,
-    "",
-    `If you did not request this email, you can ignore it or unsubscribe:`,
-    urls.unsubscribeUrl,
+    "If you did not ask to sign in, ignore this email: nothing happens unless the link is opened.",
   ].join("\n");
 
   const html = `<!doctype html>
@@ -146,19 +133,17 @@ export function renderVerificationEmail(
   <body style="margin:0;padding:24px;background:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1d1d1f;">
     <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:20px;padding:28px;border:1px solid rgba(0,0,0,0.08);">
       <p style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#6e6e73;">${escapeHtml(SITE_NAME)}</p>
-      <h1 style="margin:8px 0 12px;font-size:22px;line-height:1.25;letter-spacing:-0.02em;">Confirm your alert subscription</h1>
+      <h1 style="margin:8px 0 12px;font-size:22px;line-height:1.25;letter-spacing:-0.02em;">Sign in to ${escapeHtml(SITE_NAME)}</h1>
       <p style="margin:0 0 18px;font-size:15px;line-height:1.5;color:#424245;">
-        Click below to activate daily digest alerts for <strong>${escapeHtml(summary)}</strong>. We send at most one combined email per day when new filings arrive.
+        Click below to sign in. The link expires in 15 minutes.
       </p>
       <p style="margin:24px 0;">
-        <a href="${escapeHtml(urls.verifyUrl)}" style="display:inline-block;background:#1d1d1f;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:10px 20px;border-radius:999px;">
-          Confirm subscription
+        <a href="${escapeHtml(signInUrl)}" style="display:inline-block;background:#1d1d1f;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:10px 20px;border-radius:999px;">
+          Sign in
         </a>
       </p>
       <p style="margin:20px 0 0;padding-top:16px;border-top:1px solid #e5e5ea;font-size:12px;line-height:1.5;color:#6e6e73;">
-        <a href="${escapeHtml(urls.manageUrl)}" style="color:#424245;text-decoration:underline;">Manage preferences</a>
-        &nbsp;·&nbsp;
-        <a href="${escapeHtml(urls.unsubscribeUrl)}" style="color:#424245;text-decoration:underline;">Unsubscribe</a>
+        If you did not ask to sign in, ignore this email: nothing happens unless the link is opened.
       </p>
     </div>
   </body>
@@ -296,7 +281,8 @@ export async function sendResendEmail(opts: {
   subject: string;
   html: string;
   text: string;
-  unsubscribeUrl: string;
+  /** Omitted for a transactional email (the sign-in link): no List-Unsubscribe. */
+  unsubscribeUrl?: string;
   env?: Env;
 }): Promise<{ ok: boolean; error?: string }> {
   const env = opts.env ?? process.env;
@@ -316,10 +302,14 @@ export async function sendResendEmail(opts: {
       subject: opts.subject,
       html: opts.html,
       text: opts.text,
-      headers: {
-        "List-Unsubscribe": `<${opts.unsubscribeUrl}>`,
-        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-      },
+      ...(opts.unsubscribeUrl
+        ? {
+            headers: {
+              "List-Unsubscribe": `<${opts.unsubscribeUrl}>`,
+              "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+            },
+          }
+        : {}),
     }),
   });
   if (!res.ok) {

@@ -520,6 +520,31 @@ parser stays faithful to the PDF and the UI flags the row rather than
   `VERCEL_PROJECT_PRODUCTION_URL` → request origin), never a deployment URL;
   page links in API objects come from `memberHref` / `tickerHref`.
 
+## Reader accounts (`/signin`, `/api/auth/*`, `/api/account*`)
+
+- Sign-in is Google (OAuth code flow + PKCE, scope `openid email` only) or an
+  emailed link (`login` token, 15 min, stateless so a mail scanner's prefetch
+  does not burn it). Both end in a verified address; no auth vendor, no
+  password. Code: `web/lib/auth.ts` (pure), `web/lib/auth-routes.ts`.
+- **The account is the subscription record**: `subscriptions/<hmac>.json` in
+  the private Blob store (`lib/subscription-store.ts`). Same address via
+  either method is one account; signing in verifies a pending double-opt-in.
+  An unsubscribe link sets `emailAlerts: false` and keeps the follows; only
+  "Delete account" removes the blob. Pre-account records read `emailAlerts`
+  as true.
+- **Never read the session in a page.** Pages are CDN-cached by URL, so a
+  page that read `fcw_session` would serve one reader's account to the next.
+  The browser fetches `/api/account` (`no-store`); the readable
+  `fcw_signed_in` hint cookie spares signed-out visitors that request.
+- The watchlist stays in localStorage; signed in it mirrors the account
+  (`app/account-store.ts`): follows go up item by item, a browser's
+  signed-out follows merge in once per account (`fatcat_watchlist_owner_v1`),
+  sign-out clears the mirror. State-changing routes check `isSameOrigin`.
+- Env: `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` (redirect URI
+  `<origin>/api/auth/google/callback`, registered per origin), plus the
+  existing `ALERTS_SECRET`, Blob and `RESEND_API_KEY`. Missing pieces hide
+  that method on `/signin` rather than failing.
+
 ## Data-viz
 
 Charts are pure CSS/SVG in `web/app/charts.tsx`; no chart library. Colour roles

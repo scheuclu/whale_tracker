@@ -9,3 +9,4 @@ tsconfig.tsbuildinfo
 /playwright-report/
 /test-results/
 /blob-report/
+.vercel

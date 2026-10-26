@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { subscriptionBackend } from "@/lib/subscription-blob";
-import { unsubscribeAll } from "@/lib/subscription-store";
+import { stopEmails } from "@/lib/subscription-store";
 import { alertsSecret, verifySubscriptionToken } from "@/lib/subscription-token";
 import { absoluteUrl } from "@/lib/site";
 
@@ -14,7 +14,9 @@ async function handleUnsubscribe(req: Request): Promise<{ ok: boolean }> {
   const payload = verifySubscriptionToken(token, ["unsubscribe", "manage"], secret);
   if (!payload) return { ok: false };
 
-  await unsubscribeAll(backend, secret, payload.email);
+  // Stops every email; the account and its follows stay (signing in again
+  // shows them, with email alerts off).
+  await stopEmails(backend, secret, payload.email);
   return { ok: true };
 }
 
