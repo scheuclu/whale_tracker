@@ -16,10 +16,10 @@ import {
   WATCHLIST_EVENT,
   getAccountState,
   getServerAccountState,
+  followAfterSignIn,
   pushWatchChange,
   readWatchlist,
   saveAccountSettings,
-  signInHref,
   startAccount,
   subscribeAccount,
   writeWatchlist,
@@ -33,15 +33,20 @@ export function useAccount(): AccountState {
   return snapshot;
 }
 
+/**
+ * The reader's follows. Following needs an account, so signed out the list
+ * reads as empty and `toggle` sends the reader to sign in, keeping the
+ * follow to apply on return (`followAfterSignIn`).
+ */
 export function useWatchlist() {
-  const [state, setState] = useState<WatchlistState>(EMPTY_WATCHLIST);
+  const account = useAccount();
+  const [stored, setStored] = useState<WatchlistState>(EMPTY_WATCHLIST);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
-    setState(readWatchlist());
-    startAccount();
-    const sync = () => setState(readWatchlist());
+    setStored(readWatchlist());
+    const sync = () => setStored(readWatchlist());
     window.addEventListener(WATCHLIST_EVENT, sync);
     window.addEventListener("storage", sync);
     return () => {
@@ -50,17 +55,26 @@ export function useWatchlist() {
     };
   }, []);
 
+  const signedIn = account.status === "signed_in";
+  const state = signedIn ? stored : EMPTY_WATCHLIST;
+
   const toggle = useCallback((item: { kind: "member" | "ticker"; id: string; label?: string }) => {
+    const id = item.id.trim().toUpperCase();
+    const ids = item.kind === "member" ? { members: [id] } : { tickers: [id] };
+    // Loading means a session cookie is there and being checked: the change
+    // is queued and sent once it is. Signed out, it waits for a sign-in.
+    if (getAccountState().status === "signed_out") {
+      followAfterSignIn(ids, `follow_${item.kind}`);
+      return false;
+    }
     const current = readWatchlist();
     const { next, followed } = toggleWatchItem(current, item);
     writeWatchlist(next);
-    setState(next);
-    const id = item.id.trim().toUpperCase();
-    const ids = item.kind === "member" ? { members: [id] } : { tickers: [id] };
+    setStored(next);
     pushWatchChange(followed ? { add: ids } : { remove: ids });
     trackEvent("watchlist_toggle", {
       kind: item.kind,
-      id: item.id.toUpperCase(),
+      id,
       followed,
       total: next.members.length + next.tickers.length,
     });
@@ -68,14 +82,15 @@ export function useWatchlist() {
   }, []);
 
   const clear = useCallback(() => {
+    if (getAccountState().status !== "signed_in") return;
     const current = readWatchlist();
     pushWatchChange({ remove: { members: current.members, tickers: current.tickers } });
     writeWatchlist(EMPTY_WATCHLIST);
-    setState(EMPTY_WATCHLIST);
+    setStored(EMPTY_WATCHLIST);
     trackEvent("watchlist_clear");
   }, []);
 
-  return { state, mounted, toggle, clear };
+  return { state, mounted, signedIn, toggle, clear };
 }
 
 /**
@@ -245,85 +260,99 @@ export function GetAlertsPopover({
           </div>
 
           <div className="mt-3 space-y-2.5 text-[13px]">
-            {subject && normId ? (
+            {account.status === "signed_out" ? (
+              // Following needs an account: one invitation, which follows the
+              // subject on the way back from signing in.
               <div className="rounded-[14px] bg-fill/65 p-3 ring-1 ring-black/[0.04] dark:ring-white/[0.07]">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium text-foreground">
-                    {isFollowed ? `Following ${subject.label}` : `Follow ${subject.label}`}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => toggle({ kind: subject.kind, id: normId, label: subject.label })}
-                    className={cn(isFollowed ? BUTTON : BUTTON_PRIMARY, "h-7 px-3 text-[12px]")}
-                  >
-                    {isFollowed ? "Unfollow" : "Follow"}
-                  </button>
-                </div>
-                <p className="mt-1 text-[12px] leading-snug text-muted-foreground">
-                  Pins {subject.label} to your personal Following feed
-                  {account.status === "signed_in" ? " on every device you sign in on." : " on this device."}
+                <p className="font-medium text-foreground">
+                  {subject ? `Follow ${subject.label}` : "Follow members & tickers"}
                 </p>
+                <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground">
+                  Sign in to follow{subject ? ` ${subject.label}` : ""} and get one email a day when
+                  anything you follow files new trades. Your follows are kept on your account, on every device.
+                </p>
+                <button
+                  type="button"
+                  onClick={() =>
+                    followAfterSignIn(
+                      subject && normId
+                        ? subject.kind === "member"
+                          ? { members: [normId] }
+                          : { tickers: [normId] }
+                        : {},
+                      "alerts_popover"
+                    )
+                  }
+                  className={cn(BUTTON_PRIMARY, "mt-2 h-8 px-3 text-[12px]")}
+                >
+                  <Mail className="size-3" aria-hidden />
+                  {subject ? "Sign in & follow" : "Sign in"}
+                </button>
               </div>
-            ) : null}
-
-            <div className="rounded-[14px] bg-fill/65 p-3 ring-1 ring-black/[0.04] dark:ring-white/[0.07]">
-              <p className="font-medium text-foreground">Daily email digest</p>
-              {account.status === "signed_in" ? (
-                account.account.emailAlerts ? (
-                  <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground">
-                    On. At most one email a day to{" "}
-                    <span className="font-medium text-foreground">{account.account.email}</span> when {what}{" "}
-                    files new trades.
-                  </p>
-                ) : (
-                  <div className="mt-0.5 flex items-center justify-between gap-2">
-                    <p className="text-[12px] leading-snug text-muted-foreground">
-                      Off for {account.account.email}.
+            ) : (
+              <>
+                {subject && normId ? (
+                  <div className="rounded-[14px] bg-fill/65 p-3 ring-1 ring-black/[0.04] dark:ring-white/[0.07]">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium text-foreground">
+                        {isFollowed ? `Following ${subject.label}` : `Follow ${subject.label}`}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => toggle({ kind: subject.kind, id: normId, label: subject.label })}
+                        className={cn(isFollowed ? BUTTON : BUTTON_PRIMARY, "h-7 px-3 text-[12px]")}
+                      >
+                        {isFollowed ? "Unfollow" : "Follow"}
+                      </button>
+                    </div>
+                    <p className="mt-1 text-[12px] leading-snug text-muted-foreground">
+                      Adds {subject.label} to your Following feed and your daily digest.
                     </p>
-                    <button
-                      type="button"
-                      disabled={saving}
-                      onClick={turnOnEmails}
-                      className={cn(BUTTON_PRIMARY, "h-7 shrink-0 px-3 text-[12px]")}
-                    >
-                      <Mail className="size-3" aria-hidden />
-                      {saving ? "…" : "Turn on"}
-                    </button>
                   </div>
-                )
-              ) : (
-                <>
-                  <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground">
-                    Sign in and get one email a day when {what} files new trades. Your watchlist comes with
-                    you to every device.
-                  </p>
-                  <a
-                    href={signInHref()}
-                    onClick={() => {
-                      // Follow first, so the subject is in the watchlist the
-                      // sign-in carries over to the account.
-                      if (subject && normId && !isFollowed) {
-                        toggle({ kind: subject.kind, id: normId, label: subject.label });
-                      }
-                      trackEvent("sign_in_start", { from: "alerts_popover" });
-                    }}
-                    className={cn(BUTTON_PRIMARY, "mt-2 h-8 px-3 text-[12px]")}
-                  >
-                    <Mail className="size-3" aria-hidden />
-                    {subject && !isFollowed ? `Follow & sign in` : "Sign in for email alerts"}
-                  </a>
-                </>
-              )}
-            </div>
+                ) : null}
+
+                {account.status === "signed_in" ? (
+                  <div className="rounded-[14px] bg-fill/65 p-3 ring-1 ring-black/[0.04] dark:ring-white/[0.07]">
+                    <p className="font-medium text-foreground">Daily email digest</p>
+                    {account.account.emailAlerts ? (
+                      <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground">
+                        On. At most one email a day to{" "}
+                        <span className="font-medium text-foreground">{account.account.email}</span> when {what}{" "}
+                        files new trades.
+                      </p>
+                    ) : (
+                      <div className="mt-0.5 flex items-center justify-between gap-2">
+                        <p className="text-[12px] leading-snug text-muted-foreground">
+                          Off for {account.account.email}.
+                        </p>
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={turnOnEmails}
+                          className={cn(BUTTON_PRIMARY, "h-7 shrink-0 px-3 text-[12px]")}
+                        >
+                          <Mail className="size-3" aria-hidden />
+                          {saving ? "…" : "Turn on"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+              </>
+            )}
 
             <div className="flex items-center justify-between border-t border-border/60 pt-2.5 text-[12px]">
-              <a
-                href="/watchlist"
-                onClick={() => setOpen(false)}
-                className="font-semibold text-foreground underline decoration-border-strong underline-offset-[3px]"
-              >
-                Manage watchlist {totalWatched > 0 ? `(${totalWatched})` : ""}
-              </a>
+              {account.status === "signed_in" ? (
+                <a
+                  href="/account"
+                  onClick={() => setOpen(false)}
+                  className="font-semibold text-foreground underline decoration-border-strong underline-offset-[3px]"
+                >
+                  Your dashboard {totalWatched > 0 ? `(${totalWatched})` : ""}
+                </a>
+              ) : (
+                <span />
+              )}
               <a
                 href={totalWatched > 0 ? feedUrl : "/alerts"}
                 onClick={() => {
@@ -429,7 +458,7 @@ export function ActiveWatchlistBanner({
   activeWatch?: { members: string[]; tickers: string[] };
   clearHref: string;
 }) {
-  const { state, mounted, toggle } = useWatchlist();
+  const { state, mounted, signedIn, toggle } = useWatchlist();
   if (!activeWatch || (activeWatch.members.length === 0 && activeWatch.tickers.length === 0)) {
     return null;
   }
@@ -440,6 +469,10 @@ export function ActiveWatchlistBanner({
   const isUnsavedShared = mounted && urlParam !== localParam;
 
   const saveSharedToLocal = () => {
+    if (!signedIn) {
+      followAfterSignIn({ members: activeWatch.members, tickers: activeWatch.tickers }, "shared_watchlist");
+      return;
+    }
     const mergedMembers = Array.from(new Set([...state.members, ...activeWatch.members]));
     const mergedTickers = Array.from(new Set([...state.tickers, ...activeWatch.tickers]));
     writeWatchlist({

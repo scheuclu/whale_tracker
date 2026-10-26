@@ -30,7 +30,7 @@ export function authBackend(): { secret: string; backend: SubscriptionBlobBacken
 export function signInError(req: Request, code: string, next?: string): NextResponse {
   const url = new URL("/signin", req.url);
   url.searchParams.set("error", code);
-  if (next && next !== "/watchlist") url.searchParams.set("next", next);
+  if (next && next !== "/account") url.searchParams.set("next", next);
   return NextResponse.redirect(url, { status: 303, headers: NO_STORE });
 }
 

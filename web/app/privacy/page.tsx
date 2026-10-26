@@ -47,9 +47,9 @@ const SECTIONS: LegalSection[] = [
           browser&apos;s local storage under the key <Code>theme</Code>. It never leaves your device.
         </p>
         <p>
-          <strong>Your watchlist.</strong> Members and tickers you follow without signing in are saved in your
-          browser&apos;s local storage (<Code>fatcat_watchlist_v1</Code>) and never leave your device unless you
-          sign in or share a watchlist link yourself.
+          <strong>Your follows.</strong> Following members and tickers needs an account (below). While you are
+          signed in, your browser keeps a copy of what you follow in its local storage
+          (<Code>fatcat_watchlist_v1</Code>) so pages can show it at once; signing out clears it.
         </p>
       </>
     ),
@@ -60,8 +60,9 @@ const SECTIONS: LegalSection[] = [
     body: (
       <>
         <p>
-          Signing in is optional; everything on the site can be read without it. It keeps your watchlist on
-          every device and lets us email it to you. There is no password: you sign in with Google, or with a
+          Signing in is optional; everything on the site can be read without it. You need it only to follow
+          members and tickers: your follows are kept on your account, on every device, and we can email you
+          about them. There is no password: you sign in with Google, or with a
           link we email you that expires after 15 minutes.
         </p>
         <p>For an account we store, in private storage that is not publicly accessible:</p>
@@ -90,10 +91,10 @@ const SECTIONS: LegalSection[] = [
           <strong>Emails.</strong> A new account gets a daily digest (at most one a day, and only on days
           something you follow has new filings). Every digest has a one-click unsubscribe link, which stops the
           emails and keeps your account; you can also switch them off on your{" "}
-          <TextLink href="/watchlist">watchlist page</TextLink>. We send nothing else.
+          <TextLink href="/account">dashboard</TextLink>. We send nothing else.
         </p>
         <p>
-          <strong>Deleting it.</strong> &ldquo;Delete account&rdquo; on the watchlist page removes the record
+          <strong>Deleting it.</strong> &ldquo;Delete account&rdquo; on your dashboard removes the record
           immediately. We keep accounts until you delete them.
         </p>
       </>
@@ -230,7 +231,7 @@ const SECTIONS: LegalSection[] = [
           You can ask to see, correct or delete anything you have sent us, or object to how we use it, through
           the <TextLink href="/contact">contact form</TextLink>. Use the email address you wrote from, so we can
           match the request to your message. We answer within 30 days. If you have an account, you can delete
-          it yourself at any time from the <TextLink href="/watchlist">watchlist page</TextLink>.
+          it yourself at any time from the <TextLink href="/account">dashboard</TextLink>.
         </p>
         <p>
           Page-view counts are aggregated and cannot be traced back to you, so there is nothing in them to look

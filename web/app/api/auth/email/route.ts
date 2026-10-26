@@ -33,7 +33,7 @@ export async function POST(req: Request) {
   const url = new URL("/api/auth/email/callback", req.url);
   url.searchParams.set("token", signLoginToken(email, auth.secret));
   const next = safeNextPath(body.next);
-  if (next !== "/watchlist") url.searchParams.set("next", next);
+  if (next !== "/account") url.searchParams.set("next", next);
 
   const mail = renderSignInEmail(url.toString());
   const sent = await sendResendEmail({ to: email, subject: mail.subject, html: mail.html, text: mail.text });

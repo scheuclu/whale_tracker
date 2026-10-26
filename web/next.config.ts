@@ -36,6 +36,11 @@ const nextConfig: NextConfig = {
   // (see the note there for why a page cannot do it). Matched on the query
   // key, so `/politicians` and `/tickers` themselves are untouched; the
   // original query string travels with the rewrite.
+  // The watchlist page became the signed-in dashboard; old links (email
+  // footers, bookmarks) keep working, query string included.
+  async redirects() {
+    return [{ source: "/watchlist", destination: "/account", permanent: true }];
+  },
   async rewrites() {
     return {
       beforeFiles: [

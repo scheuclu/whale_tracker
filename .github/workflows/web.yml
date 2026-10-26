@@ -80,9 +80,14 @@ jobs:
         if: steps.pw-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium
 
-      # playwright.config.ts starts `next start` on E2E_PORT itself.
+      # playwright.config.ts starts `next start` on E2E_PORT itself. The
+      # account tests sign in for real against an in-memory account store
+      # (lib/subscription-blob.ts), which only these two variables switch on.
       - name: End-to-end tests
         run: npm run test:e2e
+        env:
+          WHALE_TEST_MEMORY_STORE: "1"
+          ALERTS_SECRET: e2e-only-alerts-secret-not-a-real-one
 
       - name: Upload Playwright report and traces
         if: failure()
