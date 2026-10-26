@@ -255,9 +255,24 @@ export function GetAlertsPopover({
 
       {open ? (
         <div
+          ref={(el) => {
+            if (!el) return;
+            el.style.marginLeft = "0px";
+            const rect = el.getBoundingClientRect();
+            const pad = 16;
+            const vw = window.innerWidth;
+            if (rect.left < pad) {
+              el.style.marginLeft = `${Math.round(pad - rect.left)}px`;
+            } else if (rect.right > vw - pad) {
+              el.style.marginLeft = `${Math.round(vw - pad - rect.right)}px`;
+            }
+          }}
           role="dialog"
           aria-label="Alert and watchlist options"
-          className="absolute right-0 top-full z-40 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-[20px] border border-black/[0.08] bg-popover/95 p-4 text-left text-popover-foreground shadow-popover backdrop-blur-2xl dark:border-white/[0.12]"
+          className={cn(
+            "absolute top-full z-50 mt-2.5 w-[min(22rem,calc(100vw-2rem))] rounded-[20px] border border-black/[0.08] bg-popover/95 p-4 text-left text-popover-foreground shadow-popover backdrop-blur-2xl dark:border-white/[0.12]",
+            subject ? "left-1/2 -translate-x-1/2" : "right-0",
+          )}
         >
           <div className="flex items-start justify-between gap-2">
             <div>

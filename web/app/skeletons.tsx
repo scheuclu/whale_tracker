@@ -514,7 +514,7 @@ export function HeadingSkeleton() {
 export function HeroSkeleton({ square = false }: { square?: boolean }) {
   return (
     <div className="space-y-8 sm:space-y-10">
-      <div className="-mb-2 sm:-mb-4">
+      <div className="mb-3 sm:mb-4">
         <Line h="h-[22px]" bone="h-3 w-20" />
       </div>
       <div className="flex flex-col items-center">

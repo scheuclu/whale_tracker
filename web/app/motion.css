@@ -114,6 +114,7 @@ html {
 .apple-reveal-active .apple-stagger-item.is-revealed {
   opacity: 1;
   transform: none;
+  will-change: auto;
 }
 
 /* Native CSS Scroll-Driven Animation progressive enhancement */

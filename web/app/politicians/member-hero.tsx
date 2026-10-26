@@ -29,7 +29,7 @@ export function MemberHero({
   const sameDay = detail.first_tx_date === detail.last_tx_date;
 
   return (
-    <section className="apple-hero-surface apple-card-reveal relative flex flex-col items-center overflow-hidden rounded-[28px] px-5 py-8 text-center sm:px-10 sm:py-11">
+    <section className="apple-hero-surface apple-card-reveal relative z-20 flex flex-col items-center rounded-[28px] px-5 py-8 text-center sm:px-10 sm:py-11">
       <div className="rounded-full bg-card p-1 shadow-[0_8px_24px_-4px_rgba(0,0,0,0.12)] ring-1 ring-border">
         <MemberAvatar name={detail.member_name} bioguideId={detail.bioguide_id} size="xl" />
       </div>
