@@ -79,7 +79,7 @@ const TILE_PAGES = [
   "/members/nancy-pelosi-p000197",
   "/tickers/MSFT",
   "/insiders",
-  "/insiders?t=BBD",
+  "/tickers/BBD",
   "/rankings?view=trends",
 ];
 

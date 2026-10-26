@@ -36,7 +36,7 @@ export const PAGES: PageCase[] = [
   { path: "/tickers/MSFT" },
   { path: "/tickers/BRK.B" },
   { path: "/insiders" },
-  { path: "/insiders?t=BBD" },
+  { path: "/tickers/BBD" },
   { path: "/alerts" },
   { path: "/pipeline" },
   { path: "/scans" },

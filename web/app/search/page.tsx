@@ -1,5 +1,5 @@
 import { Search } from "lucide-react";
-import { memberHref, shortDate, tickerHref } from "@/lib/format";
+import { insiderIssuerHref, memberHref, shortDate, tickerHref } from "@/lib/format";
 import { searchInsiderIssuers } from "@/lib/insider-queries";
 import { searchMembers, searchRoster, searchTickers } from "@/lib/queries";
 import { Card, Empty, SectionTitle } from "../charts";
@@ -221,7 +221,7 @@ async function Results({ q }: { q: string }) {
               return i.ticker ? (
                 <a
                   key={i.issuer_cik}
-                  href={`/insiders?t=${encodeURIComponent(i.ticker)}`}
+                  href={insiderIssuerHref(i.ticker)}
                   className={`${cls} transition-colors duration-150 hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none`}
                 >
                   {inner}

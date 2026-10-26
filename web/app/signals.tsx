@@ -1,7 +1,7 @@
 import { assetLabel } from "@/lib/asset-label";
 import { getBothSides, getSharedTickers, type BothSidesRow, type SharedTickers } from "@/lib/crossover-queries";
 import { COUNT_NOUN, KIND_LABEL, getAlerts, isInsiderKind, type AlertKind, type AlertRow } from "@/lib/alert-queries";
-import { memberHref, range, relativeTime, tickerHref, usd } from "@/lib/format";
+import { insiderIssuerHref, memberHref, range, relativeTime, tickerHref, usd } from "@/lib/format";
 import { Card, SectionTitle } from "./charts";
 import { ActionBadge, MoneyText, PartyBadge, Tag, TickerChip } from "./ui";
 import { Disclosure } from "./disclosure";
@@ -129,7 +129,7 @@ function RecentSignalsCard({ alerts }: { alerts: AlertRow[] }) {
                   {hasTicker && a.ticker ? (
                     <TickerChip
                       ticker={a.ticker}
-                      href={isInsiderKind(a.kind) ? `/insiders?t=${encodeURIComponent(a.ticker)}` : undefined}
+                      href={isInsiderKind(a.kind) ? insiderIssuerHref(a.ticker) : undefined}
                     />
                   ) : null}
                   <SignalVolume a={a} />
@@ -245,7 +245,7 @@ function BothSidesCard({ rows, shared }: { rows: BothSidesRow[]; shared: SharedT
                   ·
                 </span>
                 <a
-                  href={`/insiders?t=${encodeURIComponent(r.ticker)}`}
+                  href={insiderIssuerHref(r.ticker)}
                   className="font-medium text-foreground decoration-border-strong underline-offset-[3px] hover:underline"
                 >
                   {plural(r.insiders, "insider")}

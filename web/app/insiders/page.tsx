@@ -1,30 +1,18 @@
-import { Fragment } from "react";
-import { MoneyText } from "../money";
 import { assetLabel } from "@/lib/asset-label";
 import {
   getInsiderClusters,
-  getInsiderIssuer,
   getInsiderIssuers,
   getInsiderSectors,
   getInsiderTotals,
   getInsiderTrades,
-  getIssuerInsiders,
   type InsiderSectorRow,
 } from "@/lib/insider-queries";
-import { getTickerDetail, getTickerMembers, type TickerMemberRow, type TickerRow } from "@/lib/queries";
-import { insiderIssuerHref, memberHref, memberLabel, range, shortDate, tickerHref, usd } from "@/lib/format";
+import { insiderIssuerHref, shortDate, usd } from "@/lib/format";
 import { Card, DivergingSplit, Empty, MagnitudeBars, SectionTitle, StatTile } from "../charts";
-import { BUTTON, PartyBadge, ResponsiveTable, RoleTag, SectorTag, Tag } from "../ui";
-import { MemberAvatar } from "../avatar";
+import { ResponsiveTable } from "../ui";
 import { Disclosure } from "../disclosure";
-import { PriceOverlay } from "../price-overlay";
 import { BackLink, DataError, PAGE_STACK, PageHeader, PillLinks, Quiet } from "../page-header";
-import { GroupedList, LIST_FOOT_LINK, ROW_LINK, ValueRow } from "../grouped-list";
-import { SymbolHero, SymbolMark } from "../symbol-hero";
-import { DirectionSplit, GlanceTile } from "../politicians/member-hero";
-import { longDate, tradeSummary } from "@/lib/members";
-import { cn } from "@/lib/utils";
-import { ChevronRight } from "lucide-react";
+import { SymbolMark } from "../symbol-hero";
 import {
   ISSUER_SORT,
   ROW_LIMITS,
@@ -47,53 +35,17 @@ import {
 } from "../sortable-table";
 import { RowLinkBody, StickyThead } from "../table-client";
 import type { Metadata } from "next";
-import { clip, pageCard, pageMetadata } from "@/lib/seo";
-import { absoluteUrl, plural } from "@/lib/site";
-import { ShareControl } from "../share-control";
-import { FollowButton, GetAlertsPopover } from "../watchlist-client";
+import { pageCard, pageMetadata } from "@/lib/seo";
 import { InsiderTradeList } from "../insider-trade-list";
-import { isWatchTicker } from "@/lib/watchlist";
 
 export const dynamic = "force-dynamic";
 
 /**
- * An issuer (`?t=<SYMBOL>`) is its own page and canonicalises to itself;
- * every window, direction, insider filter, sort and row count of the list is
- * a view of `/insiders`.
+ * Every window, direction, insider filter, sort and row count of the list
+ * is a view of `/insiders`. An issuer (`?t=<SYMBOL>`) is the stock page now:
+ * a 308 to `/tickers/<SYMBOL>#insiders` (app/api/legacy-redirect).
  */
-export async function generateMetadata({
-  searchParams,
-}: {
-  searchParams: Promise<{ t?: string }>;
-}): Promise<Metadata> {
-  const { t } = await searchParams;
-  if (t) {
-    const ticker = t.toUpperCase();
-    const path = `/insiders?t=${encodeURIComponent(ticker)}`;
-    let issuer = null;
-    try {
-      issuer = await getInsiderIssuer(ticker);
-    } catch {
-      /* fall through to the not-found copy */
-    }
-    if (!issuer) {
-      return pageMetadata({ title: `${ticker} insider trades`, description: `No stored insider trades for ${ticker}.`, path, noindex: true });
-    }
-    const name = issuer.issuer_name ? ` (${issuer.issuer_name})` : "";
-    return pageMetadata({
-      title: `${issuer.ticker ?? ticker}${name} insider trades: SEC Form 4`,
-      description: clip(
-        `${plural(issuer.insiders, "corporate insider")} filed ${plural(issuer.trades, "open-market trade")} in ${issuer.ticker ?? ticker}${name} on SEC Form 4: ` +
-          `${issuer.buys} buys and ${issuer.sells} sells${issuer.last_tx_date ? `, last on ${issuer.last_tx_date}` : ""}. Values are shares × reported price.`,
-        200
-      ),
-      path,
-      card: pageCard(
-        `/cards/issuer/${encodeURIComponent(ticker)}`,
-        `${issuer.ticker ?? ticker}${name} insider trades on SEC Form 4: ${plural(issuer.insiders, "insider")}, ${plural(issuer.filings, "filing")}, ${issuer.buys} buys and ${issuer.sells} sells`
-      ),
-    });
-  }
+export async function generateMetadata(): Promise<Metadata> {
   return pageMetadata({
     title: "Corporate insider trades: SEC Form 4 purchases and sales",
     description:
@@ -147,9 +99,6 @@ function ValueNote({ className }: { className?: string }) {
   );
 }
 
-function issuerHref(ticker: string) {
-  return `/insiders?t=${encodeURIComponent(ticker)}`;
-}
 
 export default async function InsidersPage({
   searchParams,
@@ -157,15 +106,6 @@ export default async function InsidersPage({
   searchParams: Promise<{ t?: string; w?: string; action?: string; cik?: string; sort?: string; dir?: string; n?: string }>;
 }) {
   const params = await searchParams;
-  // Keyed so list -> detail remounts rather than morphing the list DOM.
-  if (params.t) {
-    const t = params.t.toUpperCase();
-    return (
-      <Fragment key={`t:${t}`}>
-        <IssuerDetail ticker={t} />
-      </Fragment>
-    );
-  }
 
   const windowKey = params.w ?? "30";
   const days = windowKey === "all" ? undefined : Number(windowKey) || 30;
@@ -283,7 +223,7 @@ export default async function InsidersPage({
                   .join(" · "),
                 buy: c.buy_insiders,
                 sell: c.sell_insiders,
-                href: c.ticker ? issuerHref(c.ticker) : undefined,
+                href: c.ticker ? insiderIssuerHref(c.ticker) : undefined,
               }))}
             />
           ) : (
@@ -333,7 +273,7 @@ export default async function InsidersPage({
                 valueLabel: usd(r.buy_value),
                 title: r.issuer_name ?? undefined,
                 detail: `bought by ${r.buy_insiders} insider${r.buy_insiders === 1 ? "" : "s"}`,
-                href: r.ticker ? issuerHref(r.ticker) : undefined,
+                href: r.ticker ? insiderIssuerHref(r.ticker) : undefined,
               }))}
             />
           </Card>
@@ -351,7 +291,7 @@ export default async function InsidersPage({
                 valueLabel: usd(r.sell_value),
                 title: r.issuer_name ?? undefined,
                 detail: `sold by ${r.sell_insiders} insider${r.sell_insiders === 1 ? "" : "s"}`,
-                href: r.ticker ? issuerHref(r.ticker) : undefined,
+                href: r.ticker ? insiderIssuerHref(r.ticker) : undefined,
               }))}
             />
           </Card>
@@ -389,13 +329,13 @@ export default async function InsidersPage({
                     <tr
                       key={r.issuer_cik}
                       className={BODY_ROW}
-                      data-href={r.ticker ? issuerHref(r.ticker) : undefined}
+                      data-href={r.ticker ? insiderIssuerHref(r.ticker) : undefined}
                     >
                       <td className="px-3 py-2">
                         {r.ticker ? (
                           <div className="flex items-center gap-2">
                             <SymbolMark symbol={r.ticker} size="sm" />
-                            <a href={issuerHref(r.ticker)} className="row-name font-semibold">
+                            <a href={insiderIssuerHref(r.ticker)} className="row-name font-semibold">
                               {r.ticker}
                             </a>
                           </div>
@@ -548,274 +488,3 @@ function InsiderSectors({ sectors }: { sectors: InsiderSectorRow[] }) {
   );
 }
 
-async function IssuerDetail({ ticker }: { ticker: string }) {
-  let issuer, insiders, trades, congressRecent;
-  try {
-    [issuer, insiders, trades, congressRecent] = await Promise.all([
-      getInsiderIssuer(ticker),
-      getIssuerInsiders(ticker),
-      getInsiderTrades({ ticker, limit: 200 }),
-      getTickerDetail(ticker, CROSS_WINDOW_DAYS).catch(() => null),
-    ]);
-  } catch (err) {
-    return <DataError error={err} />;
-  }
-  if (!issuer) return <Empty>No stored insider trades for {ticker}.</Empty>;
-  const sym = issuer.ticker ?? ticker;
-  const watchable = isWatchTicker(sym);
-  // The three insiders with the most value traded, for the glance tile.
-  const topInsiders = [...insiders].sort((a, b) => b.bought + b.sold - (a.bought + a.sold)).slice(0, 3);
-
-  return (
-    <div className={PAGE_STACK}>
-      <header className="space-y-8 sm:space-y-10">
-        <div className="mb-3 flex items-center justify-between sm:mb-4">
-          <BackLink href="/insiders" label="Insiders" />
-        </div>
-        <SymbolHero
-          symbol={issuer.ticker ?? ticker}
-          identity={issuer.issuer_name}
-          badges={
-            <>
-              <Tag>SEC Form 4</Tag>
-              <SectorTag
-                group={trades[0]?.industry_group}
-                sic={trades[0]?.sic}
-                description={trades[0]?.sic_description}
-              />
-            </>
-          }
-          summary={
-            <>
-              {tradeSummary({ trades: issuer.trades, tickers: 0, buys: issuer.buys, sells: issuer.sells }, plural(issuer.insiders, "insider"))}.
-            </>
-          }
-          facts={
-            <>
-              {plural(issuer.filings, "filing")} · CIK {issuer.issuer_cik}
-              {issuer.last_tx_date ? ` · last traded ${longDate(issuer.last_tx_date)}` : ""}
-            </>
-          }
-          actions={
-            <>
-              {watchable ? (
-                <>
-                  <FollowButton kind="ticker" id={sym} label={sym} />
-                  <GetAlertsPopover subject={{ kind: "ticker", id: sym, label: sym }} />
-                </>
-              ) : null}
-              {congressRecent && congressRecent.politicians > 0 ? (
-                <a
-                  href="#congress-in-ticker"
-                  className={cn(BUTTON, "h-8 px-3.5 text-[13px]")}
-                  title="Jump to congressional STOCK Act trades in this symbol"
-                >
-                  {plural(congressRecent.politicians, "member")} in Congress (90d)
-                </a>
-              ) : null}
-              <ShareControl
-                url={absoluteUrl(insiderIssuerHref(sym))}
-                text={`${sym}${issuer.issuer_name ? ` (${issuer.issuer_name})` : ""}: corporate insider trades from SEC Form 4`}
-              />
-            </>
-          }
-        />
-        <div className="space-y-3 sm:space-y-4">
-          <section aria-label="Issuer totals" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-            <StatTile label="Insiders" value={String(issuer.insiders)} hint={`primary filers · ${plural(issuer.filings, "Form 4")}`} />
-            <StatTile label="Trades" value={String(issuer.trades)} hint={`${issuer.buys} buy / ${issuer.sells} sell`} />
-            <StatTile label="Bought" value={issuer.buy_value ? usd(issuer.buy_value) : "—"} hint="shares × reported price" />
-            <StatTile label="Sold" value={issuer.sell_value ? usd(issuer.sell_value) : "—"} hint="shares × reported price" />
-          </section>
-          <GlanceTile
-            aside={
-              topInsiders.length ? (
-                <>
-                  <span className="mr-1 font-semibold">Largest</span>
-                  {topInsiders.map((p) => (
-                    <a
-                      key={p.cik}
-                      href={`/insiders?cik=${encodeURIComponent(p.cik)}`}
-                      className={cn(BUTTON, "h-7 px-3 text-[12.5px]")}
-                      title={`${p.buys} buy / ${p.sells} sell · shares × reported price`}
-                    >
-                      {p.name}
-                    </a>
-                  ))}
-                </>
-              ) : null
-            }
-          >
-            <DirectionSplit
-              buys={issuer.buys}
-              sells={issuer.sells}
-              buyers={issuer.buy_insiders}
-              sellers={issuer.sell_insiders}
-              noun="insider"
-            />
-          </GlanceTile>
-        </div>
-      </header>
-
-      <PriceOverlay ticker={issuer.ticker ?? ticker} focus="insider" />
-
-      <section>
-        <SectionTitle kicker="Corporate Filers" right={<span>{plural(insiders.length, "insider")} · shares × reported price</span>}>Who traded</SectionTitle>
-        <GroupedList>
-          {insiders.map((p) => (
-            <ValueRow
-              key={p.cik}
-              name={
-                <a href={`/insiders?cik=${encodeURIComponent(p.cik)}`} className={ROW_LINK}>
-                  {p.name}
-                </a>
-              }
-              tags={
-                <RoleTag
-                  isDirector={p.is_director}
-                  isOfficer={p.is_officer}
-                  isTenPercentOwner={p.is_ten_percent_owner}
-                  officerTitle={p.officer_title}
-                />
-              }
-              value={
-                <>
-                  {p.bought ? `+${usd(p.bought)}` : ""}
-                  {p.bought && p.sold ? " " : ""}
-                  {p.sold ? `−${usd(p.sold)}` : ""}
-                </>
-              }
-              meta={`${p.buys} buy / ${p.sells} sell`}
-            />
-          ))}
-        </GroupedList>
-      </section>
-
-      <section>
-        <SectionTitle kicker="Complete Ledger">Every stored trade</SectionTitle>
-        <p className="mb-1 pl-1 text-[13px] text-muted-foreground">
-          Open-market buys and sells from filings that cleared the $50k floor.
-        </p>
-        <ValueNote className="mb-3 pl-1" />
-        <InsiderTradeList trades={trades} showIssuer={false} />
-      </section>
-
-      <MembersInTicker ticker={issuer.ticker ?? ticker} />
-    </div>
-  );
-}
-
-/** Trade-date window for the cross-link, matching the ticker page's default view. */
-const CROSS_WINDOW_DAYS = 90;
-
-/**
- * The congressional side of this symbol, set beside the Form 4 figures and
- * never added to them. Members disclose brackets, so every figure here is a
- * disclosed range (the sum of the floors to the sum of the ceilings, open-ended
- * once a trade sits in the top bracket) — not a value like the ones above.
- * Fetches its own data so a fault in the congressional tables cannot take the
- * insider page down.
- */
-async function MembersInTicker({ ticker }: { ticker: string }) {
-  let stat: TickerRow | null, members: TickerMemberRow[], allTime: TickerRow | null;
-  try {
-    [stat, members, allTime] = await Promise.all([
-      getTickerDetail(ticker, CROSS_WINDOW_DAYS),
-      getTickerMembers(ticker, CROSS_WINDOW_DAYS),
-      getTickerDetail(ticker),
-    ]);
-  } catch (err) {
-    return (
-      <section>
-        <SectionTitle>Members of Congress in this ticker</SectionTitle>
-        <DataError error={err} context="Congressional data unavailable" />
-      </section>
-    );
-  }
-  const href = tickerHref(ticker);
-
-  return (
-    <section id="congress-in-ticker" className="table-anchor">
-      <SectionTitle
-        kicker="Congressional Overlap"
-        right={
-          <span>last {CROSS_WINDOW_DAYS} days · House &amp; Senate disclosures</span>
-        }
-      >
-        Members of Congress in this ticker
-      </SectionTitle>
-      {stat ? (
-        <GroupedList
-          inset="3.25rem"
-          header={
-            <p className="text-[14px] leading-relaxed text-ink-2">
-              <span className="font-semibold text-foreground">{plural(stat.politicians, "member")}</span> disclosed{" "}
-              {plural(stat.trades, "trade")} —{" "}
-              {[
-                stat.buy_politicians ? `${stat.buy_politicians} bought` : null,
-                stat.sell_politicians ? `${stat.sell_politicians} sold` : null,
-              ]
-                .filter(Boolean)
-                .join(", ")}
-              <span className="text-muted-foreground">
-                {" "}
-                · disclosed range <MoneyText value={range(stat.volume_min, stat.volume_max)} /> · last trade{" "}
-                {shortDate(stat.last_tx_date)}
-                {stat.transcribed ? ` · ${stat.transcribed} transcribed from scans, not in the range` : ""}
-              </span>
-            </p>
-          }
-          footer={
-            <>
-              <Disclosure
-                size="sm"
-                lead="Each figure is the disclosed bracket range, never a computed value. Kept apart from the Form 4 figures above — nothing here enters them."
-              >
-                <p>
-                  Distinct filers on periodic transaction reports. A report may take 45 days to reach the Clerk,
-                  so the most recent weeks are still arriving.
-                </p>
-              </Disclosure>
-              <a href={href} className={LIST_FOOT_LINK}>
-                Every disclosed trade in {ticker}
-                <ChevronRight aria-hidden className="size-3.5" strokeWidth={2.25} />
-              </a>
-            </>
-          }
-        >
-          {members.map((m) => (
-            <ValueRow
-              key={m.member_name}
-              name={
-                <a href={memberHref(m.member_name, m.bioguide_id)} className={cn(ROW_LINK, "inline-flex min-w-0 items-center gap-2.5")}>
-                  <MemberAvatar name={m.member_name} bioguideId={m.bioguide_id} size="md" />
-                  <span className="min-w-0 truncate">{memberLabel(m.member_name, null, m.state, m.district, m.chamber)}</span>
-                </a>
-              }
-              tags={<PartyBadge party={m.party} />}
-              value={<MoneyText value={range(m.volume_min, m.volume_max)} />}
-              meta={`${m.buys} buy / ${m.sells} sell · last ${shortDate(m.last_tx_date)}`}
-            />
-          ))}
-        </GroupedList>
-      ) : (
-        <Card>
-          <Quiet>
-            No disclosed member trade in {ticker} in the last {CROSS_WINDOW_DAYS} days.{" "}
-            {allTime ? (
-              <>
-                {plural(allTime.trades, "trade")} by {plural(allTime.politicians, "member")} all-time —{" "}
-                <a href={href} className="ink-link">
-                  see the ticker
-                </a>
-                .
-              </>
-            ) : (
-              "No member has disclosed a trade in this symbol."
-            )}
-          </Quiet>
-        </Card>
-      )}
-    </section>
-  );
-}

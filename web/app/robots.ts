@@ -14,7 +14,7 @@ import { absoluteUrl } from "../lib/site";
  * filter, sort and row count is a link, so their combinations are an
  * unbounded URL space that canonicalises to one page. GPTBot walked
  * `/insiders` views from 2026-10-18 at ~140k uncached renders a day. The
- * pages themselves stay open: `/insiders`, an issuer (`/insiders?t=X`),
+ * pages themselves stay open: `/insiders`, the old issuer URL (`/insiders?t=X`, a redirect),
  * `/tickers` and every member page. Rules are scoped to those paths, never
  * `/*`, because the longest match wins and `/api/v1/` takes `action`/`sort`.
  */

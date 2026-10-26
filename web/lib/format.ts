@@ -214,7 +214,7 @@ export function tickerLogoUrl(symbol: string | null | undefined): string | null 
 
 /** An issuer's Form 4 insider page. */
 export function insiderIssuerHref(symbol: string): string {
-  return `/insiders?t=${encodeURIComponent(symbol.toUpperCase())}`;
+  return `${tickerHref(symbol.toUpperCase())}#insiders`;
 }
 
 /** One committee's roster with each seat holder's trading totals, keyed on

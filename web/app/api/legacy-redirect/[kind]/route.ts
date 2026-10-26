@@ -51,5 +51,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ kind: strin
     return redirect(req, symbol ? tickerHref(symbol) : "/tickers");
   }
 
+  // The insider issuer page became the stock page's insider section.
+  if (kind === "issuer") {
+    const symbol = q.get("t")?.trim().toUpperCase();
+    return redirect(req, symbol ? `${tickerHref(symbol)}#insiders` : "/insiders");
+  }
+
   return redirect(req, "/");
 }

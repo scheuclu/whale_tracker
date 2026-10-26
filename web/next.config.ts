@@ -67,6 +67,7 @@ const nextConfig: NextConfig = {
         { source: "/politicians", has: [{ type: "query", key: "m" }], destination: "/api/legacy-redirect/member" },
         { source: "/", has: [{ type: "query", key: "member" }], destination: "/api/legacy-redirect/feed-member" },
         { source: "/tickers", has: [{ type: "query", key: "t" }], destination: "/api/legacy-redirect/ticker" },
+        { source: "/insiders", has: [{ type: "query", key: "t" }], destination: "/api/legacy-redirect/issuer" },
       ],
       afterFiles: [],
       fallback: [],

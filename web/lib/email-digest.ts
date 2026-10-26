@@ -5,7 +5,7 @@ import {
   type AlertKind,
   type AlertRow,
 } from "./alert-queries";
-import { ACTION_LABEL, memberHref, price, range, shares, tickerHref, usd } from "./format";
+import { ACTION_LABEL, insiderIssuerHref, memberHref, price, range, shares, tickerHref, usd } from "./format";
 import { getInsiderTrades, type InsiderTradeRow } from "./insider-queries";
 import { getTransactions, type TransactionRow } from "./queries";
 import { absoluteUrl, SITE_NAME } from "./site";
@@ -205,7 +205,7 @@ export function renderDigestEmail(
         `- ${sym} (${r.insider_name ?? "insider"}): ${act} ${val} (${shares(r.shares)} sh @ ${price(r.price_per_share)}) · traded ${r.tx_date ?? "—"}`
       );
       return `<li style="padding:8px 0;border-bottom:1px solid #f0f0f2;font-size:14px;line-height:1.45;">
-        <strong><a href="${escapeHtml(absoluteUrl(`/insiders?t=${encodeURIComponent(sym)}`))}" style="color:#1d1d1f;">${escapeHtml(sym)}</a></strong>
+        <strong><a href="${escapeHtml(absoluteUrl(insiderIssuerHref(sym)))}" style="color:#1d1d1f;">${escapeHtml(sym)}</a></strong>
         · ${escapeHtml(r.insider_name ?? "insider")}
         · ${escapeHtml(act)} <strong>${escapeHtml(val)}</strong>
         <span style="color:#6e6e73;">(${escapeHtml(shares(r.shares))} sh @ ${escapeHtml(price(r.price_per_share))}) · traded ${escapeHtml(r.tx_date ?? "—")}</span>
