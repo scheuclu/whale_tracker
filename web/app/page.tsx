@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { Bell, Mail, Star, Users } from "lucide-react";
 import { getFilingSpan } from "@/lib/entities";
 import { getInsiderTotals, getInsiderTrades, type InsiderTradeRow } from "@/lib/insider-queries";
@@ -20,6 +21,7 @@ import { SignalsAndConvergence } from "./signals";
 import { AlertsCta } from "./account-client";
 import { Quiet } from "./page-header";
 import { ChevronRight } from "lucide-react";
+import heroImage from "./home-hero.jpg";
 
 /**
  * The landing page. What the site is, in one screen, then the evidence:
@@ -134,6 +136,21 @@ function Hero({
           Browse the live feed
         </a>
       </div>
+      <figure className="mx-auto mt-10 max-w-[44rem]">
+        {/* The art sits on white: multiplied, the white takes the page's own grey in light mode; in dark mode it stays a card. */}
+        <Image
+          src={heroImage}
+          alt="Satirical illustration: Nancy Pelosi drawn as a fat cat with cat ears and paws, in a pinstripe suit with a cigar, sitting in a pile of cash, gold coins and stock certificates, holding up a phone whose chart reads “Insider gains”."
+          sizes="(min-width: 768px) 44rem, 100vw"
+          loading="eager"
+          fetchPriority="high"
+          placeholder="blur"
+          className="h-auto w-full rounded-[28px] mix-blend-multiply dark:mix-blend-normal"
+        />
+        <figcaption className="mt-3 text-[12px] text-muted-foreground">
+          Satirical illustration, AI-generated. A disclosed trade is not evidence of wrongdoing.
+        </figcaption>
+      </figure>
       {figures.length ? (
         <dl className="mx-auto mt-12 grid max-w-[52rem] grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-4">
           {figures.map((f) => (
