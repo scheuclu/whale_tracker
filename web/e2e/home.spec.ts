@@ -6,11 +6,10 @@ test("the landing page says what the site is and offers alerts", async ({ page }
   const cta = page.getByRole("link", { name: "Get free alerts" }).first();
   await expect(cta).toHaveAttribute("href", "/signin?next=%2Faccount");
   await expect(page.getByRole("link", { name: "Browse the live feed" })).toHaveAttribute("href", "/feed");
-  // The hero art loads through the image optimizer and keeps its satire caption.
+  // The hero art loads through the image optimizer.
   const hero = page.getByRole("img", { name: /^Satirical illustration/ });
   await expect(hero).toBeVisible();
   await expect.poll(() => hero.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
-  await expect(page.getByText("Satirical illustration, AI-generated.", { exact: false })).toBeVisible();
   // Both sources, side by side and apart.
   await expect(page.getByRole("heading", { name: "Congress", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Corporate insiders", exact: true })).toBeVisible();

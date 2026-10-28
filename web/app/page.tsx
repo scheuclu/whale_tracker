@@ -21,7 +21,7 @@ import { SignalsAndConvergence } from "./signals";
 import { AlertsCta } from "./account-client";
 import { Quiet } from "./page-header";
 import { ChevronRight } from "lucide-react";
-import heroImage from "./home-hero.jpg";
+import heroImage from "./home-hero.png";
 
 /**
  * The landing page. What the site is, in one screen, then the evidence:
@@ -126,6 +126,23 @@ function Hero({
       <h1 className="mx-auto mt-5 max-w-[16ch] text-balance text-[40px] font-bold leading-[1.04] tracking-[-0.035em] text-foreground sm:text-[64px]">
         See what Congress and insiders are trading.
       </h1>
+
+      <figure className="mx-auto mt-10 max-w-[44rem]">
+        {/* A cut-out on a transparent ground, so it sits on the page in light and dark mode alike. */}
+        <Image
+          src={heroImage}
+          alt="Satirical illustration: Nancy Pelosi drawn as a fat cat with cat ears and paws, in a pinstripe suit with a cigar, sitting in a pile of cash, gold coins and stock certificates, holding up a phone whose chart reads “Insider gains”."
+          sizes="(min-width: 768px) 44rem, 100vw"
+          loading="eager"
+          fetchPriority="high"
+          placeholder="blur"
+          className="h-auto w-full"
+        />
+        {/*<figcaption className="mt-3 text-[12px] text-muted-foreground">
+          Satirical illustration, AI-generated. A disclosed trade is not evidence of wrongdoing.
+        </figcaption>*/}
+      </figure>
+
       <p className="mx-auto mt-5 max-w-[40rem] text-pretty text-[17px] leading-relaxed text-ink-2 sm:text-[21px]">
         Every stock trade members of Congress disclose under the STOCK Act, and every large open-market trade
         company insiders file with the SEC. Reproduced as filed, searchable, and in your inbox when it matters.
@@ -136,21 +153,7 @@ function Hero({
           Browse the live feed
         </a>
       </div>
-      <figure className="mx-auto mt-10 max-w-[44rem]">
-        {/* The art sits on white: multiplied, the white takes the page's own grey in light mode; in dark mode it stays a card. */}
-        <Image
-          src={heroImage}
-          alt="Satirical illustration: Nancy Pelosi drawn as a fat cat with cat ears and paws, in a pinstripe suit with a cigar, sitting in a pile of cash, gold coins and stock certificates, holding up a phone whose chart reads “Insider gains”."
-          sizes="(min-width: 768px) 44rem, 100vw"
-          loading="eager"
-          fetchPriority="high"
-          placeholder="blur"
-          className="h-auto w-full rounded-[28px] mix-blend-multiply dark:mix-blend-normal"
-        />
-        <figcaption className="mt-3 text-[12px] text-muted-foreground">
-          Satirical illustration, AI-generated. A disclosed trade is not evidence of wrongdoing.
-        </figcaption>
-      </figure>
+
       {figures.length ? (
         <dl className="mx-auto mt-12 grid max-w-[52rem] grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-4">
           {figures.map((f) => (
