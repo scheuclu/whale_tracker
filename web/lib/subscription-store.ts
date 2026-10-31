@@ -432,6 +432,15 @@ export async function markDigestSent(
   }
 }
 
+/** Whether the digest sender emails this record: confirmed, not unsubscribed, and something to send. */
+export function receivesDigest(sub: StoredSubscription): boolean {
+  return (
+    sub.verified &&
+    sub.emailAlerts &&
+    (sub.members.length > 0 || sub.tickers.length > 0 || sub.insiders.length > 0 || sub.clusters || sub.weeklyDigest)
+  );
+}
+
 export async function listVerifiedSubscriptions(
   backend: SubscriptionBlobBackend
 ): Promise<StoredSubscription[]> {
@@ -440,20 +449,37 @@ export async function listVerifiedSubscriptions(
   for (const b of blobs) {
     const res = await backend.read(b);
     const sub = res ? parseStoredSubscription(res.body) : null;
-    if (
-      sub &&
-      sub.verified &&
-      sub.emailAlerts &&
-      (sub.members.length > 0 ||
-        sub.tickers.length > 0 ||
-        sub.insiders.length > 0 ||
-        sub.clusters ||
-        sub.weeklyDigest)
-    ) {
-      out.push(sub);
-    }
+    if (sub && receivesDigest(sub)) out.push(sub);
   }
   return out;
+}
+
+/**
+ * Every record, for the operator's admin page — unconfirmed and unsubscribed
+ * ones included. `unreadable` counts blobs that vanished between the listing
+ * and the read or did not parse, so a broken record shows as one rather than
+ * as nobody. Read a few at a time: one request per account.
+ */
+export async function listAllSubscriptions(
+  backend: SubscriptionBlobBackend,
+  concurrency = 8
+): Promise<{ accounts: StoredSubscription[]; unreadable: number }> {
+  const blobs = (await backend.list(SUBSCRIPTION_PREFIX)).filter((b) => PATH_RE.test(b.pathname));
+  const accounts: StoredSubscription[] = [];
+  let unreadable = 0;
+  for (let i = 0; i < blobs.length; i += concurrency) {
+    const read = await Promise.all(
+      blobs.slice(i, i + concurrency).map(async (b) => {
+        const res = await backend.read(b).catch(() => null);
+        return res ? parseStoredSubscription(res.body) : null;
+      })
+    );
+    for (const sub of read) {
+      if (sub) accounts.push(sub);
+      else unreadable++;
+    }
+  }
+  return { accounts, unreadable };
 }
 
 /** In-memory fake backend for unit tests. */

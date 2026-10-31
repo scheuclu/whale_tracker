@@ -46,6 +46,8 @@ export const DISALLOW = [
   "/api/export.csv",
   "/api/scan-page/",
   "/api/health",
+  // The operator's account list: noindex and behind sign-in, kept out of crawls too.
+  "/admin",
   ...INSIDER_VIEW_PARAMS.map((p) => `/insiders?${p}=`),
   // A second parameter is always a view: an issuer plus a window, or a filter plus a sort.
   "/insiders?*&",

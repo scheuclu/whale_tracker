@@ -544,11 +544,10 @@ parser stays faithful to the PDF and the UI flags the row rather than
   (`fatcat_pending_follow_v1`, 1 h) while the reader signs in, then applied
   by `account-store.ts`. Email-link preference editing (`manage` tokens) is
   gone; the one-click unsubscribe link stays token-only, as the law needs.
-- **Read the session in one page only: `/account`.** Pages are CDN-cached by
-  URL, so any other page reading `fcw_session` would serve one reader's
-  account to the next. `/account` (the dashboard) is excluded from
-  `PAGE_SOURCE` and keeps `private, no-store` (`cache-policy.test.ts` pins
-  it); everywhere else the browser fetches `/api/account` (`no-store`), and
+- **Read the session in two pages only: `/account` and `/admin`.** Pages are
+  CDN-cached by URL, so any other page reading `fcw_session` would serve one
+  reader's account to the next. Both are excluded from `PAGE_SOURCE` and keep
+  `private, no-store` (`cache-policy.test.ts` pins them); everywhere else the browser fetches `/api/account` (`no-store`), and
   the readable `fcw_signed_in` hint cookie spares signed-out visitors that.
   `/watchlist` 308s to `/account`.
 - The dashboard's figures come from the pages' own queries filtered to the
@@ -572,6 +571,13 @@ parser stays faithful to the PDF and the UI flags the row rather than
   `<origin>/api/auth/google/callback`, registered per origin), plus the
   existing `ALERTS_SECRET`, Blob and `RESEND_API_KEY`. Missing pieces hide
   that method on `/signin` rather than failing.
+- **`/admin`** is the operator's account list: every record (unconfirmed and
+  unsubscribed included), signups per week, what each follows, the most
+  followed. Same sign-in as readers, gated on `ADMIN_EMAILS` (`lib/admin.ts`;
+  unset or blank means nobody). It reads the session like `/account`, so it
+  is excluded from `PAGE_SOURCE` too and the test pins both. "Gets the
+  digest" is `receivesDigest`, the digest sender's own predicate. No
+  analytics events on it: every row is an address.
 
 ## Data-viz
 

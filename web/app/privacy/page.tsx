@@ -76,6 +76,11 @@ const SECTIONS: LegalSection[] = [
           <li>when the account was created and last changed.</li>
         </ul>
         <p>
+          The person who runs this site can see these records (your address, what you follow, your email
+          settings and those dates) on a private admin page, to run the service and answer you if you write.
+          Nobody else can, and they are not shared or used for anything else.
+        </p>
+        <p>
           With Google, we ask only for your email address and whether Google has verified it; we do not receive
           your name, photo, contacts or anything else, and Google learns that you signed in to this site. With
           an email link, the address you type gets one email; nothing is stored unless the link is opened.
@@ -212,8 +217,8 @@ const SECTIONS: LegalSection[] = [
           address; see <TextLink href="https://policies.google.com/privacy">Google&apos;s privacy policy</TextLink>.
         </li>
         <li>
-          <strong>The operator&apos;s sign-in provider</strong> confirms who is signing in to the admin page. It
-          receives nothing about readers or about anyone who writes to us.
+          The admin page uses the same sign-in as readers (Google or an emailed link), so no other provider is
+          involved and none receives anything about readers.
         </li>
         <li>
           <strong>GitHub</strong> hosts the code and the disclosure database. No reader, account or contact data

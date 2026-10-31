@@ -45,6 +45,7 @@ export const PAGES: PageCase[] = [
   { path: "/scans/9116378", noindex: true },
   { path: "/search?q=pelosi", canonical: "/search", noindex: true },
   { path: "/account", noindex: true },
+  { path: "/admin", noindex: true },
   { path: "/signin", noindex: true },
   { path: "/methodology" },
   { path: "/this-page-does-not-exist", status: 404, canonical: null, noindex: true },
