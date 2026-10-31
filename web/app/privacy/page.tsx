@@ -73,7 +73,8 @@ const SECTIONS: LegalSection[] = [
             your email settings: whether you get the daily digest, cluster alerts and the weekly roundup, and
             the date of the last digest we sent;
           </li>
-          <li>when the account was created and last changed.</li>
+          <li>when the account was created and last changed;</li>
+          <li>if you use the chat, today&apos;s message and token count (see below).</li>
         </ul>
         <p>
           The person who runs this site can see these records (your address, what you follow, your email
@@ -101,6 +102,40 @@ const SECTIONS: LegalSection[] = [
         <p>
           <strong>Deleting it.</strong> &ldquo;Delete account&rdquo; on your dashboard removes the record
           immediately. We keep accounts until you delete them.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "chat",
+    title: "If you use the chat",
+    body: (
+      <>
+        <p>
+          <TextLink href="/chat">Ask FatCat</TextLink> is for signed-in readers. When you send a question, our
+          server sends it to <strong>Google</strong>&apos;s Gemini API together with the conversation so far
+          (your earlier questions and the answers in the same chat) and the public disclosure data the answer is
+          looked up in. Google writes the answer and sends it back. Nothing else about you goes with it: not
+          your email address, your follows or your IP address.
+        </p>
+        <p>
+          We do not store your questions or the answers. The conversation is kept only in your browser tab
+          (session storage, <Code>fatcat_chat_v1</Code>) so that it survives following a link and coming back;
+          closing the tab, &ldquo;New chat&rdquo; or signing out clears it.
+        </p>
+        <p>
+          To keep the chat free and within a daily limit, we store a counter for your account: the date, how
+          many messages you sent that day and how many Gemini tokens they used. It sits next to your account
+          record, keyed by the same one-way hash (not your address), is overwritten the next day and is
+          deleted with your account. A daily total across all readers (messages, tokens and refused requests)
+          is kept without any per-person detail. Our server logs record, for each message, only how long it
+          took and how many lookups and tokens it used, never its text.
+        </p>
+        <p>
+          Google handles chat text under its Gemini API terms for paid services: it does not use it to improve
+          its products, and keeps it for a limited period to detect abuse; see{" "}
+          <TextLink href="https://ai.google.dev/gemini-api/terms">the Gemini API terms</TextLink>. Please do not
+          put personal information in your questions; the chat is about public disclosures.
         </p>
       </>
     ),
@@ -215,6 +250,10 @@ const SECTIONS: LegalSection[] = [
         <li>
           <strong>Google</strong>, only if you choose &ldquo;Continue with Google&rdquo;, confirms your email
           address; see <TextLink href="https://policies.google.com/privacy">Google&apos;s privacy policy</TextLink>.
+        </li>
+        <li>
+          <strong>Google</strong> also answers chat questions, only if you use the chat: its Gemini API receives
+          the conversation (see <TextLink href="#chat">If you use the chat</TextLink>).
         </li>
         <li>
           The admin page uses the same sign-in as readers (Google or an emailed link), so no other provider is

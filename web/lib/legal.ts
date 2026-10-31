@@ -4,4 +4,4 @@
  * as the change (and change /privacy whenever what the site collects does).
  */
 export const PRIVACY_UPDATED = "2026-10-31";
-export const TERMS_UPDATED = "2026-10-22";
+export const TERMS_UPDATED = "2026-10-31";

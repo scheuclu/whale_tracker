@@ -10,6 +10,8 @@ import { plural } from "@/lib/site";
 import { subscriptionBackend } from "@/lib/subscription-blob";
 import { listAllSubscriptions, receivesDigest, type StoredSubscription } from "@/lib/subscription-store";
 import { alertsSecret } from "@/lib/subscription-token";
+import { chatConfig } from "@/lib/chat-config";
+import { readChatTotals, type ChatTotals } from "@/lib/chat-usage";
 import { SignInPanel } from "../account-client";
 import { Card, ColumnSeries, SectionTitle, StatTile } from "../charts";
 import { DataTable } from "../data-table";
@@ -103,6 +105,8 @@ export default async function AdminPage() {
     s.insiders.map((i) => i.id)
   ).catch(() => ({ members: new Map<string, string>(), insiders: new Map<string, string>() }));
   const weeks = s.signupsByWeek.map((w) => ({ ...w, label: weekLabel(w.week) }));
+  const chat = chatConfig();
+  const chatToday: ChatTotals | null = chat ? await readChatTotals(subscriptionBackend()!).catch(() => null) : null;
 
   return (
     <div className={PAGE_STACK}>
@@ -122,6 +126,26 @@ export default async function AdminPage() {
           />
         </div>
       </PageHeader>
+
+      <section>
+        <SectionTitle right={<span>today, UTC</span>}>Chat</SectionTitle>
+        {!chat ? (
+          <Quiet>The chat is off on this deployment (no GEMINI_CHAT_API_KEY, or a limit set to 0).</Quiet>
+        ) : !chatToday ? (
+          <Quiet>Today&rsquo;s chat counter could not be read.</Quiet>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" data-admin-chat>
+            <StatTile label="Messages" value={chatToday.messages.toLocaleString()} hint={`limit ${chat.dailyLimit} per account`} />
+            <StatTile
+              label="Gemini tokens"
+              value={chatToday.tokens.toLocaleString()}
+              hint={`${Math.min(100, Math.round((chatToday.tokens / chat.dailyTokenBudget) * 100))}% of ${chat.dailyTokenBudget.toLocaleString()} budget`}
+            />
+            <StatTile label="Refused: daily limit" value={chatToday.refusedLimit.toLocaleString()} hint="readers out of messages" />
+            <StatTile label="Refused: budget" value={chatToday.refusedBudget.toLocaleString()} hint={`model ${chat.model}`} />
+          </div>
+        )}
+      </section>
 
       {unreadable > 0 ? (
         <StatusNote tone="error" as="p" className="text-[14px] text-foreground">

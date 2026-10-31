@@ -128,6 +128,27 @@ const SECTIONS: LegalSection[] = [
     ),
   },
   {
+    id: "chat",
+    title: "The chat",
+    body: (
+      <>
+        <p>
+          The answers in <TextLink href="/chat">Ask FatCat</TextLink> are written automatically by a language
+          model (Google Gemini) from this site&apos;s data. They can be wrong, incomplete or out of date even when
+          the data is right: check what matters against the linked filings. Like everything here, an answer is
+          not investment advice and not a statement that anyone did anything wrong, and the rules on the{" "}
+          <TextLink href="/methodology">methodology page</TextLink> (amounts are ranges, estimates are labelled)
+          apply to anything you quote from it.
+        </p>
+        <p>
+          The chat is free for signed-in readers within a daily limit. Please use it yourself rather than through
+          a script, and do not try to make it say things the data does not. We may change the limit, or pause the
+          chat, at any time.
+        </p>
+      </>
+    ),
+  },
+  {
     id: "no-warranty",
     title: "No warranty; limits on liability",
     body: (

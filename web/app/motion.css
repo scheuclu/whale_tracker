@@ -225,15 +225,17 @@ html {
    border tint in its place, so the shell's ring is restored on them here,
    unlayered, and it beats the utility.
    ------------------------------------------------------------------ */
-:is(select, textarea, input:not([type="checkbox"], [type="radio"])):not(.site-header form[role="search"] *):focus-visible,
+:is(select, textarea, input:not([type="checkbox"], [type="radio"])):not(.site-header form[role="search"] *, [data-chat-field] *):focus-visible,
 /* Chromium never matches :focus-visible on a date field (focus sits in its
    inner segments), so these take the ring on any focus. */
 input:is([type="date"], [type="time"], [type="datetime-local"], [type="month"], [type="week"]):focus {
   outline: 2px solid var(--ring);
   outline-offset: 1px;
 }
-/* The header search box: the pill is the form, so the form wears the ring. */
-.site-header form[role="search"]:has(input:focus-visible) {
+/* The header search box: the pill is the form, so the form wears the ring.
+   The chat's question field (app/chat/chat-client.tsx) is the same shape. */
+.site-header form[role="search"]:has(input:focus-visible),
+[data-chat-field]:has(textarea:focus-visible) {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }

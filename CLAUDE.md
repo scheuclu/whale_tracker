@@ -579,6 +579,58 @@ parser stays faithful to the PDF and the UI flags the row rather than
   digest" is `receivesDigest`, the digest sender's own predicate. No
   analytics events on it: every row is an address.
 
+## Reader chat (`/chat`, `/api/chat`)
+
+- "Ask FatCat": signed-in readers ask about the data in plain English; Google
+  Gemini answers through **function calling over the site's own data**. The
+  tools are `web/lib/data-tools.ts`: the `/api/v1` builders (same parameter
+  whitelist, run in-process) plus the search page's queries. No SQL tool,
+  ever: every amount reaches the model as the API's range object and every
+  total as its `Volume`, transcribed rows already out, so the model can
+  misquote a bracket but never compute one. A new question the chat should
+  answer is a new tool built on a query the pages already use.
+- The instructions (`web/lib/chat-prompt.ts`) embed `QUOTING_RULES` and
+  `KNOWN_GAPS` from `methodology.ts` verbatim, and add only conversational
+  conduct: look figures up, link only `url`/`source_url` values from tool
+  results, never accuse or speculate about motives, never advise, stay on
+  this data. Fixed text first, the day's facts last (Gemini's implicit cache
+  reuses the prefix). `lib/data-tools.test.ts` checks the embedding.
+- **Paid by the operator, so bounded everywhere.** `GEMINI_CHAT_API_KEY`
+  (its own Google project, paid tier: free-tier prompts are used to improve Google's
+  products and `/privacy` says they are not; not the pipeline's key, so chat
+  cannot starve vision's rate limit). Per account `CHAT_DAILY_LIMIT`
+  messages per UTC day (20); for everyone `CHAT_DAILY_TOKEN_BUDGET` tokens
+  per UTC day (2,000,000, ~$1.50–2 at Gemini 3.8 Flash's list price), checked
+  before a message and spent after it. Per message (`chat-config.ts`): 6 model
+  calls, 8 tool calls, 4,096 output tokens per call, tool results cut to 24k
+  characters with a `truncated` note. The last permitted call has function
+  calling off, so a message always ends in an answer. Missing key or a limit
+  of 0 turns chat off (the page says so; nothing runs unbounded).
+- Counters live in the **existing private Blob store** (`lib/chat-usage.ts`):
+  `chat-usage/<subscriberKey>.json` per account (same HMAC as its record, no
+  address), `chat-usage/_total.json` for everyone; read-modify-write under
+  the ETag, retried. Deleting the account deletes its counter. A message the
+  model never answered (outage, no tokens spent) is refunded.
+- **Nothing the reader writes is stored.** The browser keeps the
+  conversation (React state + `sessionStorage` `fatcat_chat_v1`, cleared by
+  New chat and sign-out) and sends it with each message; `parseChatBody`
+  bounds it (16 turns, 1,500-character questions, 8,000-character answers).
+  The server log line per message has counts only. `/privacy#chat` and
+  `/terms#chat` describe this; change them with it.
+- `/api/chat` reads the session (it is `no-store`); the `/chat` page does
+  not and stays CDN-cached like any page. The answer streams as NDJSON
+  (`start`, `tool` labels, `answer`, `error`, `done`). Gemini 3 needs a
+  function-calling turn sent back **verbatim** (thought signatures):
+  `chat-agent.ts` never rebuilds a model turn.
+- Answers are Markdown rendered by `lib/chat-markdown.ts` into React
+  elements, never HTML; links only to this site's pages (kept in-app, also
+  on previews via `siteOrigin`) and the filing hosts (`FILING_HOSTS`).
+- e2e: `WHALE_TEST_FAKE_CHAT=1` (refused when `VERCEL` is set) swaps Gemini
+  for a scripted model that calls `search_site` and answers from it, so the
+  route, tool loop, quota and page run in CI without a key; CI sets
+  `CHAT_DAILY_LIMIT=3` to reach the limit.
+- `/admin` shows today's totals (messages, tokens vs budget, refusals).
+
 ## Data-viz
 
 Charts are pure CSS/SVG in `web/app/charts.tsx`; no chart library. Colour roles

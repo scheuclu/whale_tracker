@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
-import { Moon, Search, Sun } from "lucide-react";
+import { MessageCircle, Moon, Search, Sun } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
 
@@ -100,6 +100,24 @@ export function ThemeToggle() {
       <Sun className="hidden size-4 transition-transform duration-300 motion-safe:group-hover:rotate-45 dark:block" aria-hidden />
       <Moon className="size-4 transition-transform duration-300 motion-safe:group-hover:-rotate-12 dark:hidden" aria-hidden />
     </button>
+  );
+}
+
+/** Ask FatCat (/chat): the reader chat. An icon in the masthead's tools, next to search. */
+export function ChatLink({ className }: { className?: string }) {
+  const pathname = usePathname();
+  const active = pathname === "/chat";
+  return (
+    <Link
+      href="/chat"
+      className={cn(ICON_BUTTON, active && "bg-fill text-foreground", className)}
+      aria-label="Ask FatCat: chat about the data"
+      aria-current={active ? "page" : undefined}
+      title="Ask FatCat"
+      onClick={() => trackEvent("header_chat_click")}
+    >
+      <MessageCircle className="size-4" aria-hidden />
+    </Link>
   );
 }
 

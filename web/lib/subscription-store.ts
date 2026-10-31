@@ -1,3 +1,4 @@
+import { chatUsagePathname } from "./chat-usage";
 import { emailSubscriberKey, normalizeEmail } from "./subscription-token";
 import { cleanInsiderCiks, isBioguideId, isWatchTicker, MAX_WATCH_ITEMS } from "./watchlist";
 
@@ -244,7 +245,7 @@ export async function verifySubscriber(
   return null;
 }
 
-/** Deletes the record outright: the account, its follows and its settings. */
+/** Deletes the record outright: the account, its follows, its settings and its chat counter. */
 export async function deleteSubscription(
   backend: SubscriptionBlobBackend,
   secret: string,
@@ -254,6 +255,7 @@ export async function deleteSubscription(
   if (!norm) return false;
   const id = emailSubscriberKey(norm, secret);
   await backend.del(subscriptionPathname(id));
+  await backend.del(chatUsagePathname(id));
   return true;
 }
 

@@ -31,6 +31,7 @@ const SECTIONS = [
   { href: "/tickers", label: "Stocks" },
   { href: "/rankings", label: "Rankings" },
   { href: "/search", label: "Search" },
+  { href: "/chat", label: "Ask FatCat" },
 ];
 
 /**

@@ -35,6 +35,9 @@ const PENDING_KEY = "fatcat_pending_follow_v1";
 /** A pending follow older than this is dropped: the reader gave up on signing in. */
 const PENDING_TTL_MS = 60 * 60 * 1000;
 const HINT_COOKIE = "fcw_signed_in";
+/** The chat's conversation and draft (app/chat/chat-client.tsx): this tab only, cleared on sign-out. */
+export const CHAT_STORAGE_KEY = "fatcat_chat_v1";
+export const CHAT_DRAFT_KEY = "fatcat_chat_draft_v1";
 
 export interface Account {
   email: string;
@@ -291,6 +294,12 @@ function forget(): void {
   queued = [];
   storageSet(OWNER_KEY, null);
   writeWatchlist(EMPTY_WATCHLIST);
+  try {
+    window.sessionStorage.removeItem(CHAT_STORAGE_KEY);
+    window.sessionStorage.removeItem(CHAT_DRAFT_KEY);
+  } catch {
+    /* unavailable */
+  }
   setState({ status: "signed_out", account: null });
 }
 

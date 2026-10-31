@@ -48,6 +48,7 @@ export const PAGES: PageCase[] = [
   { path: "/admin", noindex: true },
   { path: "/signin", noindex: true },
   { path: "/methodology" },
+  { path: "/chat" },
   { path: "/this-page-does-not-exist", status: 404, canonical: null, noindex: true },
 ];
 
