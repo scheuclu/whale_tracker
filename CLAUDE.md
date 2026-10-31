@@ -526,6 +526,14 @@ parser stays faithful to the PDF and the UI flags the row rather than
 - Absolute URLs come from `web/lib/site-url.ts` (`NEXT_PUBLIC_SITE_URL` →
   `VERCEL_PROJECT_PRODUCTION_URL` → request origin), never a deployment URL;
   page links in API objects come from `memberHref` / `tickerHref`.
+- `/api/mcp` (`web/lib/mcp.ts`) is a Model Context Protocol server over the
+  **same tools as the reader chat** (`lib/data-tools.ts`), so a reader's own
+  assistant and Ask FatCat cannot answer differently; results are the
+  `/api/v1` bodies with `meta.caveats`. Streamable HTTP, stateless JSON
+  (POST only; GET is a 405 since there is no event stream), no auth, CORS
+  open. It is JSON-RPC, not REST, so it is `MCP_SERVER` in methodology.ts,
+  not an `API_ENDPOINTS` entry, and not in openapi.json. A new chat tool is
+  an MCP tool automatically; add its title in `TITLES`.
 
 ## Reader accounts (`/signin`, `/api/auth/*`, `/api/account*`)
 

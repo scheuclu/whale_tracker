@@ -176,8 +176,10 @@ const SECTIONS: LegalSection[] = [
     title: "The public API and data files",
     body: (
       <p>
-        The <TextLink href="/methodology#machines">read-only API</TextLink>, <Code>llms.txt</Code> and the CSV
-        exports need no key or account. Requests to them appear in the hosting logs like any page request and
+        The <TextLink href="/methodology#machines">read-only API</TextLink>, the MCP server (
+        <Code>/api/mcp</Code>), <Code>llms.txt</Code> and the CSV exports need no key or account. If you connect
+        your own assistant to the MCP server, what you ask it stays between you and that assistant: we receive
+        only its lookups, like any API request. Requests to them appear in the hosting logs like any page request and
         are not tracked any further.
       </p>
     ),

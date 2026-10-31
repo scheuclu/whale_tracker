@@ -470,6 +470,19 @@ export const API_ENDPOINTS: Endpoint[] = [
   { path: "/api/v1/feed.md", summary: "The latest congressional trades and coverage as Markdown.", example: "/api/v1/feed.md" },
 ];
 
+/**
+ * The MCP server (`/api/mcp`, lib/mcp.ts): the reader chat's tools for any
+ * assistant that speaks the Model Context Protocol. JSON-RPC over POST, so it
+ * is not one of the GET endpoints above (nor in openapi.json).
+ */
+export const MCP_SERVER = {
+  path: "/api/mcp",
+  summary:
+    "Model Context Protocol server (Streamable HTTP, JSON-RPC over POST, no key): search, trades, members, tickers, " +
+    "Form 4 insiders, the track record and coverage as tools, returning the API's own JSON with its caveats. " +
+    "Add it as a custom connector or remote MCP server in your assistant.",
+};
+
 /* ------------------------------------------------------------------ renderers */
 
 function n(v: number): string {
@@ -530,6 +543,9 @@ export function llmsTxt(origin: string): string {
     const href = abs(origin, e.example ?? e.path);
     out.push(`- [${e.path}](${href}): ${e.summary}`);
   }
+  out.push("");
+  out.push("## MCP", "");
+  out.push(`- [${MCP_SERVER.path}](${abs(origin, MCP_SERVER.path)}): ${MCP_SERVER.summary}`);
   out.push("");
   out.push("## Sources", "");
   for (const s of SOURCES) out.push(`- [${s.name}](${s.href}): ${s.what}`);
@@ -612,6 +628,8 @@ export function llmsFullTxt(origin: string, coverage: Coverage): string {
       "Dashboard pages are linked from each object's `url` field; link to those rather than constructing page URLs.",
     ""
   );
+  out.push("## MCP server", "");
+  out.push(`- \`POST ${MCP_SERVER.path}\` (${abs(origin, MCP_SERVER.path)}): ${MCP_SERVER.summary}`, "");
   out.push("## Disclaimer", "");
   out.push("Public disclosures, shown for information. Not investment advice. A disclosed trade is not evidence of wrongdoing.", "");
   return out.join("\n");

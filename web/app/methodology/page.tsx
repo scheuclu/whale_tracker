@@ -4,6 +4,7 @@ import { ArrowUpRight } from "lucide-react";
 import { getCoverage } from "@/lib/api-queries";
 import {
   API_ENDPOINTS,
+  MCP_SERVER,
   KNOWN_GAPS,
   QUOTING_RULES,
   SOURCES,
@@ -157,6 +158,10 @@ export default async function MethodologyPage() {
                 </p>
               </li>
             ))}
+            <li className="grid gap-x-6 gap-y-0.5 px-5 py-3 text-[15px] sm:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] sm:px-7">
+              <span className="break-all font-mono text-[12.5px]">POST {MCP_SERVER.path}</span>
+              <span className="text-muted-foreground">{MCP_SERVER.summary}</span>
+            </li>
           </ul>
         </Card>
       </section>
