@@ -48,10 +48,11 @@ test("every page gets the CDN header", () => {
   }
 });
 
-test("the signed-in dashboard is never held on the CDN", () => {
-  for (const p of ["/account", "/account/"]) assert.ok(!matches(p), p);
-  // Only that page: a ticker or member that merely starts with the word is still cached.
+test("the signed-in dashboard and the admin page are never held on the CDN", () => {
+  for (const p of ["/account", "/account/", "/admin", "/admin/"]) assert.ok(!matches(p), p);
+  // Only those pages: a path that merely starts with the word is still cached.
   assert.ok(matches("/accounts"));
+  assert.ok(matches("/administration"));
 });
 
 test("API routes, Next assets, files and metadata images keep their own policy", () => {

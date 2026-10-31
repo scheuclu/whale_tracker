@@ -82,12 +82,14 @@ jobs:
 
       # playwright.config.ts starts `next start` on E2E_PORT itself. The
       # account tests sign in for real against an in-memory account store
-      # (lib/subscription-blob.ts), which only these two variables switch on.
+      # (lib/subscription-blob.ts), which only the first two variables switch
+      # on; ADMIN_EMAILS lets one test open /admin.
       - name: End-to-end tests
         run: npm run test:e2e
         env:
           WHALE_TEST_MEMORY_STORE: "1"
           ALERTS_SECRET: e2e-only-alerts-secret-not-a-real-one
+          ADMIN_EMAILS: e2e-admin@example.com
 
       - name: Upload Playwright report and traces
         if: failure()

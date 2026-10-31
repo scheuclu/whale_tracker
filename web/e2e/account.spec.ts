@@ -83,4 +83,30 @@ test.describe("signed in", () => {
     await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
     await expect(page.getByText(email)).toHaveCount(0);
   });
+
+  test("the admin page lists accounts to an ADMIN_EMAILS address and to no one else", async ({ page }) => {
+    const admin = process.env.ADMIN_EMAILS?.split(/[\s,]+/).find((e) => e.includes("@"));
+    test.skip(!admin, "needs ADMIN_EMAILS on the server");
+    const reader = `e2e-reader-${Date.now()}-${Math.round(Math.random() * 1e6)}@example.com`;
+
+    // A reader who follows something, and is refused the page.
+    await visit(page, `/api/auth/email/callback?token=${encodeURIComponent(signLoginToken(reader, SECRET!))}&next=%2Ftickers%2FMSFT`);
+    const msft = page.locator("button[data-follow-kind='ticker'][data-follow-id='MSFT']");
+    await msft.click();
+    await expect(msft).toHaveAttribute("aria-pressed", "true");
+    await visit(page, "/admin");
+    await expect(page.getByText("which is not an admin address")).toBeVisible();
+    await expect(page.locator("[data-admin-account]")).toHaveCount(0);
+
+    // The operator sees that reader and what they follow, uncached.
+    await visit(page, `/api/auth/email/callback?token=${encodeURIComponent(signLoginToken(admin!, SECRET!))}&next=%2Fadmin`);
+    await expect(page).toHaveURL(/\/admin$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Accounts" })).toBeVisible();
+    const row = page.locator(`[data-admin-account='${reader}']`);
+    await expect(row).toContainText("MSFT");
+    await expect(row).toContainText("Gets the digest");
+    const res = await page.request.get("/admin");
+    expect(res.headers()["cache-control"]).toContain("no-store");
+    expect(res.headers()["cdn-cache-control"]).toBeUndefined();
+  });
 });
