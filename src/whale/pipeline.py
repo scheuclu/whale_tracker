@@ -13,7 +13,7 @@ import logging
 import sqlite3
 import time
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 
 from . import (db, digest, house, insider_alerts, insiders, issuers, options, prices, roster, senate,
                senate_ptr, stats, telegram, track)
@@ -21,7 +21,8 @@ from .amounts import parse_amount
 from .config import Config
 from .ptr import (PAREN_SYMBOL_RE, SLOT_SYMBOL_RE, ParsedFiling, ScannedFilingError, parse_pdf,
                   ticker_from_asset_name, with_ticker_note)
-from .vision import JOIN_VERSION, ScannedFiling, ScanUnreadable, VisionUnavailable, parse_scanned
+from .vision import (JOIN_VERSION, ScannedFiling, ScanUnreadable, VisionServiceError,
+                     VisionUnavailable, parse_scanned)
 
 log = logging.getLogger(__name__)
 
@@ -720,7 +721,10 @@ def parse_pending(conn: sqlite3.Connection, config: Config,
         queued = queued[:limit]
     done = _parse_senate_filings(conn, config, [f for f in queued if f["chamber"] == "senate"],
                                  target_status, silent)
-    filings = [f for f in queued if f["chamber"] == "house"]
+    # Retries of failed model calls go last: a scan never attempted is read
+    # first, and retries spend what is left of the budget.
+    filings = sorted((f for f in queued if f["chamber"] == "house"),
+                     key=lambda f: f["parse_method"] == "vision_error")
 
     # Model time is metered per run: a scan takes seconds to minutes of
     # Gemini, the job has a 20-minute timeout, and the commit step is last.
@@ -730,6 +734,11 @@ def parse_pending(conn: sqlite3.Connection, config: Config,
     budget = config.vision_budget_seconds
     vision_spent = 0.0
     deferred = 0
+    # A key, billing or model-name failure (VisionServiceError.halts_run)
+    # fails every call alike: after the first, the run's other scans stay
+    # queued rather than each spending a request to learn the same thing.
+    halted: VisionServiceError | None = None
+    held = 0
     for filing in filings:
         try:
             pdf_bytes = house.fetch_pdf(filing["pdf_url"])
@@ -738,12 +747,15 @@ def parse_pending(conn: sqlite3.Connection, config: Config,
             log.warning("PDF download failed for %s: %s", filing["doc_id"], exc)
             continue
 
-        allow_vision = not budget or vision_spent < budget
+        allow_vision = (not budget or vision_spent < budget) and halted is None
         started = clock()
         try:
             parsed, method = _parse_bytes(pdf_bytes, config, allow_vision)
         except VisionDeferred:
-            deferred += 1
+            if halted is not None:
+                held += 1
+            else:
+                deferred += 1
             continue
         except VisionUnavailable as exc:
             db.set_status(conn, filing["id"], "failed",
@@ -753,6 +765,23 @@ def parse_pending(conn: sqlite3.Connection, config: Config,
             conn.commit()
             log.info("filing %s is a scan and vision is unavailable", filing["doc_id"])
             _capture_scan(conn, filing, pdf_bytes)
+            continue
+        except VisionServiceError as exc:
+            vision_spent += clock() - started
+            # The call failed, not the scan: `vision_error`, reported once as
+            # unread like any failure and re-queued by `retry_scanned` until
+            # the service answers — every run, or daily for a slow failure.
+            what = (f"{SLOW_VISION_ERROR}{exc.elapsed:.0f} s ({exc})" if exc.slow
+                    else f"vision call failed ({exc})")
+            db.set_status(conn, filing["id"], "failed", what, "vision_error")
+            if silent:
+                db.mark_notified(conn, filing["id"])
+            conn.commit()
+            log.warning("filing %s: vision call failed: %s", filing["doc_id"], exc)
+            if exc.halts_run and halted is None:
+                halted = exc
+            if not db.has_scan_pages(conn, filing["id"]):
+                _capture_scan(conn, filing, pdf_bytes)
             continue
         except ScanUnreadable as exc:
             vision_spent += clock() - started
@@ -802,6 +831,9 @@ def parse_pending(conn: sqlite3.Connection, config: Config,
     if deferred:
         log.warning("vision budget of %.0fs spent after %.0fs; %d scan(s) stay queued for the next run",
                     budget, vision_spent, deferred)
+    if held:
+        log.warning("vision refused this run's key (%s); %d more scan(s) stay queued for the next run",
+                    halted, held)
     return done
 
 
@@ -837,12 +869,24 @@ def retry_scanned(conn: sqlite3.Connection, config: Config) -> int:
     one more try exactly when those rules change (#51 made the join per
     page, and the eight filings refused under the old one are that
     version's retry) and never every three hours.
+
+    That includes `vision_error`: the model call failed (credits, quota, a
+    dropped connection), so it is re-queued every run like a scan that was
+    never attempted, and fails again in about a second while the outage
+    lasts. With a key or billing error the first one stops the run's other
+    model calls (`parse_pending`), so an outage costs one request a run. A
+    slow failure (the call ran for minutes, then dropped) waits
+    SLOW_RETRY_HOURS before its next try.
     """
+    relabel_vision_errors(conn)
     if not (config.vision_enabled and config.gemini_api_key):
         return 0
+    slow_due = (datetime.now(timezone.utc) - timedelta(hours=SLOW_RETRY_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
     rows = conn.execute(
-        "SELECT id, doc_id FROM filings WHERE chamber = 'house' "
-        "AND status = 'failed' AND parse_method = 'scanned'"
+        "SELECT id, doc_id FROM filings WHERE chamber = 'house' AND status = 'failed' "
+        "AND (parse_method = 'scanned' OR (parse_method = 'vision_error' "
+        "     AND (COALESCE(last_error, '') NOT LIKE ? OR updated_at <= ?)))",
+        (SLOW_VISION_ERROR + "%", slow_due),
     ).fetchall()
     refused = []
     if db.get_state(conn, REFUSED_RETRY_STATE) != str(JOIN_VERSION):
@@ -855,11 +899,44 @@ def retry_scanned(conn: sqlite3.Connection, config: Config) -> int:
         db.set_status(conn, r["id"], "new", None)
     conn.commit()
     if rows:
-        log.info("vision available: re-queued %d scanned filing(s)", len(rows))
+        log.info("vision available: re-queued %d scan(s) never read or whose vision call failed", len(rows))
     if refused:
         log.info("join version %d: re-queued %d refused scan(s) for one more try",
                  JOIN_VERSION, len(refused))
     return len(rows) + len(refused)
+
+
+# A `vision_error` whose call ran past vision.SLOW_CALL_SECONDS before failing
+# is stored under this prefix and re-queued only SLOW_RETRY_HOURS after the
+# attempt (`updated_at`), not every run: a 56-page scan's call runs about six
+# minutes, so an every-run retry would spend each run's model budget on it.
+SLOW_VISION_ERROR = "vision call failed after "
+SLOW_RETRY_HOURS = 24
+
+# How a failed model call was stored before `vision_error` existed:
+# `_parse_bytes` wrapped it as "vision parse failed: …" and it landed as a
+# plain parse error. Eight House scans sat there for good (four dropped
+# connections on 2026-10-17/18, one broken reply, three 402s from spent
+# credits on 2026-10-29), because nothing re-queues `error`.
+_LEGACY_VISION_ERROR = "parse error: vision parse failed:%"
+
+
+def relabel_vision_errors(conn: sqlite3.Connection) -> int:
+    """Give the scans stranded as plain parse errors by a failed model call
+    the `vision_error` label, so `retry_scanned` tries them again. Each gets
+    one more attempt, then is labelled by what happens: read, refused
+    (`vision_failed`, a broken reply included) or `vision_error` again.
+    Idempotent and run every time: new failures are never stored under the
+    old text, so after the first run this matches nothing."""
+    n = conn.execute(
+        "UPDATE filings SET parse_method = 'vision_error' "
+        "WHERE chamber = 'house' AND status = 'failed' AND parse_method = 'error' "
+        "AND last_error LIKE ?", (_LEGACY_VISION_ERROR,)
+    ).rowcount
+    if n:
+        conn.commit()
+        log.info("relabelled %d scan(s) a failed vision call had left as parse errors", n)
+    return n
 
 
 # sync_state key: the `vision.JOIN_VERSION` under which refused scans were
@@ -960,10 +1037,14 @@ def _parse_bytes(pdf_bytes: bytes, config: Config,
         # refuse to guess at" and "the parser broke".
         try:
             return parse_scanned(pdf_bytes, config.gemini_api_key), "vision"
-        except (VisionUnavailable, ScanUnreadable):
+        except (VisionUnavailable, ScanUnreadable, VisionServiceError):
             raise
         except Exception as exc:
-            raise ValueError(f"vision parse failed: {exc}") from exc
+            # Our own code broke on the reply: a plain `error`, never retried
+            # by itself. Worded differently from the old "vision parse
+            # failed:" on purpose: `relabel_vision_errors` keys on that text
+            # to recover the filings it stranded.
+            raise ValueError(f"vision step raised {type(exc).__name__}: {exc}") from exc
 
 
 def _transaction_row(tx) -> dict:
@@ -1108,7 +1189,7 @@ def notify_pending(conn: sqlite3.Connection, config: Config, dry_run: bool = Fal
     # Filings we could not read are reported rather than silently dropped. A
     # Senate paper filing is the same case as a House scan: a link, once.
     for filing in db.filings_by_status(conn, "failed", unnotified_only=True):
-        if filing["parse_method"] not in ("scanned", "vision_failed", "error", "efd_paper"):
+        if filing["parse_method"] not in ("scanned", "vision_failed", "vision_error", "error", "efd_paper"):
             continue
         text = telegram.format_unparsed(
             member=filing["member_name"] or filing["filer_name"],

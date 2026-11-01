@@ -528,6 +528,43 @@ def check_vision_rows(conn, today: date | None = None) -> list[Finding]:
     )]
 
 
+def check_vision_errors(conn, today: date | None = None) -> list[Finding]:
+    """Scans waiting on a model call that failed (`vision_error`).
+
+    The call failed, not the scan: spent prepaid credits (402), a quota, a
+    rejected key, a dropped connection. The pipeline retries these every
+    run, so the warning is about the service, and it quotes the latest
+    error. Silent while none wait. Before this label existed the same
+    failures were stored as plain parse errors and folded into
+    `parse_coverage`'s unreadable count, where three filings sat behind
+    spent credits from 2026-10-29 with nothing saying why.
+    """
+    rows = conn.execute("""
+        SELECT doc_id, filer_name, filing_date, status, last_error, updated_at
+        FROM filings
+        WHERE chamber = 'house' AND parse_method = 'vision_error'
+          AND status IN ('failed', 'new')
+        ORDER BY updated_at DESC
+    """).fetchall()
+    if not rows:
+        return []
+    latest = next((r["last_error"] for r in rows if r["last_error"]), "no error text")
+    return [Finding(
+        WARN, "vision_errors",
+        f"{len(rows)} scan(s) waiting on a failed vision call; latest: {latest[:160]}",
+        "The model call itself failed, so these are retried (every run, or "
+        "daily when the call ran for minutes before failing) and need no "
+        "action once the service answers again. A 402 means the "
+        "Gemini project's prepaid credits are spent; 401/403 a rejected "
+        "GEMINI_API_KEY; 404 a retired model name (vision.MODEL); 429 a quota. "
+        "After a key or billing error the run makes no further model calls, "
+        "so other scans wait as `new`.",
+        [f"{r['doc_id']}  {r['filer_name']}  filed {r['filing_date']}  {r['status']}"
+         + (f"  {r['last_error'][:100]}" if r["last_error"] else "  (re-queued)")
+         for r in rows[:20]],
+    )]
+
+
 def check_vision_join(conn, today: date | None = None) -> list[Finding]:
     """What the page-by-page join set aside this week: pages that yielded no
     rows, and rows whose type the model disputed.
@@ -1440,6 +1477,7 @@ CHECKS = (
     check_parse_coverage,
     check_vision_rows,
     check_vision_join,
+    check_vision_errors,
     check_transaction_density,
     check_issuer_classification,
     check_alert_health,

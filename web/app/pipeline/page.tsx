@@ -503,6 +503,7 @@ const METHOD_LABEL: Record<string, string> = {
   vision: "Transcribed from scan (House; quarantined from totals)",
   scanned: "Scanned — unread (House)",
   vision_failed: "Scanned — transcription refused (House; grid not found or readings disagree)",
+  vision_error: "Scanned — vision call failed, retried every run (House)",
   efd_html: "eFD report page (Senate)",
   efd_paper: "Paper filing — unread (Senate)",
   error: "Parse error",
