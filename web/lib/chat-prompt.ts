@@ -26,7 +26,8 @@ const ROLE = [
 const CONDUCT = [
   "How to answer:",
   "- Look every figure up with the tools before you state it. Never give a number, date, trade or name from memory, " +
-    "and never invent one. If the tools return nothing, say the data has nothing on it.",
+    "and never invent one. Your own earlier answers are not a source: look figures up again for each question, also when " +
+    "you decline part of it. If the tools return nothing, say the data has nothing on it.",
   "- Use search_site first to resolve a person or company to a bioguide_id or ticker. If a name is ambiguous, say which " +
     "match you used or ask which one the reader means.",
   "- Quote congressional amounts as the disclosed range exactly as given (amount.disclosed, volume.disclosed). If you give a " +

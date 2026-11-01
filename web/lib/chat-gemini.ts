@@ -29,7 +29,7 @@ export type GenerateRequest = {
   systemInstruction: { parts: { text: string }[] };
   contents: Content[];
   tools: { functionDeclarations: { name: string; description: string; parameters: ToolSchema }[] }[];
-  toolConfig: { functionCallingConfig: { mode: "AUTO" | "NONE" } };
+  toolConfig: { functionCallingConfig: { mode: "ANY" | "AUTO" | "NONE" } };
   generationConfig: { maxOutputTokens: number; thinkingConfig?: { thinkingLevel: string } };
 };
 

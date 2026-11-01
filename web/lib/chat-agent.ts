@@ -8,6 +8,13 @@
  * `MAX_MODEL_CALLS` model calls and `MAX_TOOL_CALLS` tool calls, and the last
  * permitted call is made with function calling off so the message always
  * ends in an answer rather than a dangling lookup.
+ *
+ * The first call of every message must call a tool (mode ANY). Left to
+ * choose, Gemini answered "Should I buy NVDA?" in one call with no lookup and
+ * every figure invented (wrong trade, member and dollar counts, members who
+ * never traded it), although the instructions say to look every figure up.
+ * A forced lookup costs one extra call on a "thanks"; an invented figure is
+ * the one answer this chat must never give.
  */
 
 import {
@@ -75,10 +82,8 @@ export async function runChat(o: {
   for (let call = 0; call < MAX_MODEL_CALLS; call++) {
     if (o.signal?.aborted) return { text: "", finish: "empty" };
     const lastCall = call === MAX_MODEL_CALLS - 1 || o.usage.toolCalls >= MAX_TOOL_CALLS;
-    const res = await o.model.generate(
-      { ...base, contents, toolConfig: { functionCallingConfig: { mode: lastCall ? "NONE" : "AUTO" } } },
-      o.signal
-    );
+    const mode = lastCall ? "NONE" : call === 0 ? "ANY" : "AUTO";
+    const res = await o.model.generate({ ...base, contents, toolConfig: { functionCallingConfig: { mode } } }, o.signal);
     o.usage.modelCalls++;
     o.usage.tokens += res.usageMetadata?.totalTokenCount ?? 0;
 

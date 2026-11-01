@@ -611,8 +611,11 @@ parser stays faithful to the PDF and the UI flags the row rather than
   per UTC day (2,000,000, ~$1.50–2 at Gemini 3.8 Flash's list price), checked
   before a message and spent after it. Per message (`chat-config.ts`): 6 model
   calls, 8 tool calls, 4,096 output tokens per call, tool results cut to 24k
-  characters with a `truncated` note. The last permitted call has function
-  calling off, so a message always ends in an answer. Missing key or a limit
+  characters with a `truncated` note. The first call of every message must
+  call a tool (mode `ANY`): left to choose, Gemini answered "Should I buy
+  NVDA?" with no lookup and every figure invented (2026-11-01). The last
+  permitted call has function calling off, so a message always ends in an
+  answer. Missing key or a limit
   of 0 turns chat off (the page says so; nothing runs unbounded).
 - Counters live in the **existing private Blob store** (`lib/chat-usage.ts`):
   `chat-usage/<subscriberKey>.json` per account (same HMAC as its record, no
