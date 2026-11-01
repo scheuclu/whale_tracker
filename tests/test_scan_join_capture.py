@@ -143,7 +143,7 @@ def test_link_by_row_index_refuses_a_count_or_index_it_cannot_honour(conn):
 def test_pipeline_parses_a_partially_read_scan_and_says_so(conn, monkeypatch):
     fid = _scan_filing(conn, "9116308")
     monkeypatch.setattr(pipeline.house, "fetch_pdf", lambda url: WIED.read_bytes())
-    monkeypatch.setattr(vision, "_transcribe", lambda pdf, key: _short_page_2())
+    monkeypatch.setattr(vision, "_transcribe", lambda pdf, key, timeout=None: _short_page_2())
     assert pipeline.parse_pending(conn, Config(vision_enabled=True, gemini_api_key="k")) == 1
     row = conn.execute("SELECT status, parse_method, last_error FROM filings WHERE id = ?", (fid,)).fetchone()
     assert (row["status"], row["parse_method"]) == ("parsed", "vision")
@@ -159,7 +159,7 @@ def test_pipeline_parses_a_partially_read_scan_and_says_so(conn, monkeypatch):
 def test_pipeline_leaves_no_note_on_a_fully_read_scan(conn, monkeypatch):
     fid = _scan_filing(conn, "9116308")
     monkeypatch.setattr(pipeline.house, "fetch_pdf", lambda url: WIED.read_bytes())
-    monkeypatch.setattr(vision, "_transcribe", lambda pdf, key: _full())
+    monkeypatch.setattr(vision, "_transcribe", lambda pdf, key, timeout=None: _full())
     assert pipeline.parse_pending(conn, Config(vision_enabled=True, gemini_api_key="k")) == 1
     row = conn.execute("SELECT status, last_error FROM filings WHERE id = ?", (fid,)).fetchone()
     assert (row["status"], row["last_error"]) == ("parsed", None)
@@ -196,7 +196,7 @@ def test_refused_scans_are_requeued_once_per_join_version(conn, monkeypatch):
 def test_a_retried_refusal_announced_before_lands_as_history(conn, monkeypatch):
     fid = _scan_filing(conn, "9116308", method="vision_failed", status="failed", notified=True)
     monkeypatch.setattr(pipeline.house, "fetch_pdf", lambda url: WIED.read_bytes())
-    monkeypatch.setattr(vision, "_transcribe", lambda pdf, key: _short_page_2())
+    monkeypatch.setattr(vision, "_transcribe", lambda pdf, key, timeout=None: _short_page_2())
     config = Config(vision_enabled=True, gemini_api_key="k")
     assert pipeline.retry_scanned(conn, config) == 1
     assert pipeline.parse_pending(conn, config) == 1
@@ -211,7 +211,7 @@ def test_a_retried_refusal_announced_before_lands_as_history(conn, monkeypatch):
 def _transcribe_into(conn, monkeypatch, doc_id, transcription):
     fid = _scan_filing(conn, doc_id)
     monkeypatch.setattr(pipeline.house, "fetch_pdf", lambda url: WIED.read_bytes())
-    monkeypatch.setattr(vision, "_transcribe", lambda pdf, key: transcription)
+    monkeypatch.setattr(vision, "_transcribe", lambda pdf, key, timeout=None: transcription)
     assert pipeline.parse_pending(conn, Config(vision_enabled=True, gemini_api_key="k")) == 1
     return fid
 

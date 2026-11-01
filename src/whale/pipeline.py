@@ -699,6 +699,11 @@ class VisionDeferred(Exception):
     """A scan the run has no model time left for; it stays queued."""
 
 
+# No model call starts with less of the budget left than this: a call given a
+# few seconds can only be cut off, and would spend a request learning that.
+VISION_MIN_CALL_SECONDS = 60
+
+
 def parse_pending(conn: sqlite3.Connection, config: Config,
                   statuses: tuple[str, ...] = ("new",),
                   target_status: str = "parsed", limit: int | None = None,
@@ -730,7 +735,10 @@ def parse_pending(conn: sqlite3.Connection, config: Config,
     # Gemini, the job has a 20-minute timeout, and the commit step is last.
     # The first run with vision on had 53 scans queued, spent the whole
     # timeout on them and was killed with nothing committed; the next run
-    # would have repeated that. Scans past the budget stay `new`.
+    # would have repeated that. Scans past the budget stay `new`. Each call
+    # is also given only what is left of the budget as its timeout: checking
+    # before a call is not enough, because one call that never returns
+    # (8221322, 2026-11-01) outlives any budget and the job with it.
     budget = config.vision_budget_seconds
     vision_spent = 0.0
     deferred = 0
@@ -747,10 +755,12 @@ def parse_pending(conn: sqlite3.Connection, config: Config,
             log.warning("PDF download failed for %s: %s", filing["doc_id"], exc)
             continue
 
-        allow_vision = (not budget or vision_spent < budget) and halted is None
+        remaining = budget - vision_spent if budget else None
+        allow_vision = (remaining is None or remaining >= min(VISION_MIN_CALL_SECONDS, budget)) \
+            and halted is None
         started = clock()
         try:
-            parsed, method = _parse_bytes(pdf_bytes, config, allow_vision)
+            parsed, method = _parse_bytes(pdf_bytes, config, allow_vision, timeout=remaining)
         except VisionDeferred:
             if halted is not None:
                 held += 1
@@ -768,6 +778,14 @@ def parse_pending(conn: sqlite3.Connection, config: Config,
             continue
         except VisionServiceError as exc:
             vision_spent += clock() - started
+            if exc.timed_out and remaining is not None and remaining < budget:
+                # Cut off by what this run had left, not by the scan: it
+                # waits for a run with the whole budget, unreported. A call
+                # that runs out a whole budget is a slow failure below.
+                deferred += 1
+                log.info("filing %s: vision call cut off after %.0f s by the run's budget; "
+                         "it stays queued", filing["doc_id"], exc.elapsed)
+                continue
             # The call failed, not the scan: `vision_error`, reported once as
             # unread like any failure and re-queued by `retry_scanned` until
             # the service answers — every run, or daily for a slow failure.
@@ -1018,9 +1036,10 @@ def _parse_senate_filings(conn: sqlite3.Connection, config: Config, filings: lis
     return done
 
 
-def _parse_bytes(pdf_bytes: bytes, config: Config,
-                 allow_vision: bool = True) -> tuple[ParsedFiling, str]:
-    """Text layer first; scanned filings fall back to the vision model.
+def _parse_bytes(pdf_bytes: bytes, config: Config, allow_vision: bool = True,
+                 timeout: float | None = None) -> tuple[ParsedFiling, str]:
+    """Text layer first; scanned filings fall back to the vision model, whose
+    call may take at most `timeout` seconds (None: no limit).
 
     Returns the filing and which method read it, so the dashboard can show how
     much of the corpus depended on transcription.
@@ -1036,7 +1055,7 @@ def _parse_bytes(pdf_bytes: bytes, config: Config,
         # distinguishes "a scan we cannot attempt", "a scan we attempted and
         # refuse to guess at" and "the parser broke".
         try:
-            return parse_scanned(pdf_bytes, config.gemini_api_key), "vision"
+            return parse_scanned(pdf_bytes, config.gemini_api_key, timeout=timeout), "vision"
         except (VisionUnavailable, ScanUnreadable, VisionServiceError):
             raise
         except Exception as exc:

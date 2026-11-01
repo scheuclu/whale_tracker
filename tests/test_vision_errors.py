@@ -98,6 +98,7 @@ class _FakeClient:
         self.models = self
 
     def generate_content(self, **kwargs):
+        _FakeClient.kwargs = kwargs
         if isinstance(self.outcome, BaseException):
             raise self.outcome
         return self.outcome
@@ -137,14 +138,14 @@ def test_parse_bytes_lets_service_errors_through_and_names_bugs(monkeypatch):
 
     monkeypatch.setattr(pipeline, "parse_pdf", scanned)
 
-    def down(pdf_bytes, key):
+    def down(pdf_bytes, key, timeout=None):
         raise VisionServiceError("402 RESOURCE_EXHAUSTED", 402)
 
     monkeypatch.setattr(pipeline, "parse_scanned", down)
     with pytest.raises(VisionServiceError):
         pipeline._parse_bytes(b"pdf", _config())
 
-    def bug(pdf_bytes, key):
+    def bug(pdf_bytes, key, timeout=None):
         raise KeyError("rows")
 
     monkeypatch.setattr(pipeline, "parse_scanned", bug)
@@ -165,7 +166,7 @@ def _scan_queue(conn, monkeypatch, failure):
     captured = []
     monkeypatch.setattr(pipeline.house, "fetch_pdf", lambda url: url.encode())
 
-    def parse(pdf_bytes, config, allow_vision=True):
+    def parse(pdf_bytes, config, allow_vision=True, timeout=None):
         if b"text" in pdf_bytes:
             return PARSED, "text"
         if not allow_vision:
@@ -331,7 +332,7 @@ def test_new_scans_are_read_before_retries_of_failed_calls(conn, monkeypatch):
     order = []
     monkeypatch.setattr(pipeline.house, "fetch_pdf", lambda url: url.encode())
 
-    def parse(pdf_bytes, config, allow_vision=True):
+    def parse(pdf_bytes, config, allow_vision=True, timeout=None):
         if not allow_vision:
             raise pipeline.VisionDeferred("spent")
         order.append(pdf_bytes.decode().rsplit("/", 1)[-1])
@@ -344,3 +345,147 @@ def test_new_scans_are_read_before_retries_of_failed_calls(conn, monkeypatch):
     pipeline.parse_pending(conn, _config(vision_budget_seconds=480), clock=lambda: next(clock))
     assert order == ["fresh1.pdf"]
     assert _row(conn, "retry1")["status"] == "new"
+
+
+# --- the call's timeout -------------------------------------------------------
+# 2026-11-01: the first run after the retry landed re-queued the eight, began
+# with 8221322 (56 pages), and that call never returned. The budget is checked
+# before a call, so the job ran into its 20-minute limit and committed
+# nothing, and every later run would have begun with the same call.
+
+
+def test_transcribe_gives_the_call_its_timeout_and_marks_a_cut_off(monkeypatch):
+    monkeypatch.setattr("google.genai.Client", _FakeClient)
+    _FakeClient.outcome = _reply('{"pages": []}')
+    vision._transcribe(b"pdf", "key", timeout=300)
+    assert _FakeClient.kwargs["config"]["http_options"] == {"timeout": 300_000}  # milliseconds
+    vision._transcribe(b"pdf", "key")
+    assert "http_options" not in _FakeClient.kwargs["config"]
+
+    def clock(*steps):
+        ticks = iter(steps)
+        monkeypatch.setattr(vision, "time", SimpleNamespace(monotonic=lambda: next(ticks)))
+
+    _FakeClient.outcome = httpx.ReadTimeout("timed out")
+    clock(0, 300)
+    with pytest.raises(VisionServiceError) as cut:
+        vision._transcribe(b"pdf", "key", timeout=300)
+    assert cut.value.timed_out and cut.value.slow
+    # The server giving up at the deadline we sent it counts the same.
+    _FakeClient.outcome = genai_errors.ServerError(504, {"error": {"message": "Deadline expired"}})
+    clock(0, 299)
+    with pytest.raises(VisionServiceError) as deadline:
+        vision._transcribe(b"pdf", "key", timeout=300)
+    assert deadline.value.timed_out
+    # A connection dropped long before the timeout is a failure of its own.
+    _FakeClient.outcome = httpx.RemoteProtocolError("Server disconnected")
+    clock(0, 100)
+    with pytest.raises(VisionServiceError) as dropped:
+        vision._transcribe(b"pdf", "key", timeout=300)
+    assert not dropped.value.timed_out and dropped.value.slow
+
+
+def test_parse_bytes_hands_the_timeout_to_the_model_call(monkeypatch):
+    from whale import ptr
+
+    def scanned(_):
+        raise ptr.ScannedFilingError("no text layer")
+
+    seen = []
+    monkeypatch.setattr(pipeline, "parse_pdf", scanned)
+    monkeypatch.setattr(pipeline, "parse_scanned",
+                        lambda pdf_bytes, key, timeout=None: seen.append(timeout) or (PARSED, None))
+    pipeline._parse_bytes(b"pdf", _config(), timeout=123.0)
+    assert seen == [123.0]
+
+
+def _timed_queue(conn, monkeypatch, durations, failures=()):
+    """Scans whose model calls take `durations` seconds of a fake clock, each
+    given what the run had left; a doc id in `failures` runs into it."""
+    now = [0.0]
+    timeouts = {}
+    monkeypatch.setattr(pipeline.house, "fetch_pdf", lambda url: url.encode())
+    monkeypatch.setattr(pipeline, "_capture_scan", lambda *a, **k: None)
+
+    def parse(pdf_bytes, config, allow_vision=True, timeout=None):
+        if not allow_vision:
+            raise pipeline.VisionDeferred("spent")
+        doc = pdf_bytes.decode().rsplit("/", 1)[-1].removesuffix(".pdf")
+        timeouts[doc] = timeout
+        wanted = durations[doc]
+        if timeout is not None and (doc in failures or wanted > timeout):
+            now[0] += timeout
+            raise VisionServiceError("connection failed: timed out", None, elapsed=timeout, timed_out=True)
+        now[0] += wanted
+        return PARSED, "vision"
+
+    monkeypatch.setattr(pipeline, "_parse_bytes", parse)
+    return (lambda: now[0]), timeouts
+
+
+def test_each_call_is_given_only_what_is_left_of_the_budget(conn, monkeypatch):
+    for doc in ("scan1", "scan2", "scan3"):
+        _filing(conn, doc)
+    clock, timeouts = _timed_queue(conn, monkeypatch, {"scan1": 100, "scan2": 330, "scan3": 10})
+    pipeline.parse_pending(conn, _config(vision_budget_seconds=480), clock=clock)
+    # scan3 would have had 50 s, under the minute a call needs: never started.
+    assert timeouts == {"scan1": 480, "scan2": 380}
+    assert [_row(conn, d)["status"] for d in ("scan1", "scan2", "scan3")] == ["parsed", "parsed", "new"]
+    assert clock() <= 480
+
+
+def test_a_budget_under_a_minute_still_allows_its_first_call(conn, monkeypatch):
+    _filing(conn, "scan1")
+    clock, timeouts = _timed_queue(conn, monkeypatch, {"scan1": 10})
+    pipeline.parse_pending(conn, _config(vision_budget_seconds=30), clock=clock)
+    assert timeouts == {"scan1": 30} and _row(conn, "scan1")["status"] == "parsed"
+
+
+def test_the_stuck_call_of_2026_11_01_no_longer_takes_the_run_with_it(conn, monkeypatch):
+    # The eight as that run found them: re-queued retries, 8221322 first.
+    for doc in ("8221322", "8221358"):
+        _filing(conn, doc, status="new", method="vision_error", error="vision call failed (…)", notified=True)
+    clock, timeouts = _timed_queue(conn, monkeypatch, {"8221322": 1_200, "8221358": 200})
+    pipeline.parse_pending(conn, _config(vision_budget_seconds=480), clock=clock)
+    assert clock() == 480  # the budget, not the job's limit
+    stuck = _row(conn, "8221322")
+    # It ran out a whole budget: a slow failure, tried again in a day.
+    assert (stuck["status"], stuck["parse_method"]) == ("failed", "vision_error")
+    assert stuck["last_error"].startswith(pipeline.SLOW_VISION_ERROR + "480 s")
+    assert pipeline.retry_scanned(conn, _config()) == 0
+    # The other waits for the next run, which gives it the whole budget.
+    assert _row(conn, "8221358")["status"] == "new"
+    pipeline.parse_pending(conn, _config(vision_budget_seconds=480), clock=clock)
+    assert timeouts["8221358"] == 480
+    assert _row(conn, "8221358")["status"] == "backfilled"  # announced as unread before: history now
+
+
+def test_a_call_cut_off_by_a_part_spent_budget_waits_unreported(conn, monkeypatch):
+    for doc in ("scan1", "scan2"):
+        _filing(conn, doc)
+    clock, timeouts = _timed_queue(conn, monkeypatch, {"scan1": 200, "scan2": 400})
+    pipeline.parse_pending(conn, _config(vision_budget_seconds=480), clock=clock)
+    assert timeouts["scan2"] == 280
+    cut = _row(conn, "scan2")
+    # Nothing is known about the scan: still `new`, no label, no message owed
+    # for a failure that was only this run running out of time.
+    assert (cut["status"], cut["parse_method"], cut["last_error"], cut["notified_at"]) == ("new", None, None, None)
+    pipeline.parse_pending(conn, _config(vision_budget_seconds=480), clock=clock)
+    assert timeouts["scan2"] == 480
+    assert _row(conn, "scan2")["status"] == "parsed"
+
+
+def test_parse_scanned_reads_the_grid_then_hands_the_timeout_to_the_call(monkeypatch):
+    from pathlib import Path
+
+    seen = []
+
+    def stuck(pdf_bytes, key, timeout=None):
+        seen.append(timeout)
+        raise VisionServiceError("504 DEADLINE_EXCEEDED", 504, elapsed=timeout, timed_out=True)
+
+    monkeypatch.setattr(vision, "_transcribe", stuck)
+    pdf = (Path(__file__).parent / "fixtures" / "ptr_scanned_9116308.pdf").read_bytes()
+    with pytest.raises(VisionServiceError):
+        vision.parse_scanned(pdf, "key", timeout=77.0)
+    assert seen == [77.0]

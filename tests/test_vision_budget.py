@@ -28,7 +28,7 @@ def _filing(conn, doc_id):
         pdf_url=f"http://x/{doc_id}.pdf", status="new")
 
 
-def _fake_parse(pdf_bytes, config, allow_vision=True):
+def _fake_parse(pdf_bytes, config, allow_vision=True, timeout=None):
     if b"text" in pdf_bytes:
         return PARSED, "text"
     if not allow_vision:

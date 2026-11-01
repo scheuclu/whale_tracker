@@ -177,7 +177,7 @@ def test_parse_pending_counts_the_scans_it_transcribed(tmp_path, monkeypatch):
     monkeypatch.setattr(pipeline.house, "fetch_pdf", lambda url: url.encode())
     monkeypatch.setattr(
         pipeline, "_parse_bytes",
-        lambda pdf, config, allow_vision=True: (PARSED, "text" if b"text" in pdf else "vision"))
+        lambda pdf, config, allow_vision=True, timeout=None: (PARSED, "text" if b"text" in pdf else "vision"))
 
     tally = pipeline.RunTally()
     done = pipeline.parse_pending(

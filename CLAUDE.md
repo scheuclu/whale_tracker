@@ -149,10 +149,17 @@ parser stays faithful to the PDF and the UI flags the row rather than
   legitimate state for debugging; the filings then wait as `failed`/`scanned`
   and are re-queued by `pipeline.retry_scanned` when it is turned back on.
   Model time per run is capped by `vision.budget_seconds` (480 s; scans past
-  it stay `new` for the next run). The poll job's timeout is 20 minutes and
-  the commit step is last, so an uncapped backlog is killed and commits
-  nothing: the first run with vision on did exactly that with 53 scans
-  (2026-10-17), and every scheduled run after it would have repeated it.
+  it stay `new` for the next run), and **each call's timeout is what is left
+  of it** (`HttpOptions.timeout`, which the SDK also sends as the server's
+  deadline: a cut-off call comes back as a 504 at about its timeout). No call
+  starts with under `pipeline.VISION_MIN_CALL_SECONDS` (60) left. Checking
+  the budget only before a call was not a cap: the SDK waits forever by
+  default, and on 2026-11-01 the call for 8221322 (56 pages) never returned.
+  The poll job's timeout is 20 minutes and the commit step is last, so an
+  uncapped backlog or a stuck call is killed and commits nothing: the first
+  run with vision on did exactly that with 53 scans (2026-10-17), the stuck
+  call again on 2026-11-01, and every scheduled run after either would have
+  repeated it.
 - The hybrid join (`vision.join`) is **per page** (#51): the model gives
   every row a page number, the grid knows its rows per page, and a page whose
   counts disagree is refused alone — its grid rows stored `page_refused`, its
@@ -177,7 +184,10 @@ parser stays faithful to the PDF and the UI flags the row rather than
   answers; a call that ran past `vision.SLOW_CALL_SECONDS` (60) before
   failing waits **24 h** instead (a 56-page scan's call runs ~6 minutes, so
   an every-run retry would eat the run's budget and the track record's
-  deadline). Retries queue after never-attempted scans. A key/billing/
+  deadline). A call that runs into its timeout (`timed_out`) is that slow
+  failure only when it had the whole budget; cut off by a budget earlier
+  scans had spent, it says nothing about the scan and stays `new`,
+  unlabelled and unreported. Retries queue after never-attempted scans. A key/billing/
   model-name error (401/402/403/404) stops the run's other model calls, so
   the remaining scans wait as `new`. Before this label
   the same failures were plain `error`, which nothing re-queues: eight scans
