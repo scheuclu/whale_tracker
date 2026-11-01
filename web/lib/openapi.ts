@@ -13,7 +13,8 @@ import { CAVEATS, QUOTING_RULES, SITE_NAME, SITE_SUMMARY, fieldDescription } fro
 
 type Schema = Record<string, unknown>;
 
-const PARAM_DOCS: Record<string, string> = {
+/** Per-parameter descriptions; the chat and MCP tools reuse them (lib/data-tools.ts). */
+export const PARAM_DOCS: Record<string, string> = {
   member_id: "Member's Bioguide ID, e.g. P000197. Mutually exclusive with `member`.",
   member: "Member's display name exactly as listed (for a filer the roster did not match).",
   ticker: "Ticker symbol, case-insensitive.",

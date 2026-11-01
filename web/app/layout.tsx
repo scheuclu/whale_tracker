@@ -15,7 +15,7 @@ import { STALE_AFTER_HOURS } from "@/lib/health";
 import { getInsiderTotals } from "@/lib/insider-queries";
 import { relativeTime } from "@/lib/format";
 import { SITE_DESCRIPTION, SITE_NAME, siteUrl } from "@/lib/site";
-import { SearchForm, SearchLink, Tabs, ThemeToggle } from "./nav";
+import { ChatLink, SearchForm, SearchLink, Tabs, ThemeToggle } from "./nav";
 import { HeaderWatchlistPill } from "./watchlist-client";
 import { HeaderAccountButton, HeaderAlertsButton } from "./account-client";
 import "./globals.css";
@@ -106,6 +106,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <HeaderWatchlistPill />
                 <SearchForm className="hidden w-56 sm:flex md:w-64 lg:w-56 xl:w-64" />
                 <SearchLink className="sm:hidden" />
+                <ChatLink />
                 <ThemeToggle />
                 <HeaderAlertsButton />
                 <HeaderAccountButton />
