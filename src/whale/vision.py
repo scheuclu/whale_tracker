@@ -37,6 +37,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -104,8 +105,85 @@ class VisionUnavailable(Exception):
 
 
 class ScanUnreadable(Exception):
-    """The scan was read by both readers but cannot be reconciled, or its
-    grid could not be found. The message says why."""
+    """The scan was read by both readers but cannot be reconciled, its grid
+    could not be found, or the model's reply could not be used (empty, not
+    JSON, a request the service rejected as invalid). A verdict on this scan
+    under the current rules. The message says why."""
+
+
+class VisionServiceError(Exception):
+    """The model call failed before there was a reply to judge: the service
+    refused it (billing, quota, a key it rejects, an outage) or the
+    connection dropped. Says nothing about the scan, so the pipeline stores
+    it as `vision_error` and tries again on the next run.
+
+    The prepaid credits running out (402, 2026-10-29) and Google closing
+    connections mid-request ("Server disconnected", 2026-10-17/18) were both
+    stored as plain parse errors, which nothing ever retries: eight filings
+    stayed unread after the service recovered.
+    """
+
+    def __init__(self, message: str, code: int | None = None, elapsed: float = 0.0):
+        super().__init__(message)
+        self.code = code
+        self.elapsed = elapsed
+
+    @property
+    def halts_run(self) -> bool:
+        """The key, billing or model name is the problem, so every other call
+        this run would fail the same way."""
+        return self.code in HALTING_CODES
+
+    @property
+    def slow(self) -> bool:
+        """The call ran for minutes before it failed. Retrying it every run
+        would spend the run's model time (and push the track record past its
+        deadline) on a filing that may fail the same way, so the pipeline
+        tries it again a day later instead. A key or billing failure is never
+        slow: it is answered at once."""
+        return not self.halts_run and self.elapsed > SLOW_CALL_SECONDS
+
+
+# HTTP statuses that fail every request alike: a rejected key (401), billing
+# (402: prepaid credits spent), permission (403), a retired model name (404).
+HALTING_CODES = frozenset({401, 402, 403, 404})
+# HTTP statuses worth another try later: timeout, conflict, rate or quota
+# limits, and the server's own failures.
+TRANSIENT_CODES = frozenset({408, 409, 429})
+# A failed call that ran longer than this is "slow". Refusals of billing or
+# quota come back in a second or two; the dropped connections of 2026-10-17/18
+# came after minutes of work on 32- to 56-page scans (one of them, 8221358,
+# read 562 rows on retry, so a slow failure is worth retrying, just not
+# every run).
+SLOW_CALL_SECONDS = 60
+
+
+def service_error(exc: BaseException, elapsed: float = 0.0) -> Exception | None:
+    """What a failed model call means for the filing, or None for a failure
+    that is not the service's (a bug, which must keep raising as one).
+
+    A VisionServiceError is retried every run. Another 4xx is the service
+    judging this request (a PDF it will not take, say), which repeats on
+    every attempt: a ScanUnreadable, retried once per JOIN_VERSION.
+    """
+    try:
+        from google.genai import errors as genai_errors
+    except ImportError:  # pragma: no cover - the vision extra is installed wherever this runs
+        genai_errors = None
+    if genai_errors is not None and isinstance(exc, genai_errors.APIError):
+        code = getattr(exc, "code", None)
+        text = str(exc)[:300]
+        if code in HALTING_CODES or code in TRANSIENT_CODES or (isinstance(code, int) and code >= 500):
+            return VisionServiceError(text, code, elapsed)
+        return ScanUnreadable(f"the model service rejected the request: {text}")
+    try:
+        import httpx
+        transport = (httpx.TransportError,)
+    except ImportError:  # pragma: no cover
+        transport = ()
+    if isinstance(exc, transport + (TimeoutError, ConnectionError)):
+        return VisionServiceError(f"connection failed: {exc}"[:300], None, elapsed)
+    return None
 
 
 # The paper form's amount grid, column letter → bracket. Column K is not an
@@ -219,7 +297,8 @@ def amount_from_column(letter: str | None) -> str | None:
 def parse_scanned(pdf_bytes: bytes, api_key: str | None,
                   transcribe: Transcriber | None = None) -> ScannedFiling:
     """Read a scanned PTR. Raises VisionUnavailable without a key or the
-    `vision` extra, ScanUnreadable when the readings cannot be reconciled.
+    `vision` extra, ScanUnreadable when the readings cannot be reconciled or
+    the reply cannot be used, VisionServiceError when the model call fails.
 
     `transcribe` replaces the model call (tests pass a stub); the grid is
     always read, and first, so an unreadable grid costs no API call.
@@ -256,20 +335,50 @@ def _transcribe(pdf_bytes: bytes, api_key: str) -> dict:
         raise VisionUnavailable(f"google-genai not installed: {exc}") from exc
 
     client = genai.Client(api_key=api_key)
-    response = client.models.generate_content(
-        model=MODEL,
-        contents=[
-            types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
-            PROMPT,
-        ],
-        # Gemini 3.x deprecates the sampling parameters (temperature, top_p,
-        # top_k); the migration guide says to drop them rather than pin them.
-        config={"response_mime_type": "application/json"},
-    )
-    text = (response.text or "").strip()
+    started = time.monotonic()
+    try:
+        response = client.models.generate_content(
+            model=MODEL,
+            contents=[
+                types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
+                PROMPT,
+            ],
+            # Gemini 3.x deprecates the sampling parameters (temperature, top_p,
+            # top_k); the migration guide says to drop them rather than pin them.
+            config={"response_mime_type": "application/json"},
+        )
+    except Exception as exc:
+        classified = service_error(exc, time.monotonic() - started)
+        if classified is None:
+            raise
+        raise classified from exc
+    return reply_object(response)
+
+
+def reply_object(response) -> dict:
+    """The JSON object in a model response, or ScanUnreadable when the reply
+    cannot be used. An unusable reply is a verdict on this attempt, not an
+    outage: retrying it every run would spend minutes of model time per
+    run on a filing that breaks the same way (9116142's reply ran past
+    93,000 characters and broke off mid-row), so it waits for the next
+    JOIN_VERSION like any refusal."""
+    finish = _finish_reason(response)
+    suffix = f" (finish reason {finish})" if finish and finish != "STOP" else ""
+    text = (getattr(response, "text", None) or "").strip()
     if not text:
-        raise ValueError("vision returned an empty response")
-    return json_object(text)
+        raise ScanUnreadable(f"the model returned an empty reply{suffix}")
+    try:
+        return json_object(text)
+    except ValueError as exc:  # json.JSONDecodeError included
+        raise ScanUnreadable(f"the model's reply was not usable JSON: {exc}{suffix}") from exc
+
+
+def _finish_reason(response) -> str | None:
+    try:
+        reason = response.candidates[0].finish_reason
+    except (AttributeError, IndexError, TypeError):
+        return None
+    return getattr(reason, "name", None) or (str(reason) if reason else None)
 
 
 def json_object(text: str) -> dict:

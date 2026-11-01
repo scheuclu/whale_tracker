@@ -216,7 +216,7 @@ export type MonthlyScans = {
   transcribed: number;
   /** The transcription path refused them (grid not found, readings disagree). */
   refused: number;
-  /** Never sent to a model: `vision.enabled` is off, or the Senate paper path. */
+  /** Not read yet: never sent to a model (`vision.enabled` off, the Senate paper path), or the vision call failed and is retried every run. */
   unread: number;
   rows_transcribed: number;
 };
@@ -236,12 +236,12 @@ export async function getMonthlyScans(months = 12): Promise<MonthlyScans[]> {
               COUNT(*) AS scans,
               SUM(f.parse_method = 'vision') AS transcribed,
               SUM(f.parse_method = 'vision_failed') AS refused,
-              SUM(f.parse_method IN ('scanned', 'efd_paper')) AS unread,
+              SUM(f.parse_method IN ('scanned', 'vision_error', 'efd_paper')) AS unread,
               COALESCE(SUM(CASE WHEN f.parse_method = 'vision'
                            THEN (SELECT COUNT(*) FROM transactions t WHERE t.filing_id = f.id) END), 0)
                 AS rows_transcribed
        FROM filings f
-       WHERE f.parse_method IN ('scanned', 'vision', 'vision_failed', 'efd_paper')
+       WHERE f.parse_method IN ('scanned', 'vision', 'vision_failed', 'vision_error', 'efd_paper')
          AND f.filing_date >= ? AND f.filing_date <= date('now')
        GROUP BY month
        ORDER BY month`

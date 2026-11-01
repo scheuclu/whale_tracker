@@ -167,7 +167,25 @@ parser stays faithful to the PDF and the UI flags the row rather than
   by eye). `transactions` are linked to `scan_rows` by `row_index`, not by
   count. Refused scans (`vision_failed`) are re-queued **once per
   `vision.JOIN_VERSION`** (stamped in `sync_state`), so bump it when the join
-  learns something and never retry them every run.
+  learns something and never retry them every run. An unusable model reply
+  (empty, broken JSON, a 4xx the service gives this request) is a refusal
+  too.
+- **A failed model call is `vision_error`, not a verdict** (`vision.
+  VisionServiceError`): HTTP 401/402/403/404/408/409/429/5xx and dropped
+  connections. Reported once as unread like any failure, re-queued by
+  `retry_scanned` **every run**, and read as history once the service
+  answers; a call that ran past `vision.SLOW_CALL_SECONDS` (60) before
+  failing waits **24 h** instead (a 56-page scan's call runs ~6 minutes, so
+  an every-run retry would eat the run's budget and the track record's
+  deadline). Retries queue after never-attempted scans. A key/billing/
+  model-name error (401/402/403/404) stops the run's other model calls, so
+  the remaining scans wait as `new`. Before this label
+  the same failures were plain `error`, which nothing re-queues: eight scans
+  (dropped connections 2026-10-17/18, a broken reply, spent prepaid credits
+  2026-10-29) stayed unread; `pipeline.relabel_vision_errors` moves rows
+  with the old "vision parse failed:" text over, idempotently. A bug in our
+  own code on the reply stays `error`. Audit `check_vision_errors` WARNs
+  while any wait, quoting the latest error.
 - Scanned paper filings are **captured for inspection** in the same database
   (`scan_pages`: one 1-bit PNG per page at 110 dpi, oriented the way
   `paper_form.py` turned it; `scan_rows`: every row the grid reader found,

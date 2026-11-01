@@ -198,4 +198,5 @@ const METHOD_LABEL: Record<string, string> = {
   // being refused; it stays listed because its capture is the record.
   error: "transcription errored",
   vision_failed: "transcription refused",
+  vision_error: "vision call failed — retried",
 };

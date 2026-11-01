@@ -347,7 +347,7 @@ def _scans(conn: sqlite3.Connection, config: Config, d: Digest, since: date) -> 
     d.scans_refused = r["refused"] or 0
     d.scans_waiting = conn.execute("""
         SELECT COUNT(*) FROM filings
-        WHERE chamber = 'house' AND parse_method = 'scanned'
+        WHERE chamber = 'house' AND parse_method IN ('scanned', 'vision_error')
           AND status IN ('new', 'backfill_queued', 'failed')
     """).fetchone()[0]
     d.senate_paper = conn.execute("""

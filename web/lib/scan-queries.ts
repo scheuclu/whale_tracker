@@ -103,7 +103,7 @@ export type ScanRow = {
  * attempt that crashed leaves `parse_method = 'error'`, and the capture
  * must stay inspectable — it is the audit trail for that failure.
  */
-const IS_SCAN = `f.chamber = 'house' AND (f.parse_method IN ('scanned', 'vision', 'vision_failed')
+const IS_SCAN = `f.chamber = 'house' AND (f.parse_method IN ('scanned', 'vision', 'vision_failed', 'vision_error')
      OR EXISTS (SELECT 1 FROM scan_pages s WHERE s.filing_id = f.id))`;
 
 const FILINGS = `

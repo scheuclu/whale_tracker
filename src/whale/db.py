@@ -12,9 +12,10 @@ Filing status state machine:
     parsed        transactions stored, awaiting Telegram
     notified      done
     backfilled    parsed deliberately without notifying (history for stats)
-    failed        could not be read (scanned PDF with no vision key, or
-                  malformed); retried if the pipeline gains the ability to
-                  read it, so this is not a terminal state
+    failed        could not be read (scanned PDF with no vision key, a
+                  vision call that failed, or malformed); retried if the
+                  pipeline gains the ability to read it, so this is not a
+                  terminal state
 
 Whether Telegram has seen a filing is tracked by `notified_at`, not by the
 status, because a filing can be both reported and still unparsed.
@@ -967,8 +968,15 @@ def transactions_for_filing(conn: sqlite3.Connection, filing_id: int) -> list[sq
 # --- scan capture -----------------------------------------------------------
 
 # Parse methods a House filing has when it is a scan: never attempted,
-# transcribed, or refused.
-SCAN_METHODS = ("scanned", "vision", "vision_failed")
+# transcribed, refused, or waiting on a model call that failed.
+SCAN_METHODS = ("scanned", "vision", "vision_failed", "vision_error")
+
+
+def has_scan_pages(conn: sqlite3.Connection, filing_id: int) -> bool:
+    """Whether a filing's pages are already captured for /scans."""
+    return conn.execute(
+        "SELECT 1 FROM scan_pages WHERE filing_id = ? LIMIT 1", (filing_id,)
+    ).fetchone() is not None
 
 
 def uncaptured_scans(conn: sqlite3.Connection) -> list[sqlite3.Row]:

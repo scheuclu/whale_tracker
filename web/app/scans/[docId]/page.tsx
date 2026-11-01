@@ -15,6 +15,7 @@ const METHOD_LABEL: Record<string, string> = {
   vision: "transcribed from scan (quarantined from totals)",
   error: "transcription errored",
   vision_failed: "transcription refused",
+  vision_error: "vision call failed — retried every run",
 };
 
 export const dynamic = "force-dynamic";
