@@ -81,6 +81,8 @@ describe("runChat", () => {
     assert.equal(response.name, "lookup");
     // Compacted for the model: the caveats are in its instructions already.
     assert.deepEqual(response.response, { result: { got: { q: "NVDA" }, meta: { data_as_of: "2026-10-31" } } });
+    // Every message starts with a lookup; after that the model may answer.
+    assert.equal(model.requests[0].toolConfig.functionCallingConfig.mode, "ANY");
     assert.equal(second.toolConfig.functionCallingConfig.mode, "AUTO");
     assert.deepEqual(second.generationConfig.thinkingConfig, { thinkingLevel: "low" });
     assert.equal(second.systemInstruction.parts[0].text, "system text");
