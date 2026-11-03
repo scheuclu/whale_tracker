@@ -353,8 +353,9 @@ class XError(Exception):
 
     @property
     def stops_run(self) -> bool:
-        """A rate limit or a rejected key fails every post alike."""
-        return self.status in (401, 403, 429) and "duplicate" not in str(self).lower()
+        """A rejected key, no API credits (402 "credits depleted": X bills the
+        API per use) or a rate limit fails every post alike."""
+        return self.status in (401, 402, 403, 429) and "duplicate" not in str(self).lower()
 
 
 @dataclass

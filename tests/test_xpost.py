@@ -258,6 +258,13 @@ def test_send_post_sends_json_and_returns_the_id():
             xpost.send_post(CREDS, "hi", client)
     assert limited.value.stops_run
 
+    # 2026-11-03: the developer account answered every API call with this.
+    broke = httpx.Response(402, json={"title": "Payment Required", "detail": "credits depleted"})
+    with httpx.Client(transport=httpx.MockTransport(lambda r: broke)) as client:
+        with pytest.raises(xpost.XError) as unpaid:
+            xpost.send_post(CREDS, "hi", client)
+    assert unpaid.value.stops_run
+
 
 # --- the step -----------------------------------------------------------------
 
