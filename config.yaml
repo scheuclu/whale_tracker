@@ -201,7 +201,9 @@ vision:
   # whole 20-minute timeout on them and was killed before the commit step,
   # so nothing it read was kept, and the next run would have done the same.
   # Scans the budget leaves behind stay queued for the next run; a backlog
-  # drains over a few runs instead of blocking one.
+  # drains over a few runs instead of blocking one. Each model call's timeout
+  # is what is left of the budget, so one call that never returns (8221322,
+  # 2026-11-01) cannot outlive it either.
   budget_seconds: 480
 
 prices:

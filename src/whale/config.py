@@ -564,7 +564,8 @@ class Config:
     # Seconds of model time one poll run may spend on scans; 0 = no limit.
     # The first run with vision on had 53 scans queued, spent the job's whole
     # 20-minute timeout on them and was killed before the commit step, so
-    # nothing it read was kept. Scans past the budget stay queued.
+    # nothing it read was kept. Scans past the budget stay queued, and each
+    # model call's timeout is what is left of it.
     vision_budget_seconds: float = 480
     db_path: Path = DEFAULT_DB_PATH
     # Public URL of the dashboard, for links in messages. None means the

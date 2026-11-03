@@ -341,7 +341,7 @@ def test_parse_bytes_lets_scan_unreadable_through(monkeypatch):
 
     monkeypatch.setattr(pipeline, "parse_pdf", scanned)
 
-    def refuse(pdf_bytes, key):
+    def refuse(pdf_bytes, key, timeout=None):
         raise ScanUnreadable("grid: page 1: no table")
 
     monkeypatch.setattr(pipeline, "parse_scanned", refuse)

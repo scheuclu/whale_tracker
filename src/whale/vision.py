@@ -123,10 +123,14 @@ class VisionServiceError(Exception):
     stayed unread after the service recovered.
     """
 
-    def __init__(self, message: str, code: int | None = None, elapsed: float = 0.0):
+    def __init__(self, message: str, code: int | None = None, elapsed: float = 0.0,
+                 timed_out: bool = False):
         super().__init__(message)
         self.code = code
         self.elapsed = elapsed
+        # The call ran into the timeout it was given (the run's remaining
+        # model budget), so how it ended says only that it needed longer.
+        self.timed_out = timed_out
 
     @property
     def halts_run(self) -> bool:
@@ -156,6 +160,11 @@ TRANSIENT_CODES = frozenset({408, 409, 429})
 # read 562 rows on retry, so a slow failure is worth retrying, just not
 # every run).
 SLOW_CALL_SECONDS = 60
+# A call that failed after this share of its timeout is taken to have run into
+# it. The SDK applies the timeout per phase (connect, upload, read) and sends
+# it to the server as X-Server-Timeout, so a cut-off call fails at about its
+# timeout, by whichever side gives up first.
+TIMED_OUT_SHARE = 0.9
 
 
 def service_error(exc: BaseException, elapsed: float = 0.0) -> Exception | None:
@@ -295,18 +304,23 @@ def amount_from_column(letter: str | None) -> str | None:
 
 
 def parse_scanned(pdf_bytes: bytes, api_key: str | None,
-                  transcribe: Transcriber | None = None) -> ScannedFiling:
+                  transcribe: Transcriber | None = None,
+                  timeout: float | None = None) -> ScannedFiling:
     """Read a scanned PTR. Raises VisionUnavailable without a key or the
     `vision` extra, ScanUnreadable when the readings cannot be reconciled or
     the reply cannot be used, VisionServiceError when the model call fails.
 
     `transcribe` replaces the model call (tests pass a stub); the grid is
     always read, and first, so an unreadable grid costs no API call.
+    `timeout` is the most seconds the model call may take (None: no limit).
     """
     if not api_key:
         raise VisionUnavailable("GEMINI_API_KEY not set")
     grid = read_grid(pdf_bytes)
-    data = (transcribe or _transcribe)(pdf_bytes, api_key)
+    if transcribe is not None:
+        data = transcribe(pdf_bytes, api_key)
+    else:
+        data = _transcribe(pdf_bytes, api_key, timeout)
     return join(data, grid)
 
 
@@ -327,13 +341,23 @@ def read_grid(pdf_bytes: bytes):
     return grid
 
 
-def _transcribe(pdf_bytes: bytes, api_key: str) -> dict:
+def _transcribe(pdf_bytes: bytes, api_key: str, timeout: float | None = None) -> dict:
+    """The model's transcription of the scan. `timeout` bounds the call: on
+    2026-11-01 the call for 8221322 (56 pages) never returned, and the poll
+    job was killed at its 20-minute limit with nothing committed. The budget
+    is checked before a call starts, so without this one stuck call outlived
+    it; the SDK's default is to wait forever (and never to retry)."""
     try:
         from google import genai
         from google.genai import types
     except ImportError as exc:
         raise VisionUnavailable(f"google-genai not installed: {exc}") from exc
 
+    # Gemini 3.x deprecates the sampling parameters (temperature, top_p,
+    # top_k); the migration guide says to drop them rather than pin them.
+    config: dict = {"response_mime_type": "application/json"}
+    if timeout:
+        config["http_options"] = {"timeout": max(1000, int(timeout * 1000))}  # milliseconds
     client = genai.Client(api_key=api_key)
     started = time.monotonic()
     try:
@@ -343,14 +367,15 @@ def _transcribe(pdf_bytes: bytes, api_key: str) -> dict:
                 types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
                 PROMPT,
             ],
-            # Gemini 3.x deprecates the sampling parameters (temperature, top_p,
-            # top_k); the migration guide says to drop them rather than pin them.
-            config={"response_mime_type": "application/json"},
+            config=config,
         )
     except Exception as exc:
-        classified = service_error(exc, time.monotonic() - started)
+        elapsed = time.monotonic() - started
+        classified = service_error(exc, elapsed)
         if classified is None:
             raise
+        if isinstance(classified, VisionServiceError) and timeout and elapsed >= timeout * TIMED_OUT_SHARE:
+            classified.timed_out = True
         raise classified from exc
     return reply_object(response)
 
