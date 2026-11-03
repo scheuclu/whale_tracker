@@ -33,6 +33,10 @@ interactions should be instrumented with custom events:
 - Never log personally identifiable information (PII).
 - `trackEvent` is safe to call across browser and server contexts (safely no-ops
   during SSR, node unit tests, or if an ad blocker prevents analytics loading).
+- Never call `track` from `@vercel/analytics` directly: it drops any event sent
+  before `<Analytics />` has defined `window.va`, which is every event fired
+  while a page starts up. `trackEvent` defines the SDK's queue first. Until it
+  did (2026-11-03), production had recorded no `sign_in_complete` at all.
 
 ## Non-negotiable: amounts are ranges
 
