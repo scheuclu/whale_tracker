@@ -157,9 +157,10 @@ parser stays faithful to the PDF and the UI flags the row rather than
   default, and on 2026-11-01 the call for 8221322 (56 pages) never returned.
   The poll job's timeout is 20 minutes and the commit step is last, so an
   uncapped backlog or a stuck call is killed and commits nothing: the first
-  run with vision on did exactly that with 53 scans (2026-10-17), the stuck
-  call again on 2026-11-01, and every scheduled run after either would have
-  repeated it.
+  run with vision on did exactly that with 53 scans (2026-10-17), and every
+  scheduled run after it would have repeated it; the stuck call did it once
+  (2026-11-01; the next run's calls for the same scans ended in ~5-minute
+  disconnects, and runs overshot the budget to 604–659 s of model time).
 - The hybrid join (`vision.join`) is **per page** (#51): the model gives
   every row a page number, the grid knows its rows per page, and a page whose
   counts disagree is refused alone — its grid rows stored `page_refused`, its
