@@ -480,8 +480,11 @@ parser stays faithful to the PDF and the UI flags the row rather than
   counted (a member below the floor is named but not counted).
 - Bounded: alerts older than `x.max_age_hours` (24) are never posted, which
   also stops the first enabled run replaying history; at most
-  `x.max_per_run` (5) per run; a 401/402/403/429 stops the step for the run
-  (402 is "credits depleted": X bills API calls against prepaid credits).
+  `x.max_per_run` (5) per run; a 401/402/429 stops the step for the run
+  (402 is "credits depleted": X bills API calls against prepaid credits, and
+  a post with a link costs $0.20, 13× a plain one). A post X refuses on its
+  content (400/403) is `rejected` and never sent again. **One cashtag per
+  post**: the API refuses a second (403), so only the first keeps its `$`.
   Off by default (`x.enabled`), like the digest.
 
 ## Insider alerts

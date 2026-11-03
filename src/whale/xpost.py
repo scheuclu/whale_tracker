@@ -59,6 +59,9 @@ URL_WEIGHT = 23
 _LIGHT_RANGES = ((0, 4351), (8192, 8205), (8208, 8223), (8242, 8247))
 _URL_RE = re.compile(r"https?://\S+")
 _CASHTAG_RE = re.compile(r"[A-Z]{1,6}")
+# A cashtag as twitter-text finds one (`$MSFT`, `$BRK.B`, any case); amounts
+# ("$15k") start with a digit.
+_CASHTAG_IN_TEXT = re.compile(r"(?<![\w$])\$([A-Za-z]{1,6}(?:[._][A-Za-z]{1,2})?)(?![A-Za-z0-9_])")
 _CIK_RE = re.compile(r"\d{10}")
 
 POSTED_KINDS = (stats.FILING_KIND, stats.CLUSTER_KIND, stats.INSIDER_FILING_KIND,
@@ -152,6 +155,28 @@ def _plural(n: int, one: str, many: str | None = None) -> str:
 def compose(conn: sqlite3.Connection, alert, config: Config) -> str | None:
     """The post for one alert row, or None when the alert is not one the public
     account carries (see the module docstring)."""
+    text = _compose(conn, alert, config)
+    return one_cashtag(text) if text is not None else None
+
+
+def one_cashtag(text: str) -> str:
+    """Keep the first cashtag and print later ones as plain symbols. The API
+    refuses a post with more than one ("Posts are limited to a maximum of one
+    cashtag", 403, 2026-11-03), and the first is the post's subject: the
+    headline's ticker, or a filing's largest line."""
+    seen = False
+
+    def keep_first(m: re.Match) -> str:
+        nonlocal seen
+        if seen:
+            return m.group(1)
+        seen = True
+        return m.group(0)
+
+    return _CASHTAG_IN_TEXT.sub(keep_first, text)
+
+
+def _compose(conn: sqlite3.Connection, alert, config: Config) -> str | None:
     base = config.dashboard_url
     if not base:
         return None
@@ -355,7 +380,13 @@ class XError(Exception):
     def stops_run(self) -> bool:
         """A rejected key, no API credits (402 "credits depleted": X bills the
         API per use) or a rate limit fails every post alike."""
-        return self.status in (401, 402, 403, 429) and "duplicate" not in str(self).lower()
+        return self.status in (401, 402, 429)
+
+    @property
+    def rejected(self) -> bool:
+        """X refused this post's content (400, or 403 as for a second cashtag or
+        a duplicate): sending it again would be refused again, and billed."""
+        return self.status in (400, 403)
 
 
 @dataclass
@@ -423,13 +454,15 @@ def send_post(creds: Credentials, text: str, client: httpx.Client | None = None)
 class Result:
     posted: int = 0
     failed: int = 0
+    rejected: int = 0
     skipped: int = 0
     left: int = 0
     stopped: str | None = None
     previews: list[str] = field(default_factory=list)
 
     def summary(self) -> str:
-        out = f"{self.posted} posted, {self.failed} failed, {self.skipped} not for X, {self.left} left for the next run"
+        out = (f"{self.posted} posted, {self.failed} failed, {self.rejected} rejected by X, "
+               f"{self.skipped} not for X, {self.left} left for the next run")
         return out + (f"; stopped: {self.stopped}" if self.stopped else "")
 
 
@@ -469,7 +502,7 @@ def sync(conn: sqlite3.Connection, config: Config, dry_run: bool = False,
         return result
     queue = pending(conn, settings.max_age_hours, now)
     for i, alert in enumerate(queue):
-        if result.posted + result.failed >= settings.max_per_run:
+        if result.posted + result.failed + result.rejected >= settings.max_per_run:
             result.left = len(queue) - i
             break
         text = compose(conn, alert, config)
@@ -485,8 +518,11 @@ def sync(conn: sqlite3.Connection, config: Config, dry_run: bool = False,
         try:
             post_id = send(creds, text)
         except XError as exc:
-            result.failed += 1
-            _record(conn, alert["id"], "failed", text, error=str(exc)[:300])
+            if exc.rejected:
+                result.rejected += 1
+            else:
+                result.failed += 1
+            _record(conn, alert["id"], "rejected" if exc.rejected else "failed", text, error=str(exc)[:300])
             log.warning("x: alert %s not posted: %s", alert["id"], exc)
             if exc.stops_run:
                 result.stopped = str(exc)[:160]
