@@ -66,7 +66,7 @@ from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 
 # The alerts table's columns, shared by the fresh-database DDL and the
 # version-13 rebuild so the two cannot drift.
@@ -602,6 +602,20 @@ CREATE TABLE IF NOT EXISTS insider_track_coverage (
 );
 """
 
+# Public X posts (schema 18, xpost.py): one row per alert the step has
+# handled, so an alert is posted once and a failed post is tried again.
+_X_POSTS_DDL = """
+CREATE TABLE IF NOT EXISTS x_posts (
+  alert_id INTEGER PRIMARY KEY REFERENCES alerts(id) ON DELETE CASCADE,
+  status TEXT NOT NULL,                -- 'posted' | 'failed' | 'skipped' (not a kind X carries)
+  post_id TEXT,                        -- X's id for the post, once posted
+  text TEXT,                           -- the post as sent, or as last attempted
+  attempts INTEGER NOT NULL DEFAULT 0,
+  error TEXT,
+  updated_at TEXT NOT NULL
+);
+"""
+
 # Statuses whose transactions count toward statistics. A filing that failed to
 # parse contributes nothing, and one that is merely 'new' has no rows yet.
 COUNTED_STATUSES = ("parsed", "notified", "backfilled")
@@ -710,6 +724,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
         # Insider track record tables; filled by the poll run's insider
         # track step (or `whale track-record --insiders`).
         conn.executescript(_INSIDER_TRACK_DDL)
+    if version < 18:
+        # Public X posts; empty until the step first runs with x.enabled.
+        conn.executescript(_X_POSTS_DDL)
     if version < SCHEMA_VERSION:
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         conn.commit()

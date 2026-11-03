@@ -138,6 +138,14 @@ def main(argv: list[str] | None = None) -> int:
     p_ialerts.add_argument("--show-message", action="store_true",
                            help="print the Telegram message each match would send")
 
+    p_x = sub.add_parser(
+        "x-post", help="post pending alerts to the public X account (see config.yaml `x`)")
+    p_x.add_argument("--dry-run", action="store_true",
+                     help="print what the next run would post; post and record nothing")
+    p_x.add_argument("--preview", type=int, metavar="N",
+                     help="print the posts the latest N alerts would make, whatever their age or "
+                          "state; no network, no writes")
+
     p_prices = sub.add_parser(
         "fetch-prices",
         help="refresh daily closes for every alerted ticker and the benchmark, rebuild "
@@ -293,6 +301,27 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if not result.status.startswith(("error", "blocked", "throttled")) else 1
 
     from . import query
+
+    if args.command == "x-post":
+        from . import xpost
+
+        conn = db.connect(config.db_path)
+        try:
+            if args.preview:
+                for alert_id, kind, text in xpost.preview(conn, config, args.preview):
+                    print(f"\n── alert {alert_id} ({kind}) · {xpost.weighted_length(text)}/280")
+                    print(text)
+                return 0
+            if not config.x.enabled and not args.dry_run:
+                print("x.enabled is false in config.yaml; nothing posted (use --dry-run or --preview)")
+                return 1
+            result = xpost.sync(conn, config, dry_run=args.dry_run)
+            for text in result.previews:
+                print(f"\n── {xpost.weighted_length(text)}/280\n{text}")
+            print(f"\nx: {result.summary()}" + (" (dry run)" if args.dry_run else ""))
+        finally:
+            conn.close()
+        return 0
 
     if args.command == "fetch-prices":
         from . import prices

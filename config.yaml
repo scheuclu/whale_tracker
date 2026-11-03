@@ -106,6 +106,21 @@ watchlist:
     bioguide_id: P000197
     every_trade: true
 
+x:
+  # Public posts on X (@fatcatwatching) mirroring the alert log: each
+  # congressional filing, cluster, insider filing and insider cluster that
+  # went to Telegram becomes one short post linking to the dashboard (amounts
+  # as disclosed ranges, insider values as shares × reported price). The four
+  # OAuth 1.0a secrets (X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN,
+  # X_ACCESS_TOKEN_SECRET) stay in the environment. Preview the wording with
+  # `whale x-post --preview 10`, the next run's queue with `--dry-run`.
+  enabled: false
+  # Alerts older than this are old news and are never posted, which also
+  # keeps the first run after enabling from replaying the history.
+  max_age_hours: 24
+  # Posts per run: a burst of alerts is spread over the next runs.
+  max_per_run: 5
+
 telegram:
   # The bot token and chat id are secrets and stay in the environment; this
   # block is for what gets sent.

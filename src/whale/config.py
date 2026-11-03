@@ -517,6 +517,47 @@ def _parse_watch(raw: dict, index: int) -> WatchedMember:
 # What the `telegram:` block may say. Same contract as the rules and the
 # watchlist: an unknown key is a typo, and `digest: true` under a misspelt
 # key would read as configured while sending nothing.
+X_KEYS = frozenset({"enabled", "max_age_hours", "max_per_run"})
+
+
+@dataclass
+class XSettings:
+    """Public X posts mirroring the alert log (xpost.py). Off by default: an
+    absent block must never start posting. The credentials stay in the
+    environment."""
+
+    enabled: bool = False
+    # Alerts older than this are old news and are not posted; it is also what
+    # stops the first run after enabling from replaying the history.
+    max_age_hours: float = 24
+    # Posts per run, so a burst of alerts is spread over the next runs.
+    max_per_run: int = 5
+
+
+def _parse_x(raw) -> XSettings:
+    if raw is None:
+        return XSettings()
+    if not isinstance(raw, dict):
+        raise ConfigError(f"x must be a mapping, not {type(raw).__name__}")
+    unknown = set(raw) - X_KEYS
+    if unknown:
+        raise ConfigError(f"x has unknown key(s) {sorted(unknown)}; allowed: {sorted(X_KEYS)}")
+    enabled = raw.get("enabled", False)
+    if not isinstance(enabled, bool):
+        # As for telegram.digest: bool("false") is True.
+        raise ConfigError(f"x.enabled must be true or false, not {enabled!r}")
+    age = _seconds(raw.get("max_age_hours", 24), "x.max_age_hours")
+    if age <= 0:
+        raise ConfigError("x.max_age_hours must be more than 0")
+    try:
+        per_run = int(raw.get("max_per_run", 5))
+    except (TypeError, ValueError):
+        raise ConfigError(f"x.max_per_run must be a whole number, not {raw.get('max_per_run')!r}") from None
+    if per_run < 1:
+        raise ConfigError(f"x.max_per_run is {per_run}; it must be at least 1")
+    return XSettings(enabled=enabled, max_age_hours=age, max_per_run=per_run)
+
+
 TELEGRAM_KEYS = frozenset({"digest"})
 
 
@@ -557,6 +598,7 @@ class Config:
     telegram: TelegramSettings = field(default_factory=TelegramSettings)
     prices: PricesSettings = field(default_factory=PricesSettings)
     track_record: TrackRecordSettings = field(default_factory=TrackRecordSettings)
+    x: XSettings = field(default_factory=XSettings)
     senate_enabled: bool = True
     # Scanned-PDF transcription; see config.yaml for the measured accuracy
     # and the quarantine that lets it be on.
@@ -579,6 +621,11 @@ class Config:
     # SEC requires "<project> <contact e-mail>"; without it EDGAR serves an
     # HTML refusal page instead of filings, so the insider step skips itself.
     edgar_user_agent: str | None = None
+    # OAuth 1.0a for the public X account (@fatcatwatching); all four or none.
+    x_api_key: str | None = None
+    x_api_secret: str | None = None
+    x_access_token: str | None = None
+    x_access_token_secret: str | None = None
 
     @property
     def telegram_configured(self) -> bool:
@@ -677,6 +724,7 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
         telegram=_parse_telegram(raw.get("telegram")),
         prices=prices,
         track_record=_parse_track_record(raw.get("track_record")),
+        x=_parse_x(raw.get("x")),
         senate_enabled=bool((raw.get("senate") or {}).get("enabled", True)),
         vision_enabled=bool((raw.get("vision") or {}).get("enabled", False)),
         vision_budget_seconds=_seconds((raw.get("vision") or {}).get("budget_seconds", 480),
@@ -688,4 +736,8 @@ def load_config(config_file: Path = DEFAULT_CONFIG_FILE,
         gemini_api_key=_env("GEMINI_API_KEY"),
         senate_proxy_url=_env("SENATE_PROXY_URL"),
         edgar_user_agent=_env("EDGAR_USER_AGENT"),
+        x_api_key=_env("X_API_KEY"),
+        x_api_secret=_env("X_API_SECRET"),
+        x_access_token=_env("X_ACCESS_TOKEN"),
+        x_access_token_secret=_env("X_ACCESS_TOKEN_SECRET"),
     )
