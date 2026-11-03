@@ -455,6 +455,34 @@ parser stays faithful to the PDF and the UI flags the row rather than
   `whale track-record --insiders`. The stored Form 4 history starts
   2026-09-10, so ranks appear only once 90-trading-day horizons mature.
 
+## Public X posts (`x`, `xpost.py`)
+
+- The account is **@fatcatwatching**, a separate, automated account (not the
+  operator's own). OAuth 1.0a user tokens, which never expire: the OAuth 2.0
+  pair expires in 2 h and its refresh token rotates on every use, which a
+  scheduled job cannot persist. Secrets `X_API_KEY`, `X_API_SECRET`,
+  `X_ACCESS_TOKEN`, `X_ACCESS_TOKEN_SECRET` in sops and GitHub Actions.
+- **A mirror of the alert log, not a delivery path.** `xpost.sync` runs after
+  every message step and posts `alerts` rows it has not handled, recording
+  each in `x_posts` (schema 18): posted, failed (tried again next run), or
+  skipped (not a kind the feed carries). Telegram never waits on it and it
+  never raises into the run. A dry run composes the posts and records nothing.
+- Posts are **written from the stored rows**, not the Telegram text, and
+  follow the same rules: summed brackets, `≥floor` for the open-ended top
+  bracket, no amount on a transcribed row, insider values "shares × reported
+  price", an unpriced trade never $0, direction in words, links to the
+  dashboard with `utm_source=x`. A post must fit X's weighted 280 (links 23,
+  wide characters 2): the largest lines are kept and the rest counted.
+- A watched member's filing and an option trade are logged per trade; the
+  first such alert of a filing posts the filing once (unless the filing had
+  its own `filing` message) and the rest, replays included, are skipped. A
+  cluster names its members only when the message named exactly those it
+  counted (a member below the floor is named but not counted).
+- Bounded: alerts older than `x.max_age_hours` (24) are never posted, which
+  also stops the first enabled run replaying history; at most
+  `x.max_per_run` (5) per run; a 401/403/429 stops the step for the run.
+  Off by default (`x.enabled`), like the digest.
+
 ## Insider alerts
 
 - Alerts fire only from the user's rules in `insiders.alerts`. **No rules means

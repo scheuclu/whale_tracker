@@ -38,6 +38,7 @@ def run(config: Config, dry_run: bool = False) -> None:
         tally.alerts_sent += notify_clusters(conn, config, dry_run=dry_run)
         tally.insiders_stored = _sync_insiders(conn, config)
         tally.alerts_sent += notify_insiders(conn, config, dry_run=dry_run)
+        _post_to_x(conn, config, dry_run=dry_run)
         digest.scheduled(conn, config, dry_run=dry_run)
         _sync_prices(conn, config, dry_run=dry_run)
         _classify_issuers(conn, config)
@@ -1398,6 +1399,24 @@ def _volume_fields(volume: stats.Volume | None) -> dict:
         return dict(volume_min_cents=None, volume_max_cents=None, volume_mid_cents=None)
     return dict(volume_min_cents=volume.min_cents, volume_max_cents=volume.max_cents,
                 volume_mid_cents=volume.mid_cents)
+
+
+def _post_to_x(conn: sqlite3.Connection, config: Config, dry_run: bool = False) -> None:
+    """Mirror the alerts just logged to the public X account (xpost.py).
+    After every message step, so it sees this run's alerts; never raises:
+    a post that fails is tried again next run, and nothing here may cost a
+    Telegram message or the commit."""
+    if not config.x.enabled:
+        return
+    try:
+        from . import xpost
+
+        result = xpost.sync(conn, config, dry_run=dry_run)
+        for text in result.previews:
+            print("\n" + "─" * 60 + "\n[X] " + text)
+        log.info("x: %s", result.summary())
+    except Exception:
+        log.exception("x posting failed")
 
 
 def _deliver(config: Config, text: str, dry_run: bool) -> bool:

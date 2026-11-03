@@ -85,6 +85,11 @@ jobs:
           # SEC requires "<project> <contact e-mail>" on every EDGAR request and
           # serves an HTML refusal page without it. Unset = insider step skips.
           EDGAR_USER_AGENT: ${{ secrets.EDGAR_USER_AGENT }}
+          # Public X posts (config.yaml `x`, off unless enabled there).
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_SECRET: ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
         run: python -m whale run
 
       - name: Backfill insiders (optional)
