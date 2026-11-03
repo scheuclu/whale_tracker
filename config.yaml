@@ -114,7 +114,7 @@ x:
   # OAuth 1.0a secrets (X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN,
   # X_ACCESS_TOKEN_SECRET) stay in the environment. Preview the wording with
   # `whale x-post --preview 10`, the next run's queue with `--dry-run`.
-  enabled: false
+  enabled: true
   # Alerts older than this are old news and are never posted, which also
   # keeps the first run after enabling from replaying the history.
   max_age_hours: 24
