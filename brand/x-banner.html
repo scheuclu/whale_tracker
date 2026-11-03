@@ -1,0 +1,22 @@
+<!--
+  The @fatcatwatching X header (brand/x-banner-3000x1000.png), option A of three (2026-11-03):
+  the homepage hero line on the site's light canvas. X shows headers at 1500 x 500 and puts
+  the profile photo over the bottom-left corner (x 40-374, y 333 down), so nothing goes there.
+  The cat paths in the other options come from web/lib/brand.ts.
+  Re-render from web/ (Playwright is a dev dependency):
+    node -e 'const{chromium}=require("playwright");(async()=>{const b=await chromium.launch();const p=await b.newPage({viewport:{width:1500,height:500},deviceScaleFactor:2});await p.goto("file://"+require("path").resolve("../brand/x-banner.html"));await p.screenshot({path:"../brand/x-banner-3000x1000.png"});await b.close()})()'
+-->
+<!doctype html><html><head><meta charset="utf-8"><style>
+html,body{margin:0;width:1500px;height:500px;overflow:hidden}
+body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue",Arial,sans-serif;color:#1d1d1f;-webkit-font-smoothing:antialiased;position:relative;
+  background:radial-gradient(900px 420px at 18% 0%,rgba(255,255,255,.95),rgba(255,255,255,0) 70%),
+             radial-gradient(700px 380px at 92% 100%,rgba(255,250,240,.7),rgba(255,250,240,0) 70%),#f5f5f7}
+.h{font-weight:700;letter-spacing:-0.045em;line-height:1.02}
+.sub{color:#6e6e73;letter-spacing:-0.01em}
+.pill{display:inline-flex;align-items:center;gap:10px;padding:8px 16px;border-radius:999px;background:#e8e8ed;color:#6e6e73;font-size:17px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.dot{width:8px;height:8px;border-radius:50%;background:#34c759}
+</style></head><body>
+<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding-bottom:120px;gap:24px">
+  <span class="pill"><span class="dot"></span>fatcatwatch.com</span>
+  <div class="h" style="font-size:96px;text-align:center">See what Congress and<br>insiders are trading.</div>
+</div></body></html>
