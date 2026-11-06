@@ -607,7 +607,7 @@ CREATE TABLE IF NOT EXISTS insider_track_coverage (
 _X_POSTS_DDL = """
 CREATE TABLE IF NOT EXISTS x_posts (
   alert_id INTEGER PRIMARY KEY REFERENCES alerts(id) ON DELETE CASCADE,
-  status TEXT NOT NULL,                -- 'posted' | 'failed' | 'skipped' (not a kind X carries)
+  status TEXT NOT NULL,                -- 'posted' | 'failed' (retried) | 'rejected' (refused by X) | 'skipped'
   post_id TEXT,                        -- X's id for the post, once posted
   text TEXT,                           -- the post as sent, or as last attempted
   attempts INTEGER NOT NULL DEFAULT 0,

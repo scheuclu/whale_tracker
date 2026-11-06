@@ -85,8 +85,15 @@ def test_a_filing_post_sums_each_assets_ranges_and_links_the_member_page(conn):
     assert text == (
         "🏛 Rep. John J. McGuire III (R-VA5) disclosed 4 trades, filed Nov 1:\n"
         "↘ Sold part of $AVGO · $100k–$250k\n"
-        "↗ Bought $MU ×3 · $3,003–$45k\n"
+        "↗ Bought MU ×3 · $3,003–$45k\n"
         f"{BASE}/members/john-j-mcguire-iii-m001239?utm_source=x")
+
+
+def test_a_post_carries_one_cashtag_and_no_amount_loses_its_dollar_sign():
+    # X: "Posts are limited to a maximum of one cashtag" (403).
+    text = xpost.one_cashtag("↘ Sold $AVGO · $100k–$250k\n↗ Bought $MU ×3 · ≥$50M\n$NVDA $BRK.B")
+    assert text == "↘ Sold $AVGO · $100k–$250k\n↗ Bought MU ×3 · ≥$50M\nNVDA BRK.B"
+    assert len(xpost._CASHTAG_IN_TEXT.findall(text)) == 1
 
 
 def test_the_open_ended_top_bracket_is_a_floor_never_an_upper_bound(conn):
@@ -258,6 +265,13 @@ def test_send_post_sends_json_and_returns_the_id():
             xpost.send_post(CREDS, "hi", client)
     assert limited.value.stops_run
 
+    # 2026-11-03: the developer account answered every API call with this.
+    broke = httpx.Response(402, json={"title": "Payment Required", "detail": "credits depleted"})
+    with httpx.Client(transport=httpx.MockTransport(lambda r: broke)) as client:
+        with pytest.raises(xpost.XError) as unpaid:
+            xpost.send_post(CREDS, "hi", client)
+    assert unpaid.value.stops_run and not unpaid.value.rejected
+
 
 # --- the step -----------------------------------------------------------------
 
@@ -304,6 +318,20 @@ def test_a_failed_post_is_retried_next_run_and_a_rate_limit_stops_the_run(conn):
     result = xpost.sync(conn, _config(), send=lambda *a: "ok")
     assert result.posted == 3
     assert _x_rows(conn)[alerts[0]["id"]]["attempts"] == 2
+
+
+def test_a_post_x_refuses_is_not_sent_again_and_does_not_stop_the_run(conn):
+    alerts = _three_clusters(conn)
+
+    def refuse_first(creds, text):
+        if "$AAA" in text:
+            raise xpost.XError("HTTP 403: Posts are limited to a maximum of one cashtag", 403)
+        return "ok"
+
+    result = xpost.sync(conn, _config(), send=refuse_first)
+    assert (result.posted, result.rejected, result.failed) == (2, 1, 0)
+    assert _x_rows(conn)[alerts[0]["id"]]["status"] == "rejected"
+    assert xpost.sync(conn, _config(), send=lambda *a: pytest.fail("sent again")).posted == 0
 
 
 def test_posts_per_run_are_capped_and_the_rest_wait(conn):
